@@ -159,7 +159,7 @@ bool TryAddIndexChar(uint32_t* index, Char c) {
   return true;
 }
 /**
- * 搞不懂这里
+ * 搞不懂这里 Hash值生成方式就是各种位运算
  * String::ArrayIndexValueBits::kShift => 2
  * String::ArrayIndexLengthBits::kShift => 2 + 24 => 26
  */
