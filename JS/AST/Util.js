@@ -102,7 +102,7 @@ const keywords = {
 
 /**
  * 判断给定字符是否在两个字符的范围内
- * C++编码转换自如 JS只能自己搞
+ * C++实现比较墨迹 JS直接强转字符
  * @param {char} c 目标字符
  * @param {char} lower_limit 低位字符
  * @param {chat} higher_limit 高位字符
