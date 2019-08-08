@@ -1,6 +1,19 @@
 import Stream from './Stream';
+import PerfectKeywordHash from './PerfectKeywordHash';
 import TokenDesc from './TokenDesc';
-import { kMaxAscii, CharTypeMapping, UnicodeToToken, UnicodeToAsciiMapping } from './Const';
+import { 
+  kMaxAscii, 
+  kIdentifierNeedsSlowPath,
+} from './Const';
+
+import {
+  TerminatesLiteral,
+  IdentifierNeedsSlowPath,
+  CanBeKeyword,
+  character_scan_flags, 
+  UnicodeToToken, 
+  UnicodeToAsciiMapping,
+} from './Util';
 
 export default class Scanner {
   constructor(source_string) {
@@ -62,8 +75,11 @@ export default class Scanner {
             return this.Select(token);
           case 'Token::STRING':
             return this.ScanString();
+          // 数字开头的变量会在这里被拦截处理
+          // case 'Token::NUMBER':
+          //   return ScanNumber(false);
           case 'Token::IDENTIFIER':
-            return ScanIdentifierOrKeyword();
+            return this.ScanIdentifierOrKeyword();
           // ...
         } 
       }
@@ -84,24 +100,59 @@ export default class Scanner {
   ScanIdentifierOrKeywordInner() {
     /**
      * 两个布尔类型的flag 
-     * 一个标记转义字符 一个标记键词
+     * 一个标记转义字符 一个标记关键词
      */
     let escaped = false;
     let can_be_keyword = true;
     if(this.c0_ < kMaxAscii) {
       // 转义字符以'\'字符开头
       if(this.c0_ !== '\\') {
-        let scan_flags = CharTypeMapping[this.c0_];
+        let scan_flags = character_scan_flags[this.c0_];
         // 这个地方比较迷 没看懂
         scan_flags >>= 1;
         this.AddLiteralChar(this.c0_);
-        this.AdvanceUntil(() => {
-
+        this.AdvanceUntil((c0) => {
+          // 当某个字符的Ascii值大于127 进入慢解析
+          if(c0 > kMaxAscii) {
+            scan_flags |= kIdentifierNeedsSlowPath;
+            return true;
+          }
+          // 叠加每个字符的bitmap
+          let char_flags = character_scan_flags[c0];
+          scan_flags |= char_flags;
+          // 用bitmap判断是否结束
+          if(TerminatesLiteral(char_flags)) {
+            return true;
+          } else {
+            this.AddLiteralChar(c0);
+            return false;
+          }
         });
+        // 基本上都是进这里
+        if(!IdentifierNeedsSlowPath(scan_flags)) {
+          if(!CanBeKeyword(scan_flags)) return 'Token::IDENTIFIER';
+          // 源码返回一个新的vector容器 这里简单处理成一个字符串
+          let str = this.next().literal_chars.one_byte_literal();
+          return this.KeywordOrIdentifierToken(str, str.length);
+        }
+        can_be_keyword = CanBeKeyword(scan_flags);
       } else {
         escaped = true;
+        // let c = this.ScanIdentifierUnicodeEscape();
+        // 合法变量以大小写字母_开头
+        // if(c === '\\' || !IsIdentifierStart(c)) return 'Token::ILLEGAL';
+        // this.AddLiteralChar(c);
+        // can_be_keyword = CharCanBeKeyword(c);
       }
     }
+    // 逻辑同上 进这里代表首字符Ascii值就过大
+    // return ScanIdentifierOrKeywordInnerSlow(escaped, can_be_keyword);
+  }
+  // 跳到另外一个文件里实现
+  KeywordOrIdentifierToken(str, len) {
+    return PerfectKeywordHash.GetToken(str, len);
+  }
+  ScanIdentifierUnicodeEscape() {
   }
   /**
    * 解析字符串相关

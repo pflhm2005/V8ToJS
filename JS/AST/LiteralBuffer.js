@@ -42,32 +42,8 @@ export default class LiteralBuffer {
     this.backing_store_[this.position_] = one_byte_char;
     this.position_ += kOneByteSize;
   }
-  ExpandBuffer() {}
-}
-
-class TokenDesc {
-  constructor() {
-    /**
-     * 源码中是一个结构体
-     * 除了标记起始、结束位置还有若干方法
-     */
-    this.location =  {
-      beg_pos: 0,
-      end_pos: 0,
-    };
-    /**
-     * 负责管理字符串
-     * 还有一个raw_literal_chars属性储存源字符串
-     */
-    this.literal_chars = new LiteralBuffer();
-    /**
-     * Token类型
-     */
-    this.token = null;
-    /**
-     * 处理小整数
-     */
-    this.smi_value = 0;
-    this.after_line_terminator = false;
+  one_byte_literal() {
+    return this.backing_store_.map(v => String.fromCharCode(v)).join('');
   }
+  ExpandBuffer() {}
 }

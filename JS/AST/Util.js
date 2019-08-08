@@ -5,6 +5,7 @@ import {
   kStringTerminator,
   kIdentifierNeedsSlowPath,
   kMultilineCommentCharacterNeedsSlowPath,
+  kMaxAscii,
 } from './Const';
 
 /**
@@ -105,9 +106,10 @@ const keywords = {
  * @param {char} lower_limit 低位字符
  * @param {chat} higher_limit 高位字符
  */
-const IsInRange = (c, lower_limit, higher_limit) => {
-  return (c.charCodeAt() - lower_limit.charCodeAt())
-   >= (higher_limit.charCodeAt() - lower_limit.charCodeAt());
+export const IsInRange = (c, lower_limit, higher_limit) => {
+
+  return (String(c).charCodeAt() - String(lower_limit).charCodeAt())
+   >= (String(higher_limit).charCodeAt() - String(lower_limit).charCodeAt());
 }
 
 /**
@@ -160,16 +162,63 @@ const IsAlphaNumeric = (c) => {
 export const IsAsciiIdentifier = (c) => {
   return IsAlphaNumeric(c) || c == '$' || c == '_';
 }
+export const IsIdentifierStart = (c) => {
+  return ('A' <= c && c <= 'Z') || ('a' <= c && c <= 'z') || c == '_';
+}
+
+/**
+ * bitmap判断flag系列
+ */
+export const TerminatesLiteral = (scan_flags) => {
+  return scan_flags & kTerminatesLiteral;
+}
+export const IdentifierNeedsSlowPath = (scan_flags) => {
+  return scan_flags & kIdentifierNeedsSlowPath;
+}
+export const CanBeKeyword = (scan_flags) => {
+  return scan_flags & kCannotBeKeyword;
+}
+
+/**
+ * Ascii - Unicode值映射
+ */
+let UnicodeToAsciiMapping = [];
+
+for(let i = 0;i < kMaxAscii;i ++) {
+  UnicodeToAsciiMapping.push(String.fromCharCode(i));
+}
+export { UnicodeToAsciiMapping }
+
+/**
+ * 源码确实是一个超长的三元表达式
+ * Token是一个枚举 这里直接用字符串代替了
+ * 因为太多了 只保留几个看看
+ */
+const TokenToAsciiMapping = (c) => {
+  return c === '(' ? 'Token::LPAREN' : 
+  c == ')' ? 'Token::RPAREN' :
+  // ...很多很多
+  c == '"' ? 'Token::STRING' :
+  c == '\'' ? 'Token::STRING' :
+  // 标识符部分单独抽离出一个方法判断
+  c == '\\' ? 'Token::IDENTIFIER' :
+  IsAsciiIdentifier(c) ? 'Token::IDENTIFIER' :
+  // ...很多很多
+  'Token::ILLEGAL'
+};
+export const UnicodeToToken = UnicodeToAsciiMapping.map(c => TokenToAsciiMapping(c));
 
 /**
  * 返回单个字符类型标记
  */
-export const GetScanFlags = (c) => {
-  (!IsAsciiIdentifier(c) ? kTerminatesLiteral : 0) |
+const GetScanFlags = (c) => {
+  return (!IsAsciiIdentifier(c) ? kTerminatesLiteral : 0) |
   (IsAsciiIdentifier(c) && !CanBeKeywordCharacter(c)) ? kCannotBeKeyword : 0 |
   (IsKeywordStart(c) ? kCannotBeKeywordStart : 0) |
   ((c === '\'' || c === '"' || c === '\n' || c === '\r' || c === '\\') ? kStringTerminator : 0) |
   (c === '\\' ? kIdentifierNeedsSlowPath : 0) |
   (c === '\n' || c === '\r' || c === '*' ? kMultilineCommentCharacterNeedsSlowPath : 0)
 }
+
+export const character_scan_flags = UnicodeToAsciiMapping.map(c => GetScanFlags(c));
 

@@ -233,7 +233,8 @@ V8_INLINE Token::Value Scanner::ScanSingleToken() {
           return Select(token);
         case Token::STRING:
           return ScanString();
-
+        case Token::IDENTIFIER:
+          return ScanIdentifierOrKeyword();
         // ...
         default:
           UNREACHABLE();
