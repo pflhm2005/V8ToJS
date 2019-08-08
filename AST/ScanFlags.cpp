@@ -81,16 +81,17 @@ enum class ScanFlags : uint8_t {
 /**
  * 字符标记
  * 一共有6种类型 单个字符可能有多种标记
+ * 注意 运算没有按照枚举的声明顺序
  */
 constexpr uint8_t GetScanFlags(char c) {
   return
     /**
-     * 关键词的标记
+     * 非关键词的标记
      * 总结就是字符是大小写字母、数字、$、_且不在关键词字符中
      */
     (IsAsciiIdentifier(c) && !CanBeKeywordCharacter(c) ? static_cast<uint8_t>(ScanFlags::kCannotBeKeyword) : 0) |
     /**
-     * 关键词开头
+     * 非关键词开头
      * 上面的group
      */
     (IsKeywordStart(c) ? 0 : static_cast<uint8_t>(ScanFlags::kCannotBeKeywordStart)) |

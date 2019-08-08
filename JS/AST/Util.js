@@ -5,6 +5,7 @@ import {
   kStringTerminator,
   kIdentifierNeedsSlowPath,
   kMultilineCommentCharacterNeedsSlowPath,
+  keywords,
 } from './Const';
 
 /**
@@ -18,12 +19,29 @@ const IsInRange = (c, lower_limit, higher_limit) => {
    >= (higher_limit.charCodeAt() - lower_limit.charCodeAt());
 }
 
-const IsInString = (c) => {
-
+/**
+ * 源码用的递归 比较迷
+ * 逻辑如下 如果是JS直接includes
+ */
+const IsInString = (tar, c, i = 0) => {
+  return i >= tar.length ? false : tar[i] === c ? true : IsInString(tar, c, i + 1);
 }
 
+/**
+ * v8将所有关键词串起来 弄成一个超长字符串
+ * 然后判断某个字符是否在这个字符串中
+ */
+const keywordLongString = Object.values(keywords).reduce((cur ,tar) => cur.concat(tar), []).map(v => v.value).join('');
 const CanBeKeywordCharacter = (c) => {
-  return IsInString(keywords, c);
+  return IsInString(keywordLongString, c);
+}
+
+/**
+ * 首字符直接用key做判断
+ * 源码用的宏 懒得去模拟了
+ */
+const IsKeywordStart = (c) => {
+  return Object.keys(keywords).includes(c);
 }
 
 /**

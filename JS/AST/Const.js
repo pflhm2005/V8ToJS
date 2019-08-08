@@ -141,4 +141,5 @@ export {
   UnicodeToAsciiMapping,
   UnicodeToToken,
   CharTypeMapping,
+  keywords,
 };
