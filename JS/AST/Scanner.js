@@ -1,6 +1,6 @@
 import Stream from './Stream';
 import TokenDesc from './TokenDesc';
-import { kMaxAscii } from './Const';
+import { kMaxAscii, CharTypeMapping, UnicodeToToken, UnicodeToAsciiMapping } from './Const';
 
 export default class Scanner {
   constructor(source_string) {
@@ -62,6 +62,8 @@ export default class Scanner {
             return this.Select(token);
           case 'Token::STRING':
             return this.ScanString();
+          case 'Token::IDENTIFIER':
+            return ScanIdentifierOrKeyword();
           // ...
         } 
       }
@@ -71,12 +73,54 @@ export default class Scanner {
     } while(token === 'Token::WHITESPACE')
     return token;
   }
+  /**
+   * 解析标识符相关
+   * 标识符的解析也用到了literal类
+   */
+  ScanIdentifierOrKeyword() {
+    this.next().literal_chars.Start();
+    return this.ScanIdentifierOrKeywordInner();
+  }
+  ScanIdentifierOrKeywordInner() {
+    /**
+     * 两个布尔类型的flag 
+     * 一个标记转义字符 一个标记键词
+     */
+    let escaped = false;
+    let can_be_keyword = true;
+    if(this.c0_ < kMaxAscii) {
+      // 转义字符以'\'字符开头
+      if(this.c0_ !== '\\') {
+        let scan_flags = CharTypeMapping[this.c0_];
+        // 这个地方比较迷 没看懂
+        scan_flags >>= 1;
+        this.AddLiteralChar(this.c0_);
+        this.AdvanceUntil(() => {
+
+        });
+      } else {
+        escaped = true;
+      }
+    }
+  }
+  /**
+   * 解析字符串相关
+   */
   ScanString() {
     // 保存当前字符串的标记符号 ' 或 "
     let quote = this.c0_;
     this.next().literal_chars.Start();
     while(true) {
-      this.AdvanceUntil();
+      this.AdvanceUntil((c0) => {
+        /**
+         * 代表当前字符可能是一个结束符 这里简化了判断 源码如下
+         * uint8_t char_flags = character_scan_flags[c0];
+         * if (MayTerminateString(char_flags)) return true;
+         */
+        if(["\'", "\""].includes(UnicodeToAsciiMapping[c0])) return true;
+        this.AddLiteralChar(c0);
+        return false;
+      });
       /**
        * 特殊符号直接前进一格
        */
@@ -101,7 +145,7 @@ export default class Scanner {
    * 1、实际调用的是source_上的方法 并把返回值给了c0_
    * 2、判断函数在这里写实现
    */
-  AdvanceUntil() {
+  AdvanceUntil(callback) {
     /**
      * 这里需要实现std标准库中一个方法
      * 实际上是三个参数 且前两个参数为迭代器 为了方便暂时就不完美实现了
@@ -110,16 +154,6 @@ export default class Scanner {
       let tarArr = arr.slice(start, end);
       let tarIdx = tarArr.findIndex(v => callback(v));
       return tarIdx === -1 ? end : tarIdx;
-    }
-    const callback = (c0) => {
-      /**
-       * 代表当前字符可能是一个结束符 这里简化了判断 源码如下
-       * uint8_t char_flags = character_scan_flags[c0];
-       * if (MayTerminateString(char_flags)) return true;
-       */
-      if(["\'", "\""].includes(UnicodeToAsciiMapping[c0])) return true;
-      this.AddLiteralChar(c0);
-      return false;
     }
     /**
      * 在字符串中寻找第一个字符结尾标记的位置
