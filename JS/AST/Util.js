@@ -102,7 +102,7 @@ const keywords = {
 
 /**
  * 判断给定字符是否在两个字符的范围内
- * C++实现比较墨迹 JS直接强转字符
+ * C++比较灵活 JS只能手动强转字符
  * @param {char} c 目标字符
  * @param {char} lower_limit 低位字符
  * @param {chat} higher_limit 高位字符
@@ -114,15 +114,15 @@ export const IsInRange = (c, lower_limit, higher_limit) => {
 
 /**
  * 源码用的递归 比较迷
- * 逻辑如下 如果是JS直接includes
+ * 逻辑如下 反正相当于JS的includes
  */
 const IsInString = (tar, c, i = 0) => {
   return i >= tar.length ? false : tar[i] === c ? true : IsInString(tar, c, i + 1);
 }
 
 /**
- * v8将所有关键词串起来 弄成一个超长字符串
- * 然后判断某个字符是否在这个字符串中
+ * v8用宏将所有关键词串起来 弄成一个超长字符串
+ * 然后判断字符是否在这个字符串中
  */
 const keywordLongString = Object.values(keywords).reduce((cur ,tar) => cur.concat(tar), []).map(v => v.value).join('');
 const CanBeKeywordCharacter = (c) => {
@@ -130,8 +130,8 @@ const CanBeKeywordCharacter = (c) => {
 }
 
 /**
- * 首字符直接用key做判断
- * 源码用的宏 懒得去模拟了
+ * 首字符直接用上面那个对象的key做判断
+ * 源码用的宏 懒得去模拟了(也基本上没法模拟)
  */
 const IsKeywordStart = (c) => {
   return Object.keys(keywords).includes(c);
