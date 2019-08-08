@@ -12,3 +12,13 @@ export const kCannotBeKeywordStart = 1 << 2;
 export const kStringTerminator = 1 << 3;
 export const kIdentifierNeedsSlowPath = 1 << 4;
 export const kMultilineCommentCharacterNeedsSlowPath = 1 << 5;
+
+/**
+ * 数字相关
+ */
+export const IMPLICIT_OCTAL = 0;
+export const BINARY = 1;
+export const OCTAL = 2;
+export const HEX = 3;
+export const DECIMAL = 4;
+export const IMPLICIT_ODECIMAL_WITH_LEADING_ZEROCTAL = 5;

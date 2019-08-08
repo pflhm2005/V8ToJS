@@ -4,6 +4,12 @@ import TokenDesc from './TokenDesc';
 import { 
   kMaxAscii, 
   kIdentifierNeedsSlowPath,
+  IMPLICIT_OCTAL,
+  BINARY,
+  OCTAL,
+  HEX,
+  DECIMAL,
+  IMPLICIT_ODECIMAL_WITH_LEADING_ZEROCTAL,
 } from './Const';
 
 import {
@@ -13,6 +19,7 @@ import {
   character_scan_flags, 
   UnicodeToToken, 
   UnicodeToAsciiMapping,
+  AsciiAlphaToLower,
 } from './Util';
 
 export default class Scanner {
@@ -49,6 +56,10 @@ export default class Scanner {
   Advance() {
     this.c0_ = this.source_.Advance();
   }
+  AddLiteralCharAdvance() {
+    this.AddLiteralChar(this.c0_);
+    this.Advance();
+  }
   /**
    * 这里有函数重载 JS就直接用默认参数模拟了
    */
@@ -76,8 +87,8 @@ export default class Scanner {
           case 'Token::STRING':
             return this.ScanString();
           // 数字开头的变量会在这里被拦截处理
-          // case 'Token::NUMBER':
-          //   return ScanNumber(false);
+          case 'Token::NUMBER':
+            return ScanNumber(false);
           case 'Token::IDENTIFIER':
             return this.ScanIdentifierOrKeyword();
           // ...
@@ -88,6 +99,48 @@ export default class Scanner {
        */
     } while(token === 'Token::WHITESPACE')
     return token;
+  }
+  /**
+   * 解析数字相关
+   * literal作为字面量类无所不能!
+   */
+  ScanNumber(seen_period) {
+    let kind = DECIMAL;
+    this.next().literal_chars.Start();
+    // 正常写法的数字
+    let as_start = !seen_period;
+    let start_pos = 0;
+    // 处理简写
+    if(seen_period) {
+
+    } else {
+      /**
+       * 共有数字0、0exxx、0Exxx、0.xxx、二进制、十六进制、八进制、十进制八种情况
+       */
+      if(this.c0_ === '0') {
+        this.AddLiteralCharAdvance();
+
+        // 0x代表16进制
+        if(AsciiAlphaToLower(c0_) === 'x') {
+          this.AddLiteralCharAdvance();
+          kind = HEX;
+          if(!ScanHexDigits()) return 'TOKEN:ILLEGAL';
+        } else if(AsciiAlphaToLower(c0_) === 'o') {
+          this.AddLiteralCharAdvance();
+          kind = OCTAL;
+          if(!ScanOctalDigits()) return 'Token::ILLEGAL';
+        } else if(AsciiAlphaToLower(c0_) === 'b') {
+          this.AddLiteralCharAdvance();
+          kind = BINARY;
+          if(!ScanBinaryDigits()) return 'Token::ILLEGAL';
+        } else if(IsOctalDigit(c0_)) {
+          kind = IMPLICIT_OCTAL;
+          // 这里的kind作为引用传入 JS没这个东西 做做样子
+          if(!ScanImplicitOctalDigits(start_pos, kind)) return 'Token::ILLEGAL';
+          if(kind === DECIMAL_WITH_LEADING_ZERO) as_start = false;
+        }
+      }
+    }
   }
   /**
    * 解析标识符相关

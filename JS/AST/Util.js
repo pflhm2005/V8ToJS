@@ -140,7 +140,7 @@ const IsKeywordStart = (c) => {
 /**
  * 将大写字母转换为小写字母
  */
-const AsciiAlphaToLower = (c) => { return String.fromCharCode(c | 0x20); }
+export const AsciiAlphaToLower = (c) => { return String.fromCharCode(c | 0x20); }
 
 /**
  * 数字字符判断
@@ -200,7 +200,9 @@ const TokenToAsciiMapping = (c) => {
   // ...很多很多
   c == '"' ? 'Token::STRING' :
   c == '\'' ? 'Token::STRING' :
+
   // 标识符部分单独抽离出一个方法判断
+  IsDecimalDigit(c) ? 'Token::NUMBER' :
   c == '\\' ? 'Token::IDENTIFIER' :
   IsAsciiIdentifier(c) ? 'Token::IDENTIFIER' :
   // ...很多很多
