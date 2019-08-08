@@ -1,6 +1,8 @@
 import Stream from './Stream';
 import PerfectKeywordHash from './PerfectKeywordHash';
 import TokenDesc from './TokenDesc';
+import Location from './Location';
+
 import { 
   kMaxAscii, 
   kIdentifierNeedsSlowPath,
@@ -9,7 +11,8 @@ import {
   OCTAL,
   HEX,
   DECIMAL,
-  IMPLICIT_ODECIMAL_WITH_LEADING_ZEROCTAL,
+  DECIMAL_WITH_LEADING_ZERO,
+  kCharacterLookaheadBufferSize,
 } from './Const';
 
 import {
@@ -20,7 +23,12 @@ import {
   UnicodeToToken, 
   UnicodeToAsciiMapping,
   AsciiAlphaToLower,
+  IsIdentifierStart,
 } from './Util';
+
+import {
+  kStrictDecimalWithLeadingZero,
+} from './MessageTemplate';
 
 export default class Scanner {
   constructor(source_string) {
@@ -37,6 +45,12 @@ export default class Scanner {
      */
     this.TokenDesc = new TokenDesc();
     this.token_storage_ = [];
+
+    this.octal_pos_ = null;
+    this.octal_message_ = '';
+  }
+  source_pos() {
+    return this.source_.pos() - kCharacterLookaheadBufferSize;
   }
   /**
    * 源码有current_、next_、next_next_三个标记 这里搞一个
@@ -109,7 +123,7 @@ export default class Scanner {
     this.next().literal_chars.Start();
     // 正常写法的数字
     let as_start = !seen_period;
-    let start_pos = 0;
+    let start_pos = this.source_pos();
     // 处理简写
     if(seen_period) {
 
@@ -138,8 +152,50 @@ export default class Scanner {
           // 这里的kind作为引用传入 JS没这个东西 做做样子
           if(!ScanImplicitOctalDigits(start_pos, kind)) return 'Token::ILLEGAL';
           if(kind === DECIMAL_WITH_LEADING_ZERO) as_start = false;
+        } else if(IsNonOctalDecimalDigit(c0_)) {
+          kind = DECIMAL_WITH_LEADING_ZERO;
+        } else if(allow_harmony_numeric_separator() && this.c0_ === '_') {
+          return 'Token::ILLEGAL';
         }
       }
+
+      // 到这里代表是普通的十进制数字
+      if(IsDecimalNumberKind(kind)) {
+        // 
+        if(as_start) {
+          let value = 0;
+          // 这里value同样作为引用传入
+          if(!ScanDecimalAsSmi(value)) return 'Token::ILLEGAL'; 
+
+          if(this.next().literal_chars.one_byte_literal().length <= 10
+            && value <= Smi_kMaxValue
+            && this.c0_ !== '.'
+            && !IsIdentifierStart(this.c0_)) {
+            this.next().smi_value = value;
+
+            if(kind === DECIMAL_WITH_LEADING_ZERO) {
+              this.octal_pos_ = new Location(start_pos, this.source_pos());
+              this.octal_message_ = kStrictDecimalWithLeadingZero;
+            }
+            return 'Token::SMI';
+          }
+        }
+        if(!ScanDecimalDigits()) return 'Token::ILLEGAL';
+        if(this.c0_ === '.') {
+          seen_period = true;
+          this.AddLiteralCharAdvance();
+          if(allow_harmony_numeric_separator() && this.c0_ === '_') return 'Token::ILLEGAL';
+          if(!ScanDecimalDigits()) return 'Token::ILLEGAL';
+        }
+      }
+    }
+    // 大整数判断
+    let is_bigint = false;
+    if(this.c0_ === 'n' && !seen_period && IsValidBigIntKind(kind)) {
+      // 这里快速判断
+      const kMaxBigIntCharacters = BigInt_kMaxLengthBits / 4;
+      let length = this.source_pos() - this.start_pos - (kind != DECIMAL ? 2 : 0);
+      if(length > kMaxBigIntCharacters) return 'Token::ILLEGAL';
     }
   }
   /**

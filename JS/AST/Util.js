@@ -143,10 +143,15 @@ const IsKeywordStart = (c) => {
 export const AsciiAlphaToLower = (c) => { return String.fromCharCode(c | 0x20); }
 
 /**
- * 数字字符判断
+ * 数字类型判断
  */
+// 十进制 0~9
 const IsDecimalDigit = (c) => {
   return IsInRange(c, '0', '9');
+}
+// 十六进制 0~f
+const IsHexDigit = (c) => {
+  return IsDecimalDigit(c) || IsInRange(AsciiAlphaToLower(c), 'a', 'f');
 }
 
 /**

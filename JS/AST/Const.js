@@ -3,6 +3,8 @@ export const Latin1_kMaxChar = 255;
 export const kOneByteSize = 1;
 export const kMaxAscii = 127;
 
+export const kCharacterLookaheadBufferSize = 1;
+
 /**
  * 字符类型相关
  */
@@ -21,4 +23,4 @@ export const BINARY = 1;
 export const OCTAL = 2;
 export const HEX = 3;
 export const DECIMAL = 4;
-export const IMPLICIT_ODECIMAL_WITH_LEADING_ZEROCTAL = 5;
+export const DECIMAL_WITH_LEADING_ZERO = 5;

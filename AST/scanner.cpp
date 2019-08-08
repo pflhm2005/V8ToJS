@@ -233,6 +233,8 @@ V8_INLINE Token::Value Scanner::ScanSingleToken() {
           return Select(token);
         case Token::STRING:
           return ScanString();
+        case Token::NUMBER:
+          return ScanNumber(false);
         case Token::IDENTIFIER:
           return ScanIdentifierOrKeyword();
         // ...

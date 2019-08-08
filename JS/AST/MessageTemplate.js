@@ -1,0 +1,1 @@
+export const kStrictDecimalWithLeadingZero = "Decimals with leading zeros are not allowed in strict mode."

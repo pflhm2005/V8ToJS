@@ -1,4 +1,5 @@
 import LiteralBuffer from './LiteralBuffer';
+import Location from './Location';
 
 export default class TokenDesc {
   constructor() {
@@ -6,10 +7,7 @@ export default class TokenDesc {
      * 源码中是一个结构体
      * 除了标记起始、结束位置还有若干方法
      */
-    this.location =  {
-      beg_pos: 0,
-      end_pos: 0,
-    };
+    this.location = new Location(0, 0);
     /**
      * 负责管理字符串
      * 还有一个raw_literal_chars属性储存源字符串

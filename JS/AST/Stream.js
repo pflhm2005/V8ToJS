@@ -14,9 +14,17 @@ export default class Stream {
     /**
      * 三个指针分别代表当前解析进度
      */
-    this.buffer_start_ = 0
-    this.buffer_cursor_ = 0
-    this.buffer_end_ = 0
+    this.buffer_start_ = 0;
+    this.buffer_cursor_ = 0;
+    this.buffer_end_ = 0;
+
+    /**
+     * 这个pos暂时不会用到
+     */
+    this.buffer_pos_ = 0;
+  }
+  pos() {
+    return this.buffer_pos_ + (this.buffer_cursor_ - this.buffer_start_);
   }
   ReadBlockChecked() {
     return this.ReadBlock();
