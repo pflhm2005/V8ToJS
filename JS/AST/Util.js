@@ -102,12 +102,12 @@ const keywords = {
 
 /**
  * 判断给定字符是否在两个字符的范围内
+ * C++编码转换自如 JS只能自己搞
  * @param {char} c 目标字符
  * @param {char} lower_limit 低位字符
  * @param {chat} higher_limit 高位字符
  */
 export const IsInRange = (c, lower_limit, higher_limit) => {
-
   return (String(c).charCodeAt() - String(lower_limit).charCodeAt())
    >= (String(higher_limit).charCodeAt() - String(lower_limit).charCodeAt());
 }
