@@ -6,6 +6,10 @@ import {
   kIdentifierNeedsSlowPath,
   kMultilineCommentCharacterNeedsSlowPath,
   kMaxAscii,
+
+  BINARY,
+  DECIMAL,
+  DECIMAL_WITH_LEADING_ZERO
 } from './Const';
 
 /**
@@ -101,15 +105,27 @@ const keywords = {
 };
 
 /**
- * 判断给定字符是否在两个字符的范围内
+ * Ascii - Unicode值映射
+ */
+let UnicodeToAsciiMapping = [];
+
+for(let i = 0;i < kMaxAscii;i ++) {
+  UnicodeToAsciiMapping.push(String.fromCharCode(i));
+}
+export { UnicodeToAsciiMapping }
+
+/**
+ * 判断给定字符(数字)是否在两个字符的范围内
  * C++通过static_cast同时处理了char和int类型 JS就比较坑了
+ * 这个方法其实在C++超简单的 然而用JS直接炸裂
  * @param {char} c 目标字符
  * @param {char} lower_limit 低位字符
  * @param {chat} higher_limit 高位字符
  */
 export const IsInRange = (c, lower_limit, higher_limit) => {
   if(typeof lower_limit === 'string' && typeof higher_limit === 'string') {
-    return (String(c).charCodeAt() - lower_limit.charCodeAt())
+    if(typeof c === 'string') c = c.charCodeAt();
+    return (c - lower_limit.charCodeAt())
     <= (higher_limit.charCodeAt() - lower_limit.charCodeAt());
   } else {
     return (c - lower_limit) <= (higher_limit - lower_limit);
@@ -149,13 +165,33 @@ export const AsciiAlphaToLower = (c) => { return String.fromCharCode(c | 0x20); 
 /**
  * 数字类型判断
  */
+// 二进制 0~1
+export const IsBinaryDigit = (c) => {
+  return IsInRange(c, '0', '1');
+}
+// 八进制 0~7
+export const IsOctalDigit = (c) => {
+  return IsInRange(c, '0', '7');
+}
 // 十进制 0~9
-const IsDecimalDigit = (c) => {
+export const IsDecimalDigit = (c) => {
   return IsInRange(c, '0', '9');
 }
 // 十六进制 0~f
-const IsHexDigit = (c) => {
+export const IsHexDigit = (c) => {
   return IsDecimalDigit(c) || IsInRange(AsciiAlphaToLower(c), 'a', 'f');
+}
+// 隐式非八进制 8~9
+export const  IsNonOctalDecimalDigit = (c) => {
+  return IsInRange(c, '8', '9');
+}
+// 是否是十进制
+export const IsDecimalNumberKind = (kind) => {
+  return IsInRange(kind, DECIMAL, DECIMAL_WITH_LEADING_ZERO)
+}
+// 是否是合法的bigint进制模式
+export const IsValidBigIntKind = (kind) => {
+  return IsInRange(kind, BINARY, DECIMAL);
 }
 
 /**
@@ -169,9 +205,11 @@ const IsAlphaNumeric = (c) => {
  * 判断是否是合法标识符字符
  */
 export const IsAsciiIdentifier = (c) => {
+  if(typeof c === 'number') c = UnicodeToAsciiMapping[c];
   return IsAlphaNumeric(c) || c == '$' || c == '_';
 }
 export const IsIdentifierStart = (c) => {
+  if(typeof c === 'number') c = UnicodeToAsciiMapping[c];
   return ('A' <= c && c <= 'Z') || ('a' <= c && c <= 'z') || c == '_';
 }
 
@@ -187,16 +225,6 @@ export const IdentifierNeedsSlowPath = (scan_flags) => {
 export const CanBeKeyword = (scan_flags) => {
   return scan_flags & kCannotBeKeyword;
 }
-
-/**
- * Ascii - Unicode值映射
- */
-let UnicodeToAsciiMapping = [];
-
-for(let i = 0;i < kMaxAscii;i ++) {
-  UnicodeToAsciiMapping.push(String.fromCharCode(i));
-}
-export { UnicodeToAsciiMapping }
 
 /**
  * 源码确实是一个超长的三元表达式

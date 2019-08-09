@@ -31,7 +31,8 @@ Token::Value Scanner::ScanNumber(bool seen_period) {
     /**
      * 0开头有八种可能
      * 1.数字0 2.0exxx 3.0Exxx 4.二进制
-     * 5.八进制 6.十六进制 7.0.xxx 8.普通的0开头十进制数字
+     * 5.八进制 6.十六进制 7.0.xxx
+     * 8.普通的0开头十进制数字 9.0开头的普通十进制数字s
      */
     if (c0_ == '0') {
       AddLiteralCharAdvance();

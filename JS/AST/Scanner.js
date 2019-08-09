@@ -24,11 +24,30 @@ import {
   UnicodeToAsciiMapping,
   AsciiAlphaToLower,
   IsIdentifierStart,
+
+  IsBinaryDigit,
+  IsOctalDigit,
+  IsDecimalDigit,
+  IsHexDigit,
+  IsNonOctalDecimalDigit,
+  IsDecimalNumberKind,
+  IsValidBigIntKind,
 } from './Util';
 
 import {
   kStrictDecimalWithLeadingZero,
+  kZeroDigitNumericSeparator,
+  kContinuousNumericSeparator,
+  kTrailingNumericSeparator,
 } from './MessageTemplate';
+
+/**
+ * v8新特性
+ * 详情见https://v8.dev/blog/v8-release-75
+ */
+const allow_harmony_numeric_separator = () => true;
+
+const Smi_kMaxValue = 2**31 - 1;
 
 export default class Scanner {
   constructor(source_string) {
@@ -94,15 +113,13 @@ export default class Scanner {
           case 'Token::LPAREN':
           /**
            * 有很多其他的case
-           * 因为只讲字符串
-           * 这里就不实现这个方法了
+           * 逐渐壮大了
            */
             return this.Select(token);
           case 'Token::STRING':
             return this.ScanString();
-          // 数字开头的变量会在这里被拦截处理
           case 'Token::NUMBER':
-            return ScanNumber(false);
+            return this.ScanNumber(false);
           case 'Token::IDENTIFIER':
             return this.ScanIdentifierOrKeyword();
           // ...
@@ -126,47 +143,51 @@ export default class Scanner {
     let start_pos = this.source_pos();
     // 处理简写
     if(seen_period) {
-
+      this.AddLiteralChar('.');
+      if(allow_harmony_numeric_separator() && this.c0_ === '_') return 'TOKEN:ILLEGAL';
+      if(!this.ScanDecimalDigits()) return 'TOKEN:ILLEGAL';
     } else {
       /**
-       * 共有数字0、0exxx、0Exxx、0.xxx、二进制、十六进制、八进制、十进制八种情况
+       * 共有数字0、0exxx、0Exxx、0.xxx、二进制、十六进制、八进制、0开头的十进制、隐式八进制九种情况
        */
-      if(this.c0_ === '0') {
+      if(UnicodeToAsciiMapping[this.c0_] === '0') {
         this.AddLiteralCharAdvance();
 
-        // 0x代表16进制
-        if(AsciiAlphaToLower(c0_) === 'x') {
+        if(AsciiAlphaToLower(this.c0_) === 'x') {
           this.AddLiteralCharAdvance();
           kind = HEX;
-          if(!ScanHexDigits()) return 'TOKEN:ILLEGAL';
-        } else if(AsciiAlphaToLower(c0_) === 'o') {
+          if(!this.ScanHexDigits()) return 'TOKEN:ILLEGAL';
+        } else if(AsciiAlphaToLower(this.c0_) === 'o') {
           this.AddLiteralCharAdvance();
           kind = OCTAL;
-          if(!ScanOctalDigits()) return 'Token::ILLEGAL';
-        } else if(AsciiAlphaToLower(c0_) === 'b') {
+          if(!this.ScanOctalDigits()) return 'Token::ILLEGAL';
+        } else if(AsciiAlphaToLower(this.c0_) === 'b') {
           this.AddLiteralCharAdvance();
           kind = BINARY;
-          if(!ScanBinaryDigits()) return 'Token::ILLEGAL';
-        } else if(IsOctalDigit(c0_)) {
+          if(!this.ScanBinaryDigits()) return 'Token::ILLEGAL';
+        } else if(IsOctalDigit(this.c0_)) {
           kind = IMPLICIT_OCTAL;
-          // 这里的kind作为引用传入 JS没这个东西 做做样子
-          if(!ScanImplicitOctalDigits(start_pos, kind)) return 'Token::ILLEGAL';
+          // 这里的第二个参数kind是作为引用传入 JS没这个东西 只能改一下返回值
+          if(!(kind = this.ScanImplicitOctalDigits(start_pos, kind))) return 'Token::ILLEGAL';
           if(kind === DECIMAL_WITH_LEADING_ZERO) as_start = false;
-        } else if(IsNonOctalDecimalDigit(c0_)) {
+        } else if(IsNonOctalDecimalDigit(this.c0_)) {
           kind = DECIMAL_WITH_LEADING_ZERO;
-        } else if(allow_harmony_numeric_separator() && this.c0_ === '_') {
+        } else if(allow_harmony_numeric_separator() && UnicodeToAsciiMapping[this.c0_] === '_') {
+          ReportScannerError(Location(source_pos(), source_pos() + 1), kZeroDigitNumericSeparator);
           return 'Token::ILLEGAL';
         }
       }
 
       // 到这里代表是普通的十进制数字
       if(IsDecimalNumberKind(kind)) {
-        // 
+        // 如果是0开头的十进制数字 则不会进入这里
         if(as_start) {
           let value = 0;
-          // 这里value同样作为引用传入
-          if(!ScanDecimalAsSmi(value)) return 'Token::ILLEGAL'; 
-
+          /**
+           * 这里value同样作为引用传入 JS没有引用修改了返回值
+           * 由于0同样是假值 这里以null为非法标记
+           */
+          if((value = this.ScanDecimalAsSmi(value)) === null) return 'Token::ILLEGAL';
           if(this.next().literal_chars.one_byte_literal().length <= 10
             && value <= Smi_kMaxValue
             && this.c0_ !== '.'
@@ -180,23 +201,159 @@ export default class Scanner {
             return 'Token::SMI';
           }
         }
-        if(!ScanDecimalDigits()) return 'Token::ILLEGAL';
-        if(this.c0_ === '.') {
+        if(!this.ScanDecimalDigits()) return 'Token::ILLEGAL';
+        if(UnicodeToAsciiMapping[this.c0_] === '.') {
           seen_period = true;
           this.AddLiteralCharAdvance();
-          if(allow_harmony_numeric_separator() && this.c0_ === '_') return 'Token::ILLEGAL';
-          if(!ScanDecimalDigits()) return 'Token::ILLEGAL';
+          if(allow_harmony_numeric_separator() && UnicodeToAsciiMapping[this.c0_] === '_') return 'Token::ILLEGAL';
+          if(!this.ScanDecimalDigits()) return 'Token::ILLEGAL';
         }
       }
     }
     // 大整数判断
     let is_bigint = false;
-    if(this.c0_ === 'n' && !seen_period && IsValidBigIntKind(kind)) {
-      // 这里快速判断
+    if(UnicodeToAsciiMapping[this.c0_] === 'n' && !seen_period && IsValidBigIntKind(kind)) {
+      // 这里根据长度快速判断大整数合法性
       const kMaxBigIntCharacters = BigInt_kMaxLengthBits / 4;
       let length = this.source_pos() - this.start_pos - (kind != DECIMAL ? 2 : 0);
       if(length > kMaxBigIntCharacters) return 'Token::ILLEGAL';
+
+      is_bigint = true;
+      this.Advance();
     }
+    // 处理指数
+    else if(AsciiAlphaToLower(this.c0_) === 'e') {
+      if(!IsDecimalNumberKind(kind)) return 'Token::ILLEGAL';
+      this.AddLiteralCharAdvance();
+      if(!this.ScanSignedInteger()) return 'Token::ILLEGAL';
+    }
+
+    // ...
+
+    if(kind === DECIMAL_WITH_LEADING_ZERO) {
+      this.octal_pos_ = new Location(start_pos, this.source_pos());
+      this.octal_message_ = kStrictDecimalWithLeadingZero
+    }
+    return is_bigint ? 'Token::BIGINT' : 'Token::NUMBER';
+  }
+  /**
+   * 这是一个公共方法
+   * 第一个参数代表进制
+   * 第二个参数标记是否需要检验第一个数字
+   */
+  ScanDigitsWithNumericSeparators(predicate, is_check_first_digit) {
+    if(is_check_first_digit && !predicate(this.c0_)) return false;
+
+    let separator_seen = false;
+    while(predicate(this.c0_)|| UnicodeToAsciiMapping[this.c0_] === '_') {
+      if(UnicodeToAsciiMapping[this.c0_] === '_') {
+        this.Advance();
+        // 连续两个下划线是不合法的
+        if(UnicodeToAsciiMapping[this.c0_] === '_') {
+          ReportScannerError(Location(source_pos(), source_pos() + 1), kContinuousNumericSeparator);
+          return false;
+        }
+        separator_seen = true;
+        continue;
+      }
+      separator_seen = false;
+      this.AddLiteralCharAdvance();
+    }
+    // 数字不能以下划线结尾
+    if(separator_seen) {
+      ReportScannerError(Location(source_pos(), source_pos() + 1), kTrailingNumericSeparator);
+      return false;
+    }
+
+    return true;
+  }
+  /**
+   * 解析各个进制的数字
+   * 基本上都是走同一个方法
+   */
+  ScanDecimalDigits() {
+    if(allow_harmony_numeric_separator()) return this.ScanDigitsWithNumericSeparators(IsDecimalDigit, false);
+    while(IsDecimalDigit(this.c0_)) this.AddLiteralCharAdvance();
+    return true;
+  }
+  ScanHexDigits() {
+    if(allow_harmony_numeric_separator()) return this.ScanDigitsWithNumericSeparators(IsHexDigit, true);
+    // 0x后面至少需要有一个数字
+    if(!IsHexDigit(this.c0_)) return false;
+    while(IsHexDigit(this.c0_)) this.AddLiteralCharAdvance();
+    return true;
+  }
+  ScanOctalDigits() {
+    if(allow_harmony_numeric_separator()) return this.ScanDigitsWithNumericSeparators(IsOctalDigit, true);
+    // 0o后面至少需要有一个数字
+    if(!IsOctalDigit(this.c0_)) return false;
+    while(IsOctalDigit(this.c0_)) this.AddLiteralCharAdvance();
+    return true;
+  }
+  ScanBinaryDigits() {
+    if(allow_harmony_numeric_separator()) return this.ScanDigitsWithNumericSeparators(IsBinaryDigit, true);
+    // 0b后面至少需要有一个数字
+    if(!IsBinaryDigit(this.c0_)) return false;
+    while(IsBinaryDigit(this.c0_)) this.AddLiteralCharAdvance();
+    return true;
+  }
+  ScanImplicitOctalDigits(start_pos, kind) {
+    kind = IMPLICIT_OCTAL;
+    while(true) {
+      if(IsNonOctalDecimalDigit(this.c0_)) {
+        kind = DECIMAL_WITH_LEADING_ZERO;
+        // 应该返回true
+        return DECIMAL_WITH_LEADING_ZERO;
+      }
+      if(!IsOctalDigit(this.c0_)) {
+        this.octal_pos_ = new Location(start_pos, this.source_pos());
+        // this.octal_message_ = kStrictOctalLiteral;
+        // 应该返回true
+        return IMPLICIT_OCTAL;
+      }
+      this.AddLiteralCharAdvance();
+    }
+  }
+  ScanDecimalAsSmi(value) {
+    if(allow_harmony_numeric_separator()) return this.ScanDecimalAsSmiWithNumericSeparators(value);
+    while(IsDecimalDigit(this.c0_)) {
+      value = 10 * value + (String.fromCharCode(this.c0_) - '0');
+      let first_char = this.c0_;
+      this.Advance();
+      this.AddLiteralChar(first_char);
+    }
+    // 这里应该是true
+    return value;
+  }
+  ScanDecimalAsSmiWithNumericSeparators(value) {
+    let separator_seen = false;
+    while(IsDecimalDigit(this.c0_) || UnicodeToAsciiMapping[this.c0_] === '_') {
+      if(UnicodeToAsciiMapping[this.c0_] === '_') {
+        this.Advance();
+        if(UnicodeToAsciiMapping[this.c0_] === '_') {
+          // ReportScannerError(Location(source_pos(), source_pos() + 1), kContinuousNumericSeparator);
+          return null;
+        }
+        separator_seen = true;
+        continue;
+      }
+      separator_seen = false;
+      value = 10 * value + (String.fromCharCode(this.c0_) - '0');
+      let first_char = this.c0_;
+      this.Advance();
+      this.AddLiteralChar(first_char);
+    }
+    if(separator_seen) {
+      // ReportScannerError(Location(source_pos(), source_pos() + 1), kTrailingNumericSeparator);
+      return null;
+    }
+    return value;
+  }
+  // 处理指数
+  ScanSignedInteger() {
+    if(UnicodeToAsciiMapping[this.c0_] === '+' || UnicodeToAsciiMapping[this.c0_] === '-') this.AddLiteralCharAdvance();
+    if(!IsDecimalDigit(this.c0_)) return false;
+    return this.ScanDecimalDigits();
   }
   /**
    * 解析标识符相关
@@ -284,7 +441,7 @@ export default class Scanner {
       /**
        * 特殊符号直接前进一格
        */
-      while(this.c0_ === '\\') {
+      while(UnicodeToAsciiMapping[this.c0_] === '\\') {
         this.Advance();
       }
       /**

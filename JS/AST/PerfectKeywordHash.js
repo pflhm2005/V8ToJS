@@ -105,6 +105,7 @@ export default class PerfectKeywordHash {
   /**
    * asso_values保存了Ascii值0-127的映射
    * 所有关键词字符都有对应的hash值 而非关键词字符都是56 比如j、k、z等等
+   * 至于为什么是56 因为上面table从56开始就全是Token::IDENTIFIER
    * 通过运算返回一个整形
    */
   static Hash(str, len) {

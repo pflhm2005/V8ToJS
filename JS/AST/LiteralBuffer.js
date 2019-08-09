@@ -33,6 +33,10 @@ export default class LiteralBuffer {
     }
     this.AddTwoByteChar(code_unit);
   }
+  ConvertToTwoByte() {}
+  AddTwoByteChar(code_unit) {
+    this.AddOneByteChar(code_unit);
+  }
   AddOneByteChar(one_byte_char) {
     /**
      * 扩容算法简述就是以64为基准 每次扩容*4
