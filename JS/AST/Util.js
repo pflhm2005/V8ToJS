@@ -102,14 +102,18 @@ const keywords = {
 
 /**
  * 判断给定字符是否在两个字符的范围内
- * C++比较灵活 JS只能手动强转字符
+ * C++通过static_cast同时处理了char和int类型 JS就比较坑了
  * @param {char} c 目标字符
  * @param {char} lower_limit 低位字符
  * @param {chat} higher_limit 高位字符
  */
 export const IsInRange = (c, lower_limit, higher_limit) => {
-  return (String(c).charCodeAt() - String(lower_limit).charCodeAt())
-   >= (String(higher_limit).charCodeAt() - String(lower_limit).charCodeAt());
+  if(typeof lower_limit === 'string' && typeof higher_limit === 'string') {
+    return (String(c).charCodeAt() - lower_limit.charCodeAt())
+    <= (higher_limit.charCodeAt() - lower_limit.charCodeAt());
+  } else {
+    return (c - lower_limit) <= (higher_limit - lower_limit);
+  }
 }
 
 /**
