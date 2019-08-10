@@ -41,7 +41,7 @@ export default class Stream {
    * 返回当前字符 并前进一格
    */
   Advance() {
-    let tmp = this.peek();
+    let tmp = this.Peek();
     this.buffer_cursor_++;
     return tmp;
   }
@@ -49,7 +49,7 @@ export default class Stream {
    * 返回当前字符
    * 同时会做初始化
    */
-  peek() {
+  Peek() {
     if(this.buffer_cursor_ < this.buffer_end_) {
       return this.buffer_[this.buffer_cursor_];
     } else if(this.ReadBlockChecked()) {

@@ -125,10 +125,10 @@ export { UnicodeToAsciiMapping }
 export const IsInRange = (c, lower_limit, higher_limit) => {
   if(typeof lower_limit === 'string' && typeof higher_limit === 'string') {
     if(typeof c === 'string') c = c.charCodeAt();
-    return (c - lower_limit.charCodeAt())
+    return Math.abs(c - lower_limit.charCodeAt())
     <= (higher_limit.charCodeAt() - lower_limit.charCodeAt());
   } else {
-    return (c - lower_limit) <= (higher_limit - lower_limit);
+    return Math.abs(c - lower_limit) <= (higher_limit - lower_limit);
   }
 }
 
@@ -160,7 +160,7 @@ const IsKeywordStart = (c) => {
 /**
  * 将大写字母转换为小写字母
  */
-export const AsciiAlphaToLower = (c) => { return String.fromCharCode(c | 0x20); }
+export const AsciiAlphaToLower = (c) => { return String.fromCharCode(c.charCodeAt() | 0x20); }
 
 /**
  * 数字类型判断

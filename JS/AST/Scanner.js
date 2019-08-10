@@ -62,7 +62,9 @@ export default class Scanner {
      * token_storage_是一个数组 里面装着那个三个类 这里就不用了
      * 为了方便就弄一个
      */
-    this.TokenDesc = new TokenDesc();
+    this.current_ = null;
+    this.next_ = new TokenDesc();
+    this.next_next_ = null;
     this.token_storage_ = [];
 
     this.octal_pos_ = null;
@@ -72,11 +74,23 @@ export default class Scanner {
     return this.source_.pos() - kCharacterLookaheadBufferSize;
   }
   /**
-   * 源码有current_、next_、next_next_三个标记 这里搞一个
+   * 源码中这三个方法返回的是指针
    */
-  next() {
-    return this.TokenDesc;
+  current() { return this.current_; }
+  next() { return this.next_; }
+  next_next() { return this.next_next_; }
+  /**
+   * 返回下一个token
+   */
+  Next() {
+    
   }
+  Peek() {
+    return this.source_.Peek();
+  }
+  /**
+   * 返回当前Token
+   */
   Initialize() {
     this.Init();
     this.next().after_line_terminator = true;
@@ -96,7 +110,7 @@ export default class Scanner {
   /**
    * 这里有函数重载 JS就直接用默认参数模拟了
    */
-  Scan(next = this.TokenDesc) {
+  Scan(next = this.next_) {
     next.token = this.ScanSingleToken();
     next.location.end_pos = this.source_.buffer_cursor_ - 1;
   }
