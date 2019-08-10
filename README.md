@@ -5,7 +5,7 @@
 
 依次运行
 ```
-babel-node npm install babel-cli -g
+npm install babel-cli -g
 npm install babel-preset-env -D
 ```
 
@@ -13,4 +13,3 @@ npm install babel-preset-env -D
 ```
 babel-node --presets env test
 ```
-即可运行
