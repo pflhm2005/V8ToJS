@@ -5,7 +5,13 @@ import {
   kStringTerminator,
   kIdentifierNeedsSlowPath,
   kMultilineCommentCharacterNeedsSlowPath,
+
   kMaxAscii,
+
+  kIsIdentifierStart,
+  kIsIdentifierPart,
+  kIsWhiteSpace,
+  kIsWhiteSpaceOrLineTerminator,
 
   BINARY,
   DECIMAL,
@@ -124,12 +130,11 @@ export { UnicodeToAsciiMapping }
  */
 export const IsInRange = (c, lower_limit, higher_limit) => {
   if(typeof lower_limit === 'string' && typeof higher_limit === 'string') {
-    if(typeof c === 'string') c = c.charCodeAt();
-    return Math.abs(c - lower_limit.charCodeAt())
-    <= (higher_limit.charCodeAt() - lower_limit.charCodeAt());
-  } else {
-    return Math.abs(c - lower_limit) <= (higher_limit - lower_limit);
+    lower_limit = lower_limit.charCodeAt();
+    higher_limit = higher_limit.charCodeAt();
   }
+  if(typeof c === 'string') c = c.charCodeAt();
+  return (c >= lower_limit) && (c <= higher_limit);
 }
 
 /**
@@ -203,14 +208,15 @@ const IsAlphaNumeric = (c) => {
 
 /**
  * 判断是否是合法标识符字符
+ * 没有char类型真的坑
  */
 export const IsAsciiIdentifier = (c) => {
-  if(typeof c === 'number') c = UnicodeToAsciiMapping[c];
-  return IsAlphaNumeric(c) || c == '$' || c == '_';
+  if(typeof c === 'number' && c > 9) c = UnicodeToAsciiMapping[c];
+  return IsAlphaNumeric(c) || c === '$' || c === '_';
 }
 export const IsIdentifierStart = (c) => {
   if(typeof c === 'number') c = UnicodeToAsciiMapping[c];
-  return ('A' <= c && c <= 'Z') || ('a' <= c && c <= 'z') || c == '_';
+  return ('A' <= c && c <= 'Z') || ('a' <= c && c <= 'z') || c === '_';
 }
 
 /**
@@ -227,16 +233,38 @@ export const CanBeKeyword = (scan_flags) => {
 }
 
 /**
+ * bitmap判断flag系列2
+ */
+const BuildAsciiCharFlags = (c) => {
+  return ((IsAsciiIdentifier(c) || c === '\\') ? 
+  (kIsIdentifierPart | (IsDecimalDigit(c) ? kIsIdentifierStart : 0)) : 0) | 
+  ((c === ' ' || c === '\t' || c === '\v' || c === '\f') ?
+  (kIsWhiteSpace | kIsWhiteSpaceOrLineTerminator) : 0) | 
+  ((c === 'r' || c=== '\n') ? kIsWhiteSpaceOrLineTerminator : 0);
+}
+const kAsciiCharFlags = UnicodeToAsciiMapping.map(c => BuildAsciiCharFlags(c));
+export const IsWhiteSpaceOrLineTerminator = (c) => {
+  // if(!IsInRange(c, 0, 127)) return IsWhiteSpaceOrLineTerminatorSlow(c);
+  return kAsciiCharFlags[c] & kIsWhiteSpaceOrLineTerminator;
+}
+
+/**
  * 源码确实是一个超长的三元表达式
  * Token是一个枚举 这里直接用字符串代替了
  * 因为太多了 只保留几个看看
  */
 const TokenToAsciiMapping = (c) => {
   return c === '(' ? 'Token::LPAREN' : 
-  c == ')' ? 'Token::RPAREN' :
+  c === ')' ? 'Token::RPAREN' :
   // ...很多很多
-  c == '"' ? 'Token::STRING' :
-  c == '\'' ? 'Token::STRING' :
+  c === ' ' ? 'Token::WHITESPACE' :
+  c === '\t' ? 'Token::WHITESPACE' :
+  c === '\v' ? 'Token::WHITESPACE' :
+  c === '\f' ? 'Token::WHITESPACE' :
+  c === '\r' ? 'Token::WHITESPACE' :
+  c === '\n' ? 'Token::WHITESPACE' :
+  c === '"' ? 'Token::STRING' :
+  c === '\'' ? 'Token::STRING' :
 
   // 标识符部分单独抽离出一个方法判断
   IsDecimalDigit(c) ? 'Token::NUMBER' :
@@ -252,7 +280,7 @@ export const UnicodeToToken = UnicodeToAsciiMapping.map(c => TokenToAsciiMapping
  */
 const GetScanFlags = (c) => {
   return (!IsAsciiIdentifier(c) ? kTerminatesLiteral : 0) |
-  (IsAsciiIdentifier(c) && !CanBeKeywordCharacter(c)) ? kCannotBeKeyword : 0 |
+  ((IsAsciiIdentifier(c) && !CanBeKeywordCharacter(c)) ? kCannotBeKeyword : 0) |
   (IsKeywordStart(c) ? kCannotBeKeywordStart : 0) |
   ((c === '\'' || c === '"' || c === '\n' || c === '\r' || c === '\\') ? kStringTerminator : 0) |
   (c === '\\' ? kIdentifierNeedsSlowPath : 0) |

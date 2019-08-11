@@ -32,6 +32,7 @@ import {
   IsNonOctalDecimalDigit,
   IsDecimalNumberKind,
   IsValidBigIntKind,
+  IsWhiteSpaceOrLineTerminator,
 } from './Util';
 
 import {
@@ -62,9 +63,9 @@ export default class Scanner {
      * token_storage_是一个数组 里面装着那个三个类 这里就不用了
      * 为了方便就弄一个
      */
-    this.current_ = null;
+    this.current_ = new TokenDesc();
     this.next_ = new TokenDesc();
-    this.next_next_ = null;
+    this.next_next_ = new TokenDesc();
     this.token_storage_ = [];
 
     this.octal_pos_ = null;
@@ -83,7 +84,19 @@ export default class Scanner {
    * 返回下一个token
    */
   Next() {
-    
+    // 交换token
+    let previous = this.current_;
+    this.current_ = this.next_;
+    if(this.next_next().token === 'Token::UNINITIALIZED') {
+      this.next_ = previous;
+      previous.after_line_terminator = false;
+      this.Scan(previous);
+    } else {
+      this.next_ = this.next_next_;
+      this.next_next_ = previous;
+      previous.token = 'Token::UNINITIALIZED';
+    }
+    return this.current().token;
   }
   Peek() {
     return this.source_.Peek();
@@ -120,9 +133,10 @@ export default class Scanner {
   ScanSingleToken() {
     let token = null;
     do {
-      this.next().location.beg_pos = this.source_.buffer_cursor_ - 1;
+      this.next().location.beg_pos = this.source_pos();
       if(this.c0_ < kMaxAscii) {
         token = UnicodeToToken[this.c0_];
+
         switch(token) {
           case 'Token::LPAREN':
           /**
@@ -132,6 +146,9 @@ export default class Scanner {
             return this.Select(token);
           case 'Token::STRING':
             return this.ScanString();
+          case 'Token::WHITESPACE':
+            token = this.SkipWhiteSpace();
+            continue;
           case 'Token::NUMBER':
             return this.ScanNumber(false);
           case 'Token::IDENTIFIER':
@@ -143,7 +160,23 @@ export default class Scanner {
        * 源码中这里处理一些特殊情况 不展开了
        */
     } while(token === 'Token::WHITESPACE')
+
     return token;
+  }
+  /**
+   * 处理空格
+   */
+  SkipWhiteSpace() {
+    let start_position = this.source_pos();
+    while(IsWhiteSpaceOrLineTerminator(this.c0_)) {
+      if(!this.next().after_line_terminator) {
+        this.next().after_line_terminator = true;
+      }
+      this.Advance();
+    }
+    if(this.source_pos() === start_position) return 'Token::ILLEGAL';
+
+    return 'Token::WHITESPACE';
   }
   /**
    * 解析数字相关

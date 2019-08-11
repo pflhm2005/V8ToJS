@@ -16,7 +16,7 @@ export const kIdentifierNeedsSlowPath = 1 << 4;
 export const kMultilineCommentCharacterNeedsSlowPath = 1 << 5;
 
 /**
- * 数字相关
+ * 进制相关
  */
 export const IMPLICIT_OCTAL = 0;
 export const BINARY = 1;
@@ -24,3 +24,11 @@ export const OCTAL = 2;
 export const HEX = 3;
 export const DECIMAL = 4;
 export const DECIMAL_WITH_LEADING_ZERO = 5;
+
+/**
+ * Ascii字符标记
+ */
+export const kIsIdentifierStart = 1 << 0;
+export const kIsIdentifierPart = 1 << 1;
+export const kIsWhiteSpace = 1 << 2;
+export const kIsWhiteSpaceOrLineTerminator = 1 << 3;

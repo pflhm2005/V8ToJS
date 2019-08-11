@@ -15,8 +15,9 @@ export default class TokenDesc {
     this.literal_chars = new LiteralBuffer();
     /**
      * Token类型
+     * 此状态等同于null
      */
-    this.token = null;
+    this.token = 'Token::UNINITIALIZED';
     /**
      * 处理小整数
      */
