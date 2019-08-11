@@ -1,4 +1,6 @@
 import {
+  TokenEnumList,
+
   kTerminatesLiteral,
   kCannotBeKeyword,
   kCannotBeKeywordStart,
@@ -256,22 +258,41 @@ export const IsWhiteSpaceOrLineTerminator = (c) => {
 const TokenToAsciiMapping = (c) => {
   return c === '(' ? 'Token::LPAREN' : 
   c === ')' ? 'Token::RPAREN' :
-  // ...很多很多
-  c == '=' ? 'Token::ASSIGN' :
+  c === '{' ? 'Token::LBRACE' :
+  c === '}' ? 'Token::RBRACE' :
+  c === '[' ? 'Token::LBRACK' :
+  c === ']' ? 'Token::RBRACK' :
+  c === '?' ? 'Token::CONDITIONAL' :
+  c === ':' ? 'Token::COLON' :
+  c === ';' ? 'Token::SEMICOLON' :
+  c === ',' ? 'Token::COMMA' :
+  c === '.' ? 'Token::PERIOD' :
+  c === '|' ? 'Token::BIT_OR' :
+  c === '&' ? 'Token::BIT_AND' :
+  c === '^' ? 'Token::BIT_XOR' :
+  c === '~' ? 'Token::BIT_NOT' :
+  c === '!' ? 'Token::NOT' :
+  c === '<' ? 'Token::LT' :
+  c === '>' ? 'Token::GT' :
+  c === '%' ? 'Token::MOD' :
+  c === '=' ? 'Token::ASSIGN' :
+  c === '+' ? 'Token::ADD' :
+  c === '-' ? 'Token::SUB' :
+  c === '*' ? 'Token::MUL' :
+  c === '/' ? 'Token::DIV' :
+  c === '#' ? 'Token::PRIVATE_NAME' :
+  c === '"' ? 'Token::STRING' :
+  c === '\'' ? 'Token::STRING' :
+  c === '`' ? 'Token::TEMPLATE_SPAN' :
+  c === '\\' ? 'Token::IDENTIFIER' :
   c === ' ' ? 'Token::WHITESPACE' :
   c === '\t' ? 'Token::WHITESPACE' :
   c === '\v' ? 'Token::WHITESPACE' :
   c === '\f' ? 'Token::WHITESPACE' :
   c === '\r' ? 'Token::WHITESPACE' :
   c === '\n' ? 'Token::WHITESPACE' :
-  c === '"' ? 'Token::STRING' :
-  c === '\'' ? 'Token::STRING' :
-
-  // 标识符部分单独抽离出一个方法判断
   IsDecimalDigit(c) ? 'Token::NUMBER' :
-  c == '\\' ? 'Token::IDENTIFIER' :
   IsAsciiIdentifier(c) ? 'Token::IDENTIFIER' :
-  // ...很多很多
   'Token::ILLEGAL'
 };
 export const UnicodeToToken = UnicodeToAsciiMapping.map(c => TokenToAsciiMapping(c));
@@ -290,3 +311,13 @@ const GetScanFlags = (c) => {
 
 export const character_scan_flags = UnicodeToAsciiMapping.map(c => GetScanFlags(c));
 
+/**
+ * 枚举已经无法再模拟了 JS真香
+ * @param {Enumerator} token "Token::xxx"
+ */
+export const IsAnyIdentifier = (token, lower_limit = 'IDENTIFIER', higher_limit = 'ESCAPED_STRICT_RESERVED_WORD') => {
+  lower_limit = TokenEnumList.indexOf('IDENTIFIER');
+  higher_limit = TokenEnumList.indexOf('ESCAPED_STRICT_RESERVED_WORD');
+  token = TokenEnumList.indexOf(token.slice(7));
+  return IsInRange(token, lower_limit, higher_limit);
+}

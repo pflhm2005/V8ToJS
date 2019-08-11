@@ -1,15 +1,55 @@
+enum VariableDeclarationContext {
+  kStatementListItem,
+  kStatement,
+  kForStatement
+};
+
 /**
  * Impl就是Parser
  */
 template <typename Impl>
 typename ParserBase<Impl>::StatementT
 ParserBase<Impl>::ParseStatementListItem() {
-  /**
-   * 处理function、class、var、let、const五个声明类型关键词
-   * 其他情况走最后
-   */
+  // ECMA 262 6th Edition
+  // StatementListItem[Yield, Return] :
+  //   Statement[?Yield, ?Return]
+  //   Declaration[?Yield]
+  //
+  // Declaration[Yield] :
+  //   HoistableDeclaration[?Yield]
+  //   ClassDeclaration[?Yield]
+  //   LexicalDeclaration[In, ?Yield]
+  //
+  // HoistableDeclaration[Yield, Default] :
+  //   FunctionDeclaration[?Yield, ?Default]
+  //   GeneratorDeclaration[?Yield, ?Default]
+  //
+  // LexicalDeclaration[In, Yield] :
+  //   LetOrConst BindingList[?In, ?Yield] ;
+
   switch (peek()) {
-    // ...
+    case Token::FUNCTION:
+      return ParseHoistableDeclaration(nullptr, false);
+    case Token::CLASS:
+      Consume(Token::CLASS);
+      return ParseClassDeclaration(nullptr, false);
+    case Token::VAR:
+    case Token::CONST:
+      return ParseVariableStatement(kStatementListItem, nullptr);
+    case Token::LET:
+      if (IsNextLetKeyword()) {
+        return ParseVariableStatement(kStatementListItem, nullptr);
+      }
+      break;
+    case Token::ASYNC:
+      if (PeekAhead() == Token::FUNCTION &&
+          !scanner()->HasLineTerminatorAfterNext()) {
+        Consume(Token::ASYNC);
+        return ParseAsyncFunctionDeclaration(nullptr, false);
+      }
+      break;
+    default:
+      break;
   }
   return ParseStatement(nullptr, nullptr, kAllowLabelledFunctionStatement);
 }

@@ -60,8 +60,7 @@ export default class Scanner {
     this.c0_ = null;
     /**
      * 其实v8有三个词法描述类
-     * token_storage_是一个数组 里面装着那个三个类 这里就不用了
-     * 为了方便就弄一个
+     * token_storage_是一个数组 里面装着那个三个类
      */
     this.current_ = new TokenDesc();
     this.next_ = new TokenDesc();
@@ -84,7 +83,15 @@ export default class Scanner {
    * 返回下一个token
    */
   Next() {
-    // 交换token
+    /**
+     * 交换token 理论上不调用PeekAhead，next_next_会一直保持Token::UNINITIALIZED
+     * 首先生成临时变量previous 赋值current_
+     * (cur_, next_) => (next_, ???)
+     * 1、当next_next_为Token::UNINITIALIZED时
+     * (cur_, next_, Token::UNINITIALIZED) => (next_, 新Scan的Token, Token::UNINITIALIZED)
+     * 2、next_next_若有值 不会进行Scan 仅进行移位
+     * (cur_, next_, next_next_) => (next_, next_next_, Token::UNINITIALIZED)
+     */
     let previous = this.current_;
     this.current_ = this.next_;
     if(this.next_next().token === 'Token::UNINITIALIZED') {
@@ -98,9 +105,35 @@ export default class Scanner {
     }
     return this.current().token;
   }
-  Peek() {
-    return this.source_.Peek();
+  AddLiteralChar(c) {
+    this.next().literal_chars.AddChar(c);
   }
+  AdvanceUntil(callback) {
+    this.c0_ = this.source_.AdvanceUntil(callback);
+  }
+  PushBack(ch) {
+    this.source_.Back();
+    this.c0_ = ch;
+  }
+  peek() { return this.next().token; }
+  peek_location() { return this.next().location; }
+  location() { return this.current().location; }
+  Peek() { return this.source_.Peek(); }
+  /**
+   * 返回next_next_的值或
+   * next_保持不变、将下一个token解析到next_next_上 
+   */
+  PeekAhead() {
+    if(this.next_next().token !== 'Token::UNINITIALIZED') return this.next_next().token;
+    let temp = this.next_;
+    this.next = this.next_next_;
+    this.next().after_line_terminator = false;
+    this.Scan();
+    this.next_next_ = this.next_;
+    this.next_ = temp;
+    return this.next_next_.token;
+  }
+  smi_value() { return this.current().smi_value; }
   /**
    * 返回当前Token
    */
@@ -111,7 +144,10 @@ export default class Scanner {
   }
   Init() {
     this.Advance();
-    // 后面会有一些词法描述类对token_storage_的映射 这里跳过
+
+    this.token_storage_[0] = this.current_;
+    this.token_storage_[1] = this.next_;
+    this.token_storage_[2] = this.next_next_;
   }
   Advance() {
     this.c0_ = this.source_.Advance();
@@ -169,6 +205,7 @@ export default class Scanner {
     } while(token === 'Token::WHITESPACE')
     return token;
   }
+  ReportScannerError(pos, msg) { throw new Error(`fatal error found at ${this.source_.source_string[pos]}`) };
   UNREACHABLE() { throw new Error('unreachable code'); }
   Select(...args) {
     this.Advance();
@@ -313,7 +350,7 @@ export default class Scanner {
         this.Advance();
         // 连续两个下划线是不合法的
         if(UnicodeToAsciiMapping[this.c0_] === '_') {
-          ReportScannerError(Location(source_pos(), source_pos() + 1), kContinuousNumericSeparator);
+          ReportScannerError(new Location(source_pos(), source_pos() + 1), kContinuousNumericSeparator);
           return false;
         }
         separator_seen = true;
@@ -324,7 +361,7 @@ export default class Scanner {
     }
     // 数字不能以下划线结尾
     if(separator_seen) {
-      ReportScannerError(Location(source_pos(), source_pos() + 1), kTrailingNumericSeparator);
+      ReportScannerError(new Location(source_pos(), source_pos() + 1), kTrailingNumericSeparator);
       return false;
     }
 
@@ -394,7 +431,7 @@ export default class Scanner {
       if(UnicodeToAsciiMapping[this.c0_] === '_') {
         this.Advance();
         if(UnicodeToAsciiMapping[this.c0_] === '_') {
-          // ReportScannerError(Location(source_pos(), source_pos() + 1), kContinuousNumericSeparator);
+          ReportScannerError(new Location(source_pos(), source_pos() + 1), kContinuousNumericSeparator);
           return null;
         }
         separator_seen = true;
@@ -407,7 +444,7 @@ export default class Scanner {
       this.AddLiteralChar(first_char);
     }
     if(separator_seen) {
-      // ReportScannerError(Location(source_pos(), source_pos() + 1), kTrailingNumericSeparator);
+      ReportScannerError(new Location(source_pos(), source_pos() + 1), kTrailingNumericSeparator);
       return null;
     }
     return value;
@@ -517,10 +554,15 @@ export default class Scanner {
       this.AddLiteralChar(this.c0_);
     }
   }
-  AddLiteralChar(c) {
-    this.next().literal_chars.AddChar(c);
+  CurrentSymbol(ast_value_factory) {
+    if(this.is_literal_one_byte()) {
+      return ast_value_factory.GetOneByteString(this.literal_one_byte_string());
+    }
   }
-  AdvanceUntil(callback) {
-    this.c0_ = this.source_.AdvanceUntil(callback);
+  is_literal_one_byte() {
+    return this.current().literal_chars.is_one_byte();
+  }
+  literal_one_byte_string() {
+    return this.current().literal_chars.one_byte_literal();
   }
 }

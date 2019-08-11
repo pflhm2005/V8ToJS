@@ -37,6 +37,21 @@ export default class Stream {
      */
     return this.buffer_.length;
   }
+  ReadBlockAt(new_pos) {
+    this.buffer_pos_ = new_pos;
+    this.buffer_cursor_ = this.buffer_start_;
+    this.ReadBlockChecked();
+  }
+  /**
+   * 撤销Advance操作
+   */
+  Back() {
+    if(this.buffer_cursor_ > this.buffer_start_) {
+      this.buffer_cursor_--;
+    } else {
+      this.ReadBlockAt(this.pos() - 1);
+    }
+  }
   /**
    * 返回当前字符 并前进一格
    */
