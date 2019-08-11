@@ -45,6 +45,28 @@ export default class Stream {
     this.buffer_cursor_++;
     return tmp;
   }
+  AdvanceUntil(callback) {
+    /**
+     * 这里需要实现std标准库中一个方法
+     * 实际上是三个参数 且前两个参数为迭代器 为了方便暂时就不完美实现了
+     */
+    const find_if = (arr, start, end, callback) => {
+      let tarArr = arr.slice(start, end);
+
+      let tarIdx = tarArr.findIndex(v => callback(v));
+      return tarIdx === -1 ? end : (tarIdx + start - 1);
+    }
+
+    let next_cursor_pos = find_if(this.buffer_, this.buffer_cursor_, this.buffer_end_, callback);
+
+    if(next_cursor_pos === this.buffer_end_) {
+      this.buffer_cursor_ = this.buffer_end_;
+      return null;
+    } else {
+      this.buffer_cursor_ = next_cursor_pos + 1;
+      return this.buffer_[this.buffer_cursor_];
+    }
+  }
   /**
    * 返回当前字符
    * 同时会做初始化
