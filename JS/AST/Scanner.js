@@ -144,6 +144,11 @@ export default class Scanner {
            * 逐渐壮大了
            */
             return this.Select(token);
+          case 'Token::ASSIGN':
+            this.Advance();
+            if (UnicodeToAsciiMapping[this.c0_] === '=') return Select('=',' Token::EQ_STRICT', 'Token::EQ');
+            if (UnicodeToAsciiMapping[this.c0_] === '>') return Select('Token::ARROW');
+            return 'Token::ASSIGN';
           case 'Token::STRING':
             return this.ScanString();
           case 'Token::WHITESPACE':
@@ -165,6 +170,15 @@ export default class Scanner {
     return token;
   }
   UNREACHABLE() { throw new Error('unreachable code'); }
+  Select(...args) {
+    this.Advance();
+    if(args.length === 1) return args[0];
+    else if(UnicodeToAsciiMapping[this.c0_] === args[0]) {
+      this.Advance();
+      return args[1];
+    }
+    return args[2];
+  }
   /**
    * 处理空格
    */

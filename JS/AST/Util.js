@@ -257,6 +257,7 @@ const TokenToAsciiMapping = (c) => {
   return c === '(' ? 'Token::LPAREN' : 
   c === ')' ? 'Token::RPAREN' :
   // ...很多很多
+  c == '=' ? 'Token::ASSIGN' :
   c === ' ' ? 'Token::WHITESPACE' :
   c === '\t' ? 'Token::WHITESPACE' :
   c === '\v' ? 'Token::WHITESPACE' :
