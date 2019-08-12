@@ -8,6 +8,7 @@ export default class AstValueFactory {
     this.one_character_strings_ = new Array(kMaxOneCharStringValue).fill(0);
     this.string_table_ = new Map();
     this.hash_seed_ = 1;
+    this.string_end_ = [];
   }
   GetOneByteString(literal) {
     return this.GetOneByteStringInternal(literal);
@@ -64,6 +65,11 @@ export default class AstValueFactory {
     this.string_table_.set(key, value);
     return null;
   }
-  AddString(str) {
+  AddString(string) {
+    /**
+     * 二维指针 搞屁
+     */
+    this.string_end_.push(string);
+    return string;
   }
 }
