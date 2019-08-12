@@ -290,7 +290,6 @@ V8_INLINE bool Check(Token::Value token) {
 template <typename Impl>
 typename ParserBase<Impl>::IdentifierT
 ParserBase<Impl>::ParseAndClassifyIdentifier(Token::Value next) {
-  DCHECK_EQ(scanner()->current_token(), next);
   if (V8_LIKELY(IsInRange(next, Token::IDENTIFIER, Token::ASYNC))) {
     IdentifierT name = impl()->GetIdentifier();
     if (V8_UNLIKELY(impl()->IsArguments(name) &&

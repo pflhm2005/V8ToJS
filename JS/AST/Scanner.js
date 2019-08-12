@@ -554,6 +554,11 @@ export default class Scanner {
       this.AddLiteralChar(this.c0_);
     }
   }
+
+  /**
+   * 非Token解析相关
+   * 处理标识符
+   */
   CurrentSymbol(ast_value_factory) {
     if(this.is_literal_one_byte()) {
       return ast_value_factory.GetOneByteString(this.literal_one_byte_string());

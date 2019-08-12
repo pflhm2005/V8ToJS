@@ -69,3 +69,23 @@ export const PARAMETER_VARIABLE = 1;
 export const THIS_VARIABLE = 2;
 export const SLOPPY_BLOCK_FUNCTION_VARIABLE = 3;
 export const SLOPPY_FUNCTION_NAME_VARIABLE = 4;
+
+/**
+ * 表达式类型
+ */
+// 表达式
+export const kExpression = 0;
+
+// 右值是表达式
+export const kMaybeArrowParameterDeclaration = 1;
+export const kMaybeAsyncArrowParameterDeclaration = 2;
+
+/// 普通声明
+export const kParameterDeclaration = 3;
+export const kVarDeclaration = 4;
+export const kLexicalDeclaration = 5;
+
+/**
+ * 语句类型
+ */
+export const kVariableDeclaration = 0;

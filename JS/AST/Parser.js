@@ -1,9 +1,12 @@
-import AstValueFactory from './AstValueFactory';
-import AstNodeFactory from './AstNodeFactory';
+import { AstNodeFactory } from './AST';
 import DeclarationParsingResult from './DeclarationParsingResult';
 import AstRawString from './AstRawString';
 import FuncNameInferrer from './FuncNameInferrer';
 import Location from './Location';
+
+import { VariableDeclarationParsingScope } from './ExpressionScope';
+import Scope from './Scope';
+import { FuncNameInferrer, State } from './FuncNameInferrer';
 
 import {
   kVar,
@@ -19,6 +22,7 @@ import {
 
 import {
   IsAnyIdentifier,
+  IsLexicalVariableMode,
 } from './Util';
 
 const kStatementListItem = 0;
@@ -30,93 +34,24 @@ const kNoSourcePosition = -1;
 const kYes = 0;
 const kNo = 1;
 
-/**
- * 内存管理相关
- */
-const kExpression = 0;
-const kMaybeArrowParameterDeclaration = 1;
-const kMaybeAsyncArrowParameterDeclaration = 2;
-const kParameterDeclaration = 3;
-const kVarDeclaration = 4;
-const kLexicalDeclaration = 5;
-
 const kNeedsInitialization = 0;
 const kCreatedInitialized = 1;
-
-class ExpressionScope {
-  constructor(parser, type) {
-    this.parser_ = parser;
-    this.type_ = type;
-  }
-  NewVariable() {
-    return this.parser_.NewRawVariable(name, start_position);
-  }
-  Declare(name, pos = kNoSourcePosition) {
-    if(type_ === kParameterDeclaration) {
-      return new ParameterDeclarationParsingScope(this).Declare(name, pos);
-    }
-    return new VariableDeclarationParsingScope(this).Declare(name, pos);
-  }
-  DefaultInitializationFlag(mode) {
-    return mode === kVar ? kCreatedInitialized : kNeedsInitialization;
-  }
-}
-
-class ParameterDeclarationParsingScope extends ExpressionScope {
-  Declare(name, pos) {
-    let kind = PARAMETER_VARIABLE;
-    let mode = kVar;
-    let was_added = null;
-    let variable = this.parser_.DeclareVariable(name, kind, mode, 
-      this.DefaultInitializationFlag(mode), this.scope_, was_added, pos);
-    if(!this.has_duplicate() && !was_added) {
-      duplicate_loc_ = new Location(pos, pos + name.length);
-    }
-    return variable;
-  }
-}
-
-// Limit the allowed number of local variables in a function. The hard limit
-// in Ignition is 2^31-1 due to the size of register operands. We limit it to
-// a more reasonable lower up-limit.
-const kMaxNumFunctionLocals = (1 << 23) - 1;
-class VariableDeclarationParsingScope extends ExpressionScope {
-  constructor(parser, mode, names) {
-    this.parser_ = parser;
-    this.mode_ = mode;
-    this.names_ = names;
-  }
-  Declare(name, pos) {
-    let kind = NORMAL_VARIABLE;
-    let was_added = null;
-    let variable = this.parser_.DeclareVariable(name, kind, this.mode_,
-      this.DefaultInitializationFlag(this.mode_), this.parser_.scope, was_added, pos);
-    if(was_added && this.parser_.scope_.num_var() > kMaxNumFunctionLocals) throw new Error('Too many variables declared (only 4194303 allowed)');
-    if(this.names_) this.names_.Add(name, this.parser_.zone());
-    if(this.IsLexicalDeclaration()) {
-      if(this.parser_.IsLet(name)) {
-        throw new Error('let is disallowed as a lexically bound name');
-      }
-    } else {
-      if(this.parser_.loop_nesting_depth() > 0) {
-        variable.set_maybe_assigned();
-      }
-    }
-    return variable;
-  }
-}
 
 const kSloppyModeBlockScopedFunctionRedefinition = 22;
 const kUseCounterFeatureCount = 76;
 
+/**
+ * 源码中的impl 作为模板参数传入ParseBase 同时也继承于该类
+ * class Parser : public ParserBase<Parser>
+ * Parser、ParserBase基本上是一个类
+ */
 class Parser extends ParserBase {
   constructor() {
     this.scope_ = null;
     this.fni_ = new FuncNameInferrer();
-    this.expression_scope_ = new ExpressionScope(this);
     this.use_counts_ = new Array(kUseCounterFeatureCount).fill(0);
   }
-  expression_scope() { return this.expression_scope_; }
+  
   ExpressionFromIdentifier(name, start_position, infer = kYes) {
     if(infer === kYes) {
       this.fni_.PushVariableName(name);
@@ -128,9 +63,12 @@ class Parser extends ParserBase {
   }
   DeclareVariable(name, kind, mode, init, scope, was_added, begin, end = kNoSourcePosition) {
     let declaration;
-    if(mode === kVar) {
+    // var声明的变量需要提升
+    if(mode === kVar && !scope.is_declaration_scope()) {
       declaration = this.factory().NewNestedVariableDeclaration(scope, begin);
-    } else {
+    }
+    // let、const 
+    else {
       declaration = this.factory().NewVariableDeclaration(begin);
     }
     this.Declare(declaration, name, kind, mode, init. scope, was_added. begin, end);
@@ -144,7 +82,7 @@ class Parser extends ParserBase {
       declaration, name, var_begin_pos, mode, variable_kind, init, was_added,
       false, true);
     if(!local_ok) throw new Error(`error at ${var_begin_pos} ${var_end_pos}`);
-    else {
+    else if(local_ok) {
       ++this.use_counts_[kSloppyModeBlockScopedFunctionRedefinition];
     }
   }
@@ -157,8 +95,13 @@ export default class ParserBase {
     this.ast_value_factory_ = new AstValueFactory();
     this.ast_node_factory_ = new AstNodeFactory();
     this.parser =  new Parser();
+    this.scope_ = new Scope();
+    this.fni_ = new FuncNameInferrer();
+    this.expression_scope_ = null;
   }
   factory() { return this.ast_node_factory_; }
+  scope() { return this.scope_; }
+  expression_scope() { return this.expression_scope_; }
   UNREACHABLE() {
     this.scanner.UNREACHABLE();
   }
@@ -267,22 +210,28 @@ export default class ParserBase {
     }
     
     // 这一步的目的是设置scope参数
-    let declaration = new VariableDeclarationParsingScope(this.parser_, parsing_result.descriptor.mode, names);
-
+    this.expression_scope_ = new VariableDeclarationParsingScope(this.parser_, parsing_result.descriptor.mode, names);
+    // 获取合适的作用域
+    let target_scope = IsLexicalVariableMode(parsing_result.descriptor.mode) ? this.scope_ : this.scope_.GetDeclarationScope();
+    
     let bindings_start = this.peek_position();
     /**
      * 可以一次性声明多个变量
      * let a = 1, b, c;
      */
     do {
+      let fni_state = new State(this.fni_);
+
       let decl_pos = this.peek_position();
-      // 变量名
-      let name = '';
+      // 变量名 => AstRawString*
+      let name = null;
+      // 抽象语法树节点 => Expression*
       let pattern = null;
-      // 存在赋值运算符或for语句
+      // 检查下一个token是否是标识符
       if(IsAnyIdentifier(this.peek())) {
+        // 解析变量名
         name = this.ParseAndClassifyIdentifier(this.Next());
-        // let a = 1;
+        // 检查下一个token是否是赋值运算符
         if(this.peek() === 'Token::ASSIGN' || 
         // for in、for of
         (var_context === kForStatement && this.PeekInOrOf()) ||
@@ -335,6 +284,6 @@ export default class ParserBase {
     return result;
   }
   NewRawVariable(name, pos) {
-    this.factory().ast_node_factory().NewVariableProxy(name, NORMAL_VARIABLE, pos);
+    return this.factory().NewVariableProxy(name, NORMAL_VARIABLE, pos);
   }
 }

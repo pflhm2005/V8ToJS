@@ -68,6 +68,7 @@ class ExpressionScope {
     bool CanBeDeclaration() const {
       return IsInRange(type_, kMaybeArrowParameterDeclaration, kLexicalDeclaration);
     }
+    bool IsVarDeclaration() const { return type_ == kVarDeclaration; }
 
     // 向下强转类型
     ExpressionParsingScope<Types>* AsExpressionParsingScope() {

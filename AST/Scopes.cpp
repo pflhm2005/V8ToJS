@@ -226,3 +226,7 @@ class Scope : public ZoneObject {
 
     bool must_use_preparsed_scope_data_ : 1;
 }
+
+class DeclarationScope : public Scope {
+  
+}

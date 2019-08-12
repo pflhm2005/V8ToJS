@@ -69,7 +69,8 @@ class PointerWithPayload {
 
 class FuncNameInferrer {
   public:
-    explicit FuncNameInferrer(AstValueFactory* ast_value_factory);
+    explicit FuncNameInferrer(AstValueFactory* ast_value_factory)
+      : ast_value_factory_(ast_value_factory) {}
     // Returns whether we have entered name collection state.
     bool IsOpen() const { return scope_depth_ > 0; }
     void FuncNameInferrer::PushVariableName(const AstRawString* name) {
@@ -104,11 +105,8 @@ class FuncNameInferrer {
 
 enum class InferName { kYes, kNo };
 
-template <typename Impl>
-class ParserBase {
+class Parser : public ParserBase<Parser> {
   public:
-    Scope* scope() const { return scope_; }
-    AstNodeFactory* factory() { return &ast_node_factory_; }
     VariableProxy* ExpressionFromIdentifier(const AstRawString* name, int start_position, InferName infer = InferName::kYes) {
       if (infer == InferName::kYes) {
         fni_.PushVariableName(name);
@@ -116,6 +114,14 @@ class ParserBase {
       // 实际上返回的就是下面这个
       return expression_scope()->NewVariable(name, start_position);
     }
+}
+
+template <typename Impl>
+class ParserBase {
+  public:
+    Scope* scope() const { return scope_; }
+    AstNodeFactory* factory() { return &ast_node_factory_; }
+    ExpressionScope* expression_scope() const { return expression_scope_; }
     VariableProxy* NewRawVariable(const AstRawString* name, int pos) {
       // AstNodeFactory
       return factory()->ast_node_factory()->NewVariableProxy(name, NORMAL_VARIABLE, pos);

@@ -17,7 +17,9 @@ import {
 
   BINARY,
   DECIMAL,
-  DECIMAL_WITH_LEADING_ZERO
+  DECIMAL_WITH_LEADING_ZERO,
+
+  kLastLexicalVariableMode,
 } from './Const';
 
 /**
@@ -320,4 +322,11 @@ export const IsAnyIdentifier = (token, lower_limit = 'IDENTIFIER', higher_limit 
   higher_limit = TokenEnumList.indexOf('ESCAPED_STRICT_RESERVED_WORD');
   token = TokenEnumList.indexOf(token.slice(7));
   return IsInRange(token, lower_limit, higher_limit);
+}
+
+/**
+ * 表达式类型判定
+ */
+export const IsLexicalVariableMode = (mode) =>{
+  return mode <= kLastLexicalVariableMode;
 }

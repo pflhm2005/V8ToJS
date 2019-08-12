@@ -107,7 +107,13 @@ class Expression : public AstNode {
     Expression(int pos, NodeType type) : AstNode(pos, type) {}
 };
 
+enum InitializationFlag : uint8_t { kNeedsInitialization, kCreatedInitialized };
+
 class VariableProxy final : public Expression {
+  public:
+    static InitializationFlag DefaultInitializationFlag(VariableMode mode) {
+      return mode == VariableMode::kVar ? kCreatedInitialized : kNeedsInitialization;
+    }
   private:
     VariableProxy(const AstRawString* name, VariableKind variable_kind, int start_position)
       : Expression(start_position, kVariableProxy),
