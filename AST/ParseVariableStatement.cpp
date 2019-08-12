@@ -151,12 +151,10 @@ void ParserBase<Impl>::ParseVariableDeclarations(
       break;
     case Token::CONST:
       Consume(Token::CONST);
-      DCHECK_NE(var_context, kStatement);
       parsing_result->descriptor.mode = VariableMode::kConst;
       break;
     case Token::LET:
       Consume(Token::LET);
-      DCHECK_NE(var_context, kStatement);
       parsing_result->descriptor.mode = VariableMode::kLet;
       break;
     default:
@@ -164,7 +162,9 @@ void ParserBase<Impl>::ParseVariableDeclarations(
       break;
   }
 
+  // 这个对象贼鸡巴重要啊
   VariableDeclarationParsingScope declaration(impl(), parsing_result->descriptor.mode, names);
+  // 是否生成暂时性死区
   Scope* target_scope = IsLexicalVariableMode(parsing_result->descriptor.mode)
                             ? scope()
                             : scope()->GetDeclarationScope();
@@ -178,26 +178,34 @@ void ParserBase<Impl>::ParseVariableDeclarations(
 
     int decl_pos = peek_position();
 
+    // using IdentifierT = typename Types::Identifier;
+    // using Identifier = const AstRawString*;
     IdentifierT name;
+    // using ExpressionT = typename Types::Expression;
+    // using Expression = v8::internal::Expression*;
     ExpressionT pattern;
-    // Check for an identifier first, so that we can elide the pattern in cases
-    // where there is no initializer (and so no proxy needs to be created).
+
+    // 检查下一个Token是否是一个标识符
     if (V8_LIKELY(Token::IsAnyIdentifier(peek()))) {
+      // 解析当前变量名
       name = ParseAndClassifyIdentifier(Next());
-      if (V8_UNLIKELY(is_strict(language_mode()) &&
-                      impl()->IsEvalOrArguments(name))) {
-        impl()->ReportMessageAt(scanner()->location(),
-                                MessageTemplate::kStrictEvalArguments);
-        return;
-      }
+      // Unexpected eval or arguments in strict mode
+      // if (V8_UNLIKELY(is_strict(language_mode()) &&
+      //                 impl()->IsEvalOrArguments(name))) {
+      //   impl()->ReportMessageAt(scanner()->location(),
+      //                           MessageTemplate::kStrictEvalArguments);
+      //   return;
+      // }
+      // 检查赋值运算符
       if (peek() == Token::ASSIGN ||
           (var_context == kForStatement && PeekInOrOf()) ||
           parsing_result->descriptor.mode == VariableMode::kLet) {
         // Assignments need the variable expression for the assignment LHS, and
         // for of/in will need it later, so create the expression now.
         pattern = impl()->ExpressionFromIdentifier(name, decl_pos);
-      } else {
-        // Otherwise, elide the variable expression and just declare it.
+      }
+      // 仅仅声明变量 不做初始化 
+      else {
         impl()->DeclareIdentifier(name, decl_pos);
         pattern = impl()->NullExpression();
       }
