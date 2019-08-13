@@ -105,9 +105,11 @@ export class VariableDeclarationParsingScope extends ExpressionScope {
    */
   Declare(name, pos) {
     let kind = NORMAL_VARIABLE;
+    // 标记是否成功添加HashMap 即第一次声明该变量
     let was_added = false;
     let variable = this.parser_.DeclareVariable(name, kind, this.mode_, 
       Variable.DefaultInitializationFlag(this.mode_), this.parser_.scope(), was_added, pos);
+    
   }
 }
 

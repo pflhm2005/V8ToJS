@@ -25,6 +25,11 @@ import {
   IsLexicalVariableMode,
 } from './Util';
 
+import {
+  kParamDupe,
+  kVarRedeclaration,
+} from './MessageTemplate';
+
 const kStatementListItem = 0;
 const kStatement = 1;
 const kForStatement = 2;
@@ -47,7 +52,6 @@ const kUseCounterFeatureCount = 76;
  */
 class Parser extends ParserBase {
   constructor() {
-    this.scope_ = null;
     this.fni_ = new FuncNameInferrer();
     this.use_counts_ = new Array(kUseCounterFeatureCount).fill(0);
   }
@@ -75,13 +79,23 @@ class Parser extends ParserBase {
     return declaration.var();
   }
   Declare(declaration, name, variable_kind, mode, init, scope, was_added, var_begin_pos, var_end_pos) {
-    // 这两个参数作为引用传入方法
+    // 这两个参数作为引用传入方法 JS没办法啊
     // bool local_ok = true;
     // bool sloppy_mode_block_scope_function_redefinition = false;
-    let local_ok = scope.DeclareVariable(
+    // 
+    let local_ok = true;
+    // 普通模式下 在作用域内容重定义
+    let sloppy_mode_block_scope_function_redefinition = false;
+    let result = scope.DeclareVariable(
       declaration, name, var_begin_pos, mode, variable_kind, init, was_added,
-      false, true);
-    if(!local_ok) throw new Error(`error at ${var_begin_pos} ${var_end_pos}`);
+      sloppy_mode_block_scope_function_redefinition, local_ok);
+    if(!local_ok) {
+      // 标记错误地点 end未传入时仅仅高亮start一个字符
+      let loc = new Location(var_begin_pos, var_end_pos !== kNoSourcePosition ? var_end_pos : var_begin_pos + 1);
+      if(variable_kind === PARAMETER_VARIABLE) throw new Error(loc, kParamDupe);
+      else throw new Error(loc, kVarRedeclaration);
+    }
+    // 重定义计数
     else if(local_ok) {
       ++this.use_counts_[kSloppyModeBlockScopedFunctionRedefinition];
     }
@@ -160,7 +174,7 @@ export default class ParserBase {
   IsNextLetKeyword() {
     let next_next = this.PeekAhead();
     /**
-     * let后面跟{、}、a、static、let、yield、await、get、set、async是合法的(怎么可能……)
+     * let后面跟{、}、a、static、let、yield、await、get、set、async是合法的(至少目前是合法的)
      * 其他保留关键词合法性根据严格模式决定
      */
     switch(next_next) {
