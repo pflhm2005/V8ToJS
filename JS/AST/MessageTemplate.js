@@ -5,3 +5,4 @@ export const kTrailingNumericSeparator = "Numeric separators are not allowed at 
 
 export const kParamDupe = "Duplicate parameter name not allowed in this context";
 export const kVarRedeclaration = "Identifier '%' has already been declared";
+export const kTooManyVariables = "Too many variables declared (only 4194303 allowed)";
