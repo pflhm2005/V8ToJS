@@ -57,9 +57,15 @@ class Parser extends ParserBase {
   }
   
   ExpressionFromIdentifier(name, start_position, infer = kYes) {
+    /**
+     * 这个fni_暂时不知道干啥的
+     */
     if(infer === kYes) {
       this.fni_.PushVariableName(name);
     }
+    /**
+     * 在当前的作用域下生成一个新的变量
+     */
     return this.expression_scope().NewVariable(name, start_position);
   }
   DeclareIdentifier(name, start_position) {
@@ -116,6 +122,7 @@ export default class ParserBase {
   factory() { return this.ast_node_factory_; }
   scope() { return this.scope_; }
   expression_scope() { return this.expression_scope_; }
+  IsLet(identifier) { return identifier === this.ast_value_factory_.let_string(); }
   UNREACHABLE() {
     this.scanner.UNREACHABLE();
   }
@@ -222,7 +229,11 @@ export default class ParserBase {
         this.UNREACHABLE();
         break;
     }
-    
+    /**
+     * 源码中该变量类型是 ZonePtrList<const AstRawString>* names
+     * 由于传进来是一个nullptr 这里手动重置为数组
+     */
+    if(!names) names = [];
     // 这一步的目的是设置scope参数
     this.expression_scope_ = new VariableDeclarationParsingScope(this.parser_, parsing_result.descriptor.mode, names);
     // 获取合适的作用域
@@ -243,13 +254,16 @@ export default class ParserBase {
       let pattern = null;
       // 检查下一个token是否是标识符
       if(IsAnyIdentifier(this.peek())) {
-        // 解析变量名
+        // 解析变量名字符串
         name = this.ParseAndClassifyIdentifier(this.Next());
         // 检查下一个token是否是赋值运算符
         if(this.peek() === 'Token::ASSIGN' || 
         // for in、for of
         (var_context === kForStatement && this.PeekInOrOf()) ||
         parsing_result.descriptor.mode === kLet) {
+          /**
+           * 生成一个Expression实例
+           */
           pattern = this.parser.ExpressionFromIdentifier(name, decl_pos);
         } else {
           // 声明未定义的语句 let a;

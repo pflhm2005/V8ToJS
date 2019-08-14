@@ -10,121 +10,59 @@ namespace internal{
 namespace v8{
   class Extension;
 }
-// PointerWithPayload combines a PointerType* an a small PayloadType into
-// one. The bits of the storage type get packed into the lower bits of the
-// pointer that are free due to alignment. The user needs to specify how many
-// bits are needed to store the PayloadType, allowing Types that by default are
-// larger to be stored.
-//
-// Example:
-//   PointerWithPayload<int *, bool, 1> data_and_flag;
-//
-//   Here we store a bool that needs 1 bit of storage state into the lower bits
-//   of int *, which points to some int data;
-
-template <typename PointerType, typename PayloadType, int NumPayloadBits>
-class PointerWithPayload {
-  // 内存对齐 不知道是啥
-  static constexpr int kAvailBits = alignof(PointerType) >= 8 ? 3 : alignof(PointerType) >= 4 ? 2 : 1;
-  static_assert(
-      kAvailBits >= NumPayloadBits,
-      "Ptr does not have sufficient alignment for the selected amount of "
-      "storage bits.");
-
-  static constexpr uintptr_t kPayloadMask = (uintptr_t{1} << kAvailBits) - 1;
-  static constexpr uintptr_t kPointerMask = ~kPayloadMask;
-
- public:
-  PointerWithPayload() {}
-
-  explicit PointerWithPayload(PointerType* pointer)
-      : pointer_(reinterpret_cast<uintptr_t>(pointer)) {}
-
-  explicit PointerWithPayload(PayloadType payload)
-      : pointer_(static_cast<uintptr_t>(payload)) {
-  }
-
-  PointerWithPayload(PointerType* pointer, PayloadType payload) {
-    update(pointer, payload);
-  }
-
-  V8_INLINE PointerType* GetPointer() const {
-    return reinterpret_cast<PointerType*>(pointer_ & kPointerMask);
-  }
-
-  V8_INLINE PointerType* operator->() const { return GetPointer(); }
-
-  V8_INLINE void update(PointerType* new_pointer, PayloadType new_payload) {
-    pointer_ = reinterpret_cast<uintptr_t>(new_pointer) |
-               static_cast<uintptr_t>(new_payload);
-  }
-
-  V8_INLINE PayloadType GetPayload() const {
-    return static_cast<PayloadType>(pointer_ & kPayloadMask);
-  }
-
- private:
-  uintptr_t pointer_ = 0;
-};
-
-class FuncNameInferrer {
-  public:
-    explicit FuncNameInferrer(AstValueFactory* ast_value_factory)
-      : ast_value_factory_(ast_value_factory) {}
-    // Returns whether we have entered name collection state.
-    bool IsOpen() const { return scope_depth_ > 0; }
-    void FuncNameInferrer::PushVariableName(const AstRawString* name) {
-      if (IsOpen() && name != ast_value_factory_->dot_result_string()) {
-        names_stack_.push_back(Name(name, kVariableName));
-      }
-    }
-  private:
-    enum NameType : uint8_t {
-      kEnclosingConstructorName,
-      kLiteralName,
-      kVariableName
-    };
-    struct Name {
-      // Needed for names_stack_.resize()
-      Name() { UNREACHABLE(); }
-      Name(const AstRawString* name, NameType type)
-          : name_and_type_(name, type) {}
-
-      PointerWithPayload<const AstRawString, NameType, 2> name_and_type_;
-      inline const AstRawString* name() const {
-        return name_and_type_.GetPointer();
-      }
-      inline NameType type() const { return name_and_type_.GetPayload(); }
-    };
-
-    AstValueFactory* ast_value_factory_;
-    std::vector<Name> names_stack_;
-    std::vector<FunctionLiteral*> funcs_to_infer_;
-    size_t scope_depth_ = 0;
-};
-
-enum class InferName { kYes, kNo };
-
-class Parser : public ParserBase<Parser> {
-  public:
-    VariableProxy* ExpressionFromIdentifier(const AstRawString* name, int start_position, InferName infer = InferName::kYes) {
-      if (infer == InferName::kYes) {
-        fni_.PushVariableName(name);
-      }
-      // 实际上返回的就是下面这个
-      return expression_scope()->NewVariable(name, start_position);
-    }
-}
 
 template <typename Impl>
 class ParserBase {
   public:
     Scope* scope() const { return scope_; }
     AstNodeFactory* factory() { return &ast_node_factory_; }
+    AstValueFactory* ast_value_factory() const { return ast_value_factory_; }
     ExpressionScope* expression_scope() const { return expression_scope_; }
+    bool IsLet(const AstRawString* identifier) const {
+      return identifier == ast_value_factory()->let_string();
+    }
+
     VariableProxy* NewRawVariable(const AstRawString* name, int pos) {
       // AstNodeFactory
       return factory()->ast_node_factory()->NewVariableProxy(name, NORMAL_VARIABLE, pos);
+    }
+    AstRawString* ParseAndClassifyIdentifier(Token::Value next) {
+      if (V8_LIKELY(IsInRange(next, Token::IDENTIFIER, Token::ASYNC))) {
+        IdentifierT name = impl()->GetIdentifier();
+        if (V8_UNLIKELY(impl()->IsArguments(name) &&
+                        scope()->ShouldBanArguments())) {
+          ReportMessage(MessageTemplate::kArgumentsDisallowedInInitializer);
+          return impl()->EmptyIdentifierString();
+        }
+        return name;
+      }
+
+      if (!Token::IsValidIdentifier(next, language_mode(), is_generator(),
+                                    parsing_module_ || is_async_function())) {
+        ReportUnexpectedToken(next);
+        return impl()->EmptyIdentifierString();
+      }
+
+      if (next == Token::AWAIT) {
+        expression_scope()->RecordAsyncArrowParametersError(
+            scanner()->location(), MessageTemplate::kAwaitBindingIdentifier);
+        return impl()->GetIdentifier();
+      }
+
+      DCHECK(Token::IsStrictReservedWord(next));
+      expression_scope()->RecordStrictModeParameterError(
+          scanner()->location(), MessageTemplate::kUnexpectedStrictReserved);
+      return impl()->GetIdentifier();
+    }
+    AstRawString* GetIdentifier() const { return GetSymbol(); }
+    AstRawString* GetSymbol() const {
+      const AstRawString* result = scanner()->CurrentSymbol(ast_value_factory());
+      DCHECK_NOT_NULL(result);
+      return result;
+    }
+    Vector<const uint8_t> literal_one_byte_string() const {
+      DCHECK(current().CanAccessLiteral() || Token::IsKeyword(current().token));
+      return current().literal_chars.one_byte_literal();
     }
   protected:
     Scope* scope_;                   // Scope stack.
@@ -141,10 +79,25 @@ class ParserBase {
     uintptr_t stack_limit_;
 };
 
+CurrentSymbol(AstValueFactory* ast_value_factory) const {
+  if (is_literal_one_byte()) {
+    return ast_value_factory->GetOneByteString(literal_one_byte_string());
+  }
+  return ast_value_factory->GetTwoByteString(literal_two_byte_string());
+}
+
 constexpr int kNoSourcePosition = -1;
 
 class Parser : public ParserBase<Parser> {
   public:
+    VariableProxy* ExpressionFromIdentifier(
+        const AstRawString* name, int start_position,
+        InferName infer = InferName::kYes) {
+      if (infer == InferName::kYes) {
+        fni_.PushVariableName(name);
+      }
+      return expression_scope()->NewVariable(name, start_position);
+    }
     // explicit Parser(ParseInfo* info)
     // : ParserBase<Parser>(info->zone(), &scanner_, info->stack_limit(),
     //                     info->extension(), info->GetOrCreateAstValueFactory(),

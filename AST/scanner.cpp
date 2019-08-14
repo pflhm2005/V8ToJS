@@ -282,3 +282,4 @@ Token::Value Scanner::Next() {
   }
   return current().token;
 }
+

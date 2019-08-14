@@ -286,38 +286,6 @@ V8_INLINE bool Check(Token::Value token) {
   return false;
 }
 
-
-template <typename Impl>
-typename ParserBase<Impl>::IdentifierT
-ParserBase<Impl>::ParseAndClassifyIdentifier(Token::Value next) {
-  if (V8_LIKELY(IsInRange(next, Token::IDENTIFIER, Token::ASYNC))) {
-    IdentifierT name = impl()->GetIdentifier();
-    if (V8_UNLIKELY(impl()->IsArguments(name) &&
-                    scope()->ShouldBanArguments())) {
-      ReportMessage(MessageTemplate::kArgumentsDisallowedInInitializer);
-      return impl()->EmptyIdentifierString();
-    }
-    return name;
-  }
-
-  if (!Token::IsValidIdentifier(next, language_mode(), is_generator(),
-                                parsing_module_ || is_async_function())) {
-    ReportUnexpectedToken(next);
-    return impl()->EmptyIdentifierString();
-  }
-
-  if (next == Token::AWAIT) {
-    expression_scope()->RecordAsyncArrowParametersError(
-        scanner()->location(), MessageTemplate::kAwaitBindingIdentifier);
-    return impl()->GetIdentifier();
-  }
-
-  DCHECK(Token::IsStrictReservedWord(next));
-  expression_scope()->RecordStrictModeParameterError(
-      scanner()->location(), MessageTemplate::kUnexpectedStrictReserved);
-  return impl()->GetIdentifier();
-}
-
 // Boilerplate for most derived classes.
 #define DEFINE_AST_NODE_LEAF_BOILERPLATE(T)                        \
   static const Kind kKind = Kind::k##T;                            \
@@ -337,24 +305,3 @@ struct Identifier : AstNode {
       : AstNode(kKind, pos), value(std::move(identifier)) {}
   std::string value;
 };
-V8_INLINE const AstRawString* GetIdentifier() const { return GetSymbol(); }
-
-// Producing data during the recursive descent.
-V8_INLINE const AstRawString* GetSymbol() const {
-  const AstRawString* result = scanner()->CurrentSymbol(ast_value_factory());
-  DCHECK_NOT_NULL(result);
-  return result;
-}
-
-const AstRawString* Scanner::CurrentSymbol(AstValueFactory* ast_value_factory) const {
-  if (is_literal_one_byte()) {
-    return ast_value_factory->GetOneByteString(literal_one_byte_string());
-  }
-  return ast_value_factory->GetTwoByteString(literal_two_byte_string());
-}
-
-Vector<const uint8_t> literal_one_byte_string() const {
-  DCHECK(current().CanAccessLiteral() || Token::IsKeyword(current().token));
-  return current().literal_chars.one_byte_literal();
-}
-
