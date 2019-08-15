@@ -1,4 +1,239 @@
 (function(){
+const getTypeOf = (input) => {
+  if(typeof input === 'string') return 'string';
+  if(Object.prototype.toString.call(input) === "[object Array]") return 'array';
+  if(input instanceof Uint8Array) return "uint8array";
+  if(input instanceof ArrayBuffer) return "arraybuffer";
+}
+
+const string2buf = (str) => {
+  let l = str.length;
+  let buf_len = 0;
+  for(let i = 0;i < l;i++) {
+    let c = str.charCodeAt(i);
+    if((c & 0xfc00) === 0xd800 && (i + 1 < l)) {
+      let c2 = str.charCodeAt(i + 1);
+      if((c2 & 0xfc00) === 0xd800) {
+        c = 0x10000 + ((c - 0xd800) << 10) + (c2 - 0xdc00);
+        i++;
+      }
+    }
+    buf_len += c < 0x80 ? 1 : c < 0x800 ? 2 : c < 0x10000 ? 3 : 4;
+  }
+  let buf = new Uint8Array(buf_len);
+  for(let i = 0, j = 0;i < buf_len;j++) {
+    let c = str.charCodeAt(j);
+    if((c & 0xfc00) === 0xd800 && (j + 1 < l)) {
+      c2 = str.charCodeAt(j + 1);
+      if((c2 & 0xfc00) === 0xdc00) {
+        c = 0x10000 + ((c - 0xd800) << 10) + (c2 - 0xdc00);
+        j++;
+      }
+    }
+    // 0 ~ 2^7 one byte
+    if(c < 0x80) buf[i++] = c;
+    // 2^7 ~ 2^11 two bytes
+    else if(c < 0x800) {
+      buf[i++] = 0xc0 | (c >>> 6);
+      buf[i++] = 0x80 | (c & 0x3f);
+    }
+    // 2^11 ~ 2^16 three bytes
+    else if(c < 0x10000) {
+      buf[i++] = 0xe0 | (c >>> 12);
+      buf[i++] = 0x80 | ((c >>> 6) & 0x3f);
+      buf[i++] = 0x80 | (c & 0x3f);
+    }
+    // 2^16+ four bytes
+    else {
+      buf[i++] = 0xf0 | (c >>> 18);
+      buf[i++] = 0x80 | ((c >>> 12) & 0x3f);
+      buf[i++] = 0x80 | ((c >>> 6) & 0x3f);
+      buf[i++] = 0x80 | (c & 0x3f);
+    }
+  }
+  return buf;
+}
+
+const stringifyByChunk = (array, type, chunk) => {
+  let result = [], k = 0, len = array.length;
+  if(len <= chunk) String.fromCharCode.apply(null, array);
+  while(k <= len) {
+    if(type === 'array') result.push(String.fromCharCode.apply(null, array.slice(k, Math.min(k + chunk, len))));
+    else result.push(String.fromCharCode.apply(null, array.subarray(k, Math.min(k + chunk, len))));
+    k += chunk;
+  }
+  return result.join('');
+}
+
+const stringifyByChar = (array) => {
+  let resultStr = '';
+  for(let i = 0;i < array.length;i++) resultStr += String.fromCharCode(array[i]);
+  return resultStr;
+}
+
+const blank = (input) => input;
+
+const stringToArrayBuffer = (str, ar) => {
+  str.forEach((v, i) => ar[i] = str.charCodeAt(i) & 0xff);
+  return ar;
+}
+
+const arrayBufferToString = (array) => {
+  let chunk = 65536, type = getTypeOf(array), canUseApply = true;
+  while(chunk > 1) {
+    return stringifyByChunk(array, type, chunk);
+  }
+  return stringifyByChar(array);
+}
+
+const arrayBufferToArrayBuffer = (from, to) => {
+  for(let i = 0;i < from.length;i++) to[i] = from[i];
+  return to;
+}
+
+const generateUnixExternalFileAttr = (unixPermissions, isDir) => {
+  let result = unixPermissions;
+  if(!unixPermissions) result = isDir ? 0x41fd : 0x81b4;
+  return (result & 0xffff) << 16;
+}
+
+const generateDosExternalFileAttr = (dosPermissions, isDir) => {
+  return (dosPermissions || 0) & 0x3f;
+}
+
+const decToHex = (dec, bytes) => {
+  let hex = '';
+  for(let i = 0;i < bytes;i++) {
+    hex += String.fromCharCode(dec & 0xff);
+    dec >>>= 8;
+  }
+  return hex;
+}
+const signature = {
+  LOCAL_FILE_HEADER: "PK\x03\x04",
+  CENTRAL_FILE_HEADER: "PK\x01\x02",
+  CENTRAL_DIRECTORY_END: "PK\x05\x06",
+  ZIP64_CENTRAL_DIRECTORY_LOCATOR: "PK\x06\x07",
+  ZIP64_CENTRAL_DIRECTORY_END: "PK\x06\x06",
+  DATA_DESCRIPTOR: "PK\x07\x08",
+};
+
+const generateZipParts = (streamInfo, streamedContent, streamingEnded, offset, platform, encodeFileName) => {
+  let file = streamInfo['file'];
+  let compression = streamInfo['compression'];
+  let dataInfo = {
+    crc: 0,
+    compressedSize: 0,
+    uncompressedSize: 0,
+  };
+  let dir = file.dir;
+  let date = file.date;
+
+  let encodedFileName = transformTo('string', encodeFileName(file.name));
+  let utfEncodedFileName = transformTo('string', string2buf(file.name));
+  let useUTF8ForFileName = utfEncodedFileName.length !== file.name.length;
+
+  
+  // 文件夹或结束标记的走这个逻辑
+  if(!streamedContent || streamingEnded) {
+    dataInfo.crc32 = streamInfo['crc32'];
+    dataInfo.compressedSize = streamInfo['compressedSize'];
+    dataInfo.uncompressedSize = streamInfo['uncompressedSize'];
+  }
+  
+  let bitflag = 0;
+  if(streamedContent) bitflag |= 0x0008;
+
+  let extFileAttr = 0;
+  let versionMadeBy = 0;
+  if(dir) extFileAttr |= 0x00010;
+  if(platform === 'UNIX') {
+    versionMadeBy = 0x031E;
+    extFileAttr |= generateUnixExternalFileAttr(file.unixPermissions, dir);
+  } else {
+    versionMadeBy = 0x0014;
+    extFileAttr |= generateDosExternalFileAttr(file.dosPermissions, dir);
+  }
+
+  let dosTime = date.getUTCHours();
+  dosTime <<= 6;
+  dosTime |= date.getUTCMinutes();
+  dosTime <<= 5;
+  dosTime |= (date.getUTCSeconds() / 2);
+
+  let dosDate = date.getUTCFullYear() - 1980;
+  dosDate <<= 4;
+  dosDate |= (date.getUTCMonth() + 1);
+  dosDate <<= 5;
+  dosDate |= date.getUTCDate();
+
+  let unicodePathExtraField = '';
+  let extraFields = '';
+  if(useUTF8ForFileName) {
+    unicodePathExtraField = `${decToHex(1, 1)}${decToHex(crc32(encodedFileName), 4)}${utfEncodedFileName}`;
+    extraFields += `\x75\x70${decToHex(unicodePathExtraField.length, 2)}${unicodePathExtraField}`;
+  }
+
+  let header = `\x0A\x00${decToHex(bitflag, 2)}${compression.magic}${decToHex(dosTime, 2)}${decToHex(dosDate, 2)}${decToHex(dataInfo.crc32, 4)}${decToHex(dataInfo.compressedSize, 4)}${decToHex(dataInfo.uncompressedSize, 4)}${decToHex(encodedFileName.length, 2)}${decToHex(extraFields.length, 2)}`;
+
+  let fileRecord = `${signature.LOCAL_FILE_HEADER}${header}${encodedFileName}${extraFields}`;
+  let dirRecord = [
+    signature.CENTRAL_FILE_HEADER,
+    decToHex(versionMadeBy, 2),
+    header,
+    '\x00\x00\x00\x00',
+    decToHex(extFileAttr, 4),
+    decToHex(offset, 4),
+    encodedFileName,
+    extraFields,
+  ].join('');
+  return { fileRecord, dirRecord };
+}
+
+const generateDataDescriptors = (streamInfo) => {
+  return `${signature.DATA_DESCRIPTOR}${decToHex(streamInfo.crc32, 4)}${decToHex(streamInfo.compressedSize, 4)}${decToHex(streamInfo.uncompressedSize, 4)}`;
+}
+
+const generateCentralDirectoryEnd = (entriesCount, centralDirLength, localDirLength, comment, encodeFileName) => {
+  return `${signature.CENTRAL_DIRECTORY_END}\x00\x00\x00\x00${decToHex(entriesCount, 2)}${decToHex(entriesCount, 2)}${decToHex(centralDirLength, 4)}${decToHex(localDirLength, 4)}`;
+}
+
+// a matrix containing functions to transform everything into everything.
+// 真几把厉害的方法
+let transform = {
+  string: {
+    string: blank,
+    array(input) { return stringToArrayBuffer(input, new Array(input.length)); },
+    arraybuffer(input) { return stringToArrayBuffer(input, new Uint8Array(input.length)); },
+    uint8array(input) { return stringToArrayBuffer(input, new Uint8Array(input.length)); },
+  },
+  array: {
+    string: arrayBufferToString,
+    array: blank,
+    arraybuffer(input) { return (new Uint8Array(input)).buffer; },
+    uint8array(input) { return (new Uint8Array(input)).buffer; },
+  },
+  arraybuffer: {
+    string(input) { return arrayBufferToString(new Uint8Array(input)); },
+    array(input) { return arrayBufferToArrayBuffer(new Uint8Array(input), new Array(input.byteLength)) },
+    arraybuffer: blank,
+    uint8array(input) { return new Uint8Array(input) },
+  },
+  uint8array: {
+    string: arrayBufferToString,
+    array(input) { return arrayBufferToArrayBuffer(input, new Array(input.length)) },
+    arraybuffer(input) { return input.buffer },
+    uint8array: blank,
+  }
+};
+const transformTo = (outputType, input = '') => {
+  let inputType = getTypeOf(input);
+  return transform[inputType][outputType](input);
+}
+
+// TODO
+const encode = (input) => input;
+
 class EventEmitter{
   constructor() {
     if(this._events === undefined) {
@@ -35,6 +270,7 @@ class EventEmitter{
 
 class GenericWorker extends EventEmitter {
   constructor(name = 'default') {
+    super();
     this.name = name;
     this.streamInfo = {};
     this.extraStreamInfo = {};
@@ -53,7 +289,7 @@ class GenericWorker extends EventEmitter {
     if(this.previous) this.previous.lock();
   }
   mergeStreamInfo() {
-    Object.keys(this.extraStreamInfo).forEach(v => this.streamInfo[v] = this.extraStreamInfo[key]);
+    Object.keys(this.extraStreamInfo).forEach(v => this.streamInfo[v] = this.extraStreamInfo[v]);
   }
   registerPrevious(previous) {
     if(this.isLocked) { throw new Error("The stream '" + this + "' has already been used."); }
@@ -62,6 +298,7 @@ class GenericWorker extends EventEmitter {
     this.previous = previous;
     this.previous.on('data', (chunk) => this.processChunk(chunk));
     this.previous.on('end', () => this.end());
+    return this;
   }
   push(chunk) {
     this.emit('data', chunk);
@@ -79,6 +316,7 @@ class GenericWorker extends EventEmitter {
     this.isPaused = false;
 
     if(this.previous) this.previous.resume();
+    return true;
   }
   end() {
     if(this.isFinished) return false;
@@ -118,9 +356,10 @@ class DataWorker extends GenericWorker {
     
   }
   resume() {
+    if(!super.resume()) return false;
     if(!this._tickScheduled && this.dataIsReady) {
       this._tickScheduled = true;
-      setImmediate(this._tickAndRepeat.bind(this));
+      setTimeout(this._tickAndRepeat.bind(this), 0);
     }
     return true;
   }
@@ -129,8 +368,8 @@ class DataWorker extends GenericWorker {
     if(this.isPaused || this.isFinished) return;
     this._tick();
     if(!this.isFinished) {
-      setImmediate(this._tickAndRepeat.bind(this));
-      this.delay(this._tickAndRepeat, []);
+      setTimeout(this._tickAndRepeat.bind(this), 0);
+      setTimeout(this._tickAndRepeat.bind(this), 0);
       this._tickScheduled = true;
     }
   }
@@ -140,7 +379,7 @@ class DataWorker extends GenericWorker {
     let data = null, nextIndex = Math.min(this.max, this.index + size);
     if(this.index >= this.max) return this.end();
     else {
-      data = this.data.substring(this.index, nextIndex);
+      data = this.data.slice(this.index, nextIndex);
       this.index = nextIndex;
       return this.push({
         data, meta: { percent: this.max ? this.index / this.max * 100 : 0 }
@@ -174,13 +413,13 @@ class Crc32Probe extends GenericWorker {
     let end = pos + len;
     crc = crc ^ (-1);
     for(let i = 0;i < end;i++) crc = (crc >>> 8) ^ this.table[(crc ^ buf[i]) & 0xFF];
-    retrun (crc ^ (-1));
+    return (crc ^ (-1));
   }
   crc32str() {
     let end = pos + len;
     crc = crc ^ (-1);
     for(let i = 0;i < end;i++) crc = (crc >>> 8) ^ this.table[(crc ^ str.charCodeAt(i)) & 0xFF];
-    retrun (crc ^ (-1));
+    return (crc ^ (-1));
   }
   crc32(input, crc) {
     if(typeof input !== 'string') return this.crc32ar(crc | 0, input, input.length, 0);
@@ -189,6 +428,19 @@ class Crc32Probe extends GenericWorker {
   processChunk(chunk) {
     this.streamInfo.crc32 = this.crc32(chunk.data, this.streamInfo.crc32 || 0);
     this.push(chunk);
+  }
+}
+
+class ConvertWorker extends GenericWorker {
+  constructor(destType) {
+    super(`ConvertWorker to ${destType}`);
+    this.destType = destType;
+  }
+  processChunk(chunk) {
+    this.push({
+      data: transformTo(this.destType, chunk.data),
+      meta: chunk.meta,
+    });
   }
 }
 
@@ -208,7 +460,7 @@ class DataLengthProbe extends GenericWorker {
 }
 
 class ZipFileWorker extends GenericWorker {
-  constructor(streamFiles, commnet, platform, encodeFileName) {
+  constructor(streamFiles, comment, platform, encodeFileName) {
     super('ZipFileWorker');
     this.bytesWritten = 0;
     this.zipComment = comment;
@@ -287,7 +539,7 @@ class ZipFileWorker extends GenericWorker {
           currentFile: this.currentFile,
           percent: entriesCount ? (currentFilePercent + 100 * (entriesCount - remainingFiles - 1)) / entriesCount : 100
         }
-      }),bind(this);
+      });
     }
   }
   flush() {
@@ -356,14 +608,44 @@ class StreamHelper {
       });
     } else {
       this._worker.on(eventName, () => {
-        setImmediate(callback.bind(this));
+        setTimeout(callback.bind(this), 0);
       });
     }
     return this;
   }
   resume() {
-    setImmediate(this._worker.resume.bind(this._worker, []));
+    setTimeout(this._worker.resume.bind(this._worker), 0);
     return this;
+  }
+  concat(type, dataArray) {
+    let len = dataArray.length;
+    let totalLength = 0;
+    let res= null;
+    let index = 0;
+    for(let i = 0;i < len;i++) totalLength += dataArray[i].length;
+    switch(type) {
+      case 'string':
+        return dataArray.join('');
+      case 'array':
+        return [].concat(dataArray);
+      case 'uint8array':
+        res = new Uint8Array(totalLength);
+        for(let i = 0;i < l;i++) {
+          res.set(dataArray[i], index);
+          index += dataArray[i].length;
+        }
+        return res;
+    }
+  }
+  transformZipOutput(type, content, mimeType) {
+    switch(type) {
+      case 'blob':
+        return new Blob([transformTo('arraybuffer', content)], { type: mimeType });
+      case 'base64':
+        return encode(content);
+      default:
+        return transformTo(type, content);
+    }
   }
   accumulate(updateCallback) {
     return new Promise((resolve, reject) => {
@@ -394,9 +676,15 @@ class ZipObject {
 
     this._data = data;
     this._dataBinary = opt.binary;
+
+    this.opts = {
+      compression : opt.compression,
+      compressionOptions : opt.compressionOptions
+    };
   }
   _compressWorker(compression, compressionOptions) {
     let result = this._decompressWorker();
+    // 这里默认跳过
     if(!this._dataBinary) result = result.pipe(new Utf8EncodeWorker());
     return CompressedObject.createWorkerFrom(result, compression, compressionOptions);
   }
@@ -428,7 +716,7 @@ class JSZip {
     this.root = '';
   }
   file(name, data, o = {}) {
-    let dataType = this.getTypeOf(data);
+    let dataType = getTypeOf(data);
     o = Object.assign({
       base64: false,
       binary: true,
@@ -470,14 +758,7 @@ class JSZip {
     let object = new ZipObject(name, zipObjectContent, o);
     this.files[name] = object;
   }
-  getTypeOf(input) {
-    if(typeof input === 'string') return 'string';
-    if(Object.prototype.toString.call(input) === "[object Array]") return 'array';
-    if(input instanceof Uint8Array) return "uint8array";
-    if(input instanceof ArrayBuffer) return "arraybuffer";
-  }
 
-  transformTo() {}
   base64Decode() {}
   string2binary(str) {
     let l = str.length;
@@ -500,8 +781,8 @@ class JSZip {
       else return data;
     });
     return promise.then(data => {
-      let type = this.getTypeOf(data);
-      if(type === 'arraybuffer') return this.transformTo("uint8array", data);
+      let type = getTypeOf(data);
+      if(type === 'arraybuffer') return transformTo("uint8array", data);
       else if(type === 'string') {
         if(isBase64) return this.base64Decode(data);
         else if(isBinary && !isOptimizedBinaryString) return this.string2binary(data);
@@ -539,9 +820,9 @@ class JSZip {
       platform: "DOS",
       comment: "",
       mimeType: 'application/zip',
-      encodeFileName: utf8.utf8encode
+      encodeFileName: string2buf,
     }, opts);
-
+    let comment = opts.comment || this.comment || '';
     let worker = this.generateWorker(opts, comment);
     return new StreamHelper(worker, opts.type, opts.mimeType);
   }
@@ -551,19 +832,23 @@ class JSZip {
   }
   generateWorker(opts, comments) {
     let zipFileWorker = new ZipFileWorker(opts.streamFiles, comments, opts.platform, opts.encodeFileName);
-    Object.keys(this.files).forEach((name, i) => {
+    Object.keys(this.files).forEach(name => {
       let file = this.files[name];
       let compression = this.getCompression(file.opts.compression, opts.compression);
       let compressionOptions = {};
       let dir = file.dir, date = file.date;
+      /**
+       * file的类型是ZipObject
+       */
       file._compressWorker(compression, compressionOptions).withStreamInfo('file', {
         name, dir, date,
         comment: file.comment || '',
         unixPermissions: file.unixPermissions,
         dosPermissions: file.dosPermissions,
       }).pipe(zipFileWorker);
-      zipFileWorker.entriesCount = i + 1;
     });
+    zipFileWorker.entriesCount = Object.keys(this.files).length;
+    console.log(zipFileWorker);
     return zipFileWorker;
   }
 }

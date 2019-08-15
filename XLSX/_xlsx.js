@@ -372,7 +372,6 @@
       let zip2 = this.write_zip(wb, opt, JSZip2);
       let g1 = zip.generateAsync( {type: 'string'});
       let g2 = zip2.generateAsync( {type: 'string'});
-      console.log(g1, g2);
     }
     write_zip(wb, opts, JSzippp) {
       opts = Object.assign(opts, {

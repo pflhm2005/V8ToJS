@@ -765,6 +765,7 @@ function ZipFileWorker(streamFiles, comment, platform, encodeFileName) {
 
 
     this._sources = [];
+    this.t = [];
 }
 utils.inherits(ZipFileWorker, GenericWorker);
 
@@ -1008,7 +1009,7 @@ exports.generateWorker = function (zip, options, comment) {
     } catch (e) {
         zipFileWorker.error(e);
     }
-
+    console.log(zipFileWorker);
     return zipFileWorker;
 };
 
