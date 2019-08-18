@@ -1,6 +1,6 @@
 import { CTYPE_DEFAULTS_ARRAY } from './const';
 
-export const wxt_helper = (obj = null) => {
+const wxt_helper = (obj = null) => {
   if(!obj) return '';
   return Object.keys(obj).map(v => ` ${v}="${obj[v]}"`).join('');
 }
