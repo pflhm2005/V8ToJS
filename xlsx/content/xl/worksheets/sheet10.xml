@@ -1,0 +1,168 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" 
+  xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" 
+  xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" mc:Ignorable="x14ac xr xr2 xr3" 
+  xmlns:x14ac="http://schemas.microsoft.com/office/spreadsheetml/2009/9/ac" 
+  xmlns:xr="http://schemas.microsoft.com/office/spreadsheetml/2014/revision" 
+  xmlns:xr2="http://schemas.microsoft.com/office/spreadsheetml/2015/revision2" 
+  xmlns:xr3="http://schemas.microsoft.com/office/spreadsheetml/2016/revision3" xr:uid="{B8059416-FC1D-044B-9245-9D2398A5B184}">
+  <dimension ref="A1:J5"/>
+  <sheetViews>
+    <sheetView workbookViewId="0"/>
+  </sheetViews>
+  <sheetFormatPr baseColWidth="10" defaultRowHeight="16"/>
+  <cols>
+    <col min="1" max="1" width="18" style="9" customWidth="1"/>
+    <col min="2" max="2" width="24" style="9" customWidth="1"/>
+    <col min="3" max="3" width="11" style="9" customWidth="1"/>
+    <col min="4" max="4" width="13.5" style="9" customWidth="1"/>
+    <col min="5" max="5" width="14" style="9" customWidth="1"/>
+    <col min="6" max="7" width="7.5" style="9" customWidth="1"/>
+    <col min="8" max="8" width="7.83203125" style="9" customWidth="1"/>
+    <col min="9" max="9" width="13.5" style="9" customWidth="1"/>
+    <col min="10" max="10" width="10.1640625" style="9" customWidth="1"/>
+    <col min="11" max="16384" width="10.83203125" style="9"/>
+  </cols>
+  <sheetData>
+    <row r="1" spans="1:10" ht="18">
+      <c r="A1" s="11" t="s">
+        <v>43</v>
+      </c>
+      <c r="B1" s="11" t="s">
+        <v>44</v>
+      </c>
+      <c r="C1" s="11" t="s">
+        <v>45</v>
+      </c>
+      <c r="D1" s="11" t="s">
+        <v>77</v>
+      </c>
+      <c r="E1" s="11" t="s">
+        <v>116</v>
+      </c>
+      <c r="F1" s="11" t="s">
+        <v>47</v>
+      </c>
+      <c r="G1" s="11" t="s">
+        <v>48</v>
+      </c>
+      <c r="H1" s="11" t="s">
+        <v>81</v>
+      </c>
+      <c r="I1" s="11" t="s">
+        <v>82</v>
+      </c>
+      <c r="J1" s="11" t="s">
+        <v>83</v>
+      </c>
+    </row>
+    <row r="2" spans="1:10" ht="18">
+      <c r="A2" s="12">
+        <v>43658.793599537035</v>
+      </c>
+      <c r="B2" s="13" t="s">
+        <v>51</v>
+      </c>
+      <c r="C2" s="13" t="s">
+        <v>52</v>
+      </c>
+      <c r="D2" s="9" t="s">
+        <v>78</v>
+      </c>
+      <c r="E2" s="13" t="s">
+        <v>54</v>
+      </c>
+      <c r="F2" s="14">
+        <v>4829</v>
+      </c>
+      <c r="G2" s="10">
+        <v>24</v>
+      </c>
+      <c r="H2" s="14">
+        <v>4</v>
+      </c>
+      <c r="I2" s="14" t="s">
+        <v>42</v>
+      </c>
+      <c r="J2" s="14">
+        <v>15852</v>
+      </c>
+    </row>
+    <row r="3" spans="1:10" ht="18">
+      <c r="A3" s="12">
+        <v>43657.433368055557</v>
+      </c>
+      <c r="B3" s="13" t="s">
+        <v>51</v>
+      </c>
+      <c r="C3" s="13" t="s">
+        <v>52</v>
+      </c>
+      <c r="D3" s="9" t="s">
+        <v>79</v>
+      </c>
+      <c r="E3" s="13" t="s">
+        <v>54</v>
+      </c>
+      <c r="F3" s="14">
+        <v>2342</v>
+      </c>
+      <c r="G3" s="10">
+        <v>13</v>
+      </c>
+      <c r="H3" s="14">
+        <v>1</v>
+      </c>
+      <c r="I3" s="14" t="s">
+        <v>62</v>
+      </c>
+      <c r="J3" s="14">
+        <v>30193</v>
+      </c>
+    </row>
+    <row r="4" spans="1:10" ht="18">
+      <c r="A4" s="12">
+        <v>43656.292534722219</v>
+      </c>
+      <c r="B4" s="13" t="s">
+        <v>51</v>
+      </c>
+      <c r="C4" s="13" t="s">
+        <v>52</v>
+      </c>
+      <c r="D4" s="9" t="s">
+        <v>80</v>
+      </c>
+      <c r="E4" s="13" t="s">
+        <v>54</v>
+      </c>
+      <c r="F4" s="14">
+        <v>1414</v>
+      </c>
+      <c r="G4" s="10">
+        <v>12</v>
+      </c>
+      <c r="H4" s="14">
+        <v>2</v>
+      </c>
+      <c r="I4" s="14" t="s">
+        <v>67</v>
+      </c>
+      <c r="J4" s="14">
+        <v>20255</v>
+      </c>
+    </row>
+    <row r="5" spans="1:10" ht="18">
+      <c r="A5" s="14"/>
+      <c r="B5" s="14"/>
+      <c r="C5" s="14"/>
+      <c r="E5" s="14"/>
+      <c r="F5" s="14"/>
+      <c r="G5" s="14"/>
+      <c r="I5" s="14"/>
+      <c r="J5" s="14"/>
+    </row>
+  </sheetData>
+  <phoneticPr fontId="1" type="noConversion"/>
+  <pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/>
+</worksheet>

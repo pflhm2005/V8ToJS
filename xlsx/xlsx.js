@@ -604,7 +604,13 @@ const generateSheetAst = () => {
       ]},
       { n: 'sheetFormatPr', p: { baseColWidth: '10', defaultRowHeight: '16' } },
       // 单sheet数据
-      { n: 'sheetData' },
+      { n: 'sheetData', c: [
+        { n: 'row', p: { r: '1', spans: '1:1' }, c:[
+          { n: 'c', p: { r: 'A1' }, c: [
+            { n: 'v', t: 1 },
+          ]}
+        ]}
+      ]},
       { n: 'phoneticPr', p: { fontId: '1', type: 'noConversion' } },
       { n: 'pageMargins', p: { left: '0.7', right: '0.7', bottom: '0.75', header: '0.3', footer: '0.3' } },
     ]
@@ -625,7 +631,7 @@ class XLSX {
   }
   writeTag(o) {
     let propertyString = '';
-    if(o.p) propertyString = [' '].concat(Object.keys(o.p).map(key => `${key}="${o.p[key]}"`)).join('');
+    if(o.p) propertyString = Object.keys(o.p).map(key => ` ${key}="${o.p[key]}"`).join('');
     if(!o.t && !o.c) return `<${o.n}${propertyString}/>`;
     else return `<${o.n}${propertyString}>${o.t || ''}${(o.c || []).map(v => this.writeTag(v)).join('')}</${o.n}>`;
   }
@@ -649,7 +655,7 @@ class XLSX {
 
     // xl/workbook.xml
     let workbookXmlPath = 'xl/workbook.xml';
-    zip.file(coreXmlPath, this.writeXml(generateWorkBookAst(SheetNames)));
+    zip.file(workbookXmlPath, this.writeXml(generateWorkBookAst(SheetNames)));
 
     // _rels/.rels
     let rels = [
