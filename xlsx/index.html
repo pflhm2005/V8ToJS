@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <title>Document</title>
+</head>
+<body>
+  
+</body>
+<script src="./jszip.js"></script>
+<script src="./xlsx.js"></script>
+<script>
+let wb = {
+  SheetNames: ['sheet1', 'sheet2'],
+  Sheets: {
+    sheet1: {},
+    sheet2: {}
+  }
+}
+let a = document.createElement('a');
+let blob = new Blob([XLSX.write(wb)], {type:"application/octet-stream"});
+let url = URL.createObjectURL(blob);
+a.href = url;
+a.download = '123.xlsx';
+a.click();
+</script>
+</html>
