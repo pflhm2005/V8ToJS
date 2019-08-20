@@ -11,34 +11,18 @@ const generateAppAst = (SheetNames) => {
       { n: 'Application', t: 'Microsoft Macintosh Excel' },
       { n: 'DocSecurity', t: '0' },
       { n: 'ScaleCrop', t: 'false' },
-      {
-        n: 'HeadingPairs',
-        c: [
-          { 
-            n: 'vt:vector',
-            p: { size: 2, baseType: 'variant', },
-            c: [
-              {
-                n: 'vt:variant',
-                c: [{ n: 'vt:lpstr', t: '工作表' }],
-              },
-              {
-                n: 'vt:variant',
-                c: [{ n: 'vt:i4', t: len }],
-              },
-            ],
-          }
-        ]
+      { n: 'HeadingPairs', c: [
+        { n: 'vt:vector', p: { size: 2, baseType: 'variant', }, c: [
+          { n: 'vt:variant', c: [{ n: 'vt:lpstr', t: '工作表' }] },
+          { n: 'vt:variant', c: [{ n: 'vt:i4', t: len }] }],
+        }]
       },
-      {
-        n: 'TitlesOfParts',
-        c: [
-          {
-            n: 'vt:vector',
-            p: { size: len, baseType: 'lpstr',},
-            c: SheetNames.map(name => { return { n: 'vt:lpstr', t: name }}),
-          }
-        ]
+      { n: 'TitlesOfParts', c: [
+        { 
+          n: 'vt:vector',
+          p: { size: len, baseType: 'lpstr',},
+          c: SheetNames.map(name => { return { n: 'vt:lpstr', t: name }}),
+        }]
       },
       { n: 'Company' },
       { n: 'LinksUpToDate', t: 'false' },
@@ -62,8 +46,8 @@ const generateCoreAst = () => {
     c: [
       { n: 'dc:creator', t: '陈 宇珩' },
       { n: 'cp:lastModifiedBy', t: '陈 宇珩' },
-      { n: 'dcterms:created', p: { 'xsi:type': 'dcterms:W3CDTF' }, t: '2019-08-07T10:16:46Z' },
-      { n: 'dcterms:modified', p: { 'xsi:type': 'dcterms:W3CDTF' }, t: '2019-08-07T10:16:46Z' },
+      { n: 'dcterms:created', p: { 'xsi:type': 'dcterms:W3CDTF' }, t: new Date().toLocaleString() },
+      { n: 'dcterms:modified', p: { 'xsi:type': 'dcterms:W3CDTF' }, t: new Date().toLocaleString() },
     ],
   };
 };
@@ -121,19 +105,12 @@ const generateWorkBookAst = (SheetNames) => {
         n: 'mc:AlternateContent',
         p: { 'xmlns:mc': 'http://schemas.openxmlformats.org/markup-compatibility/2006' },
         c: [
-          {
-            n: 'mc:Choice', 
-            p: { Requires: 'x15' },
-            c: [
-              {
-                n: 'x15ac:absPath',
-                p: {
-                  // 这个属性是文件的绝对路径
-                  url: '/Users',
-                  'xmlns:x15ac': 'http://schemas.microsoft.com/office/spreadsheetml/2010/11/ac',
-                },
-              }
-            ]
+          { n: 'mc:Choice', p: { Requires: 'x15' }, c: [
+            {
+              n: 'x15ac:absPath',
+              // 设置文件绝对路径
+              p: { url: '/Users', 'xmlns:x15ac': 'http://schemas.microsoft.com/office/spreadsheetml/2010/11/ac' },
+            }]
           },
         ]
       },
@@ -148,39 +125,30 @@ const generateWorkBookAst = (SheetNames) => {
           'xr10:uidLastSave': '{00000000-0000-0000-0000-000000000000}',
         }
       },
-      {
-        n: 'bookViews',
-        c: [
-          // 这个属性是文档的宽高
-          { n: 'workbookView' }
-        ]
+      { n: 'bookViews', c: [
+        // 这个属性是文档的宽高
+        { n: 'workbookView' }]
       },
-      {
-        n: 'sheets',
-        c: SheetNames.map((name, i) => {
-          return {
-            n: 'sheet',
-            p: {
-              name,
-              sheetId: i+1,
-              'r:id': `rId${i+1}`
-            }
+      { n: 'sheets', c: SheetNames.map((name, i) => {
+        return {
+          n: 'sheet',
+          p: {
+            name,
+            sheetId: i+1,
+            'r:id': `rId${i+1}`
           }
-        })
+        }})
       },
       { n: 'calcPr', p: { calcId: '181029' } },
-      {
-        n: 'extLst',
-        c: [
-          {
-            n: 'ext',
-            p: {
-              uri: '{140A7094-0E35-4892-8432-C4D2E57EDEB5}',
-              'xmlns:x15': 'http://schemas.microsoft.com/office/spreadsheetml/2010/11/main',
-            },
-            c: [{ n:'x15:workbookPr', p: { chartTrackingRefBase: '1' } }],
-          }
-        ]
+      { n: 'extLst', c: [
+        {
+          n: 'ext',
+          p: {
+            uri: '{140A7094-0E35-4892-8432-C4D2E57EDEB5}',
+            'xmlns:x15': 'http://schemas.microsoft.com/office/spreadsheetml/2010/11/main',
+          },
+          c: [{ n:'x15:workbookPr', p: { chartTrackingRefBase: '1' } }],
+        }]
       }
     ]
   }
@@ -198,89 +166,73 @@ const generateStyleAst = () => {
       'xmlns:xr': 'http://schemas.microsoft.com/office/spreadsheetml/2014/revision'
     },
     c: [
-      {
-        n: 'fonts',
-        c: [
-          {
-            n: 'font',
-            c: [
-              { n: 'sz', p: { val: '12' } },
-              { n: 'color', p: { theme: '1' } },
-              { n: 'name', p: { val: '等线' } },
-              { n: 'family', p: { val: '2' } },
-              { n: 'charset', p: { val: '134' } },
-              { n: 'scheme', p: { val: 'minor' } },
-            ]
-          },
-          {
-            n: 'font',
-            c: [
-              { n: 'sz', p: { val: '9' } },
-              { n: 'name', p: { val: '等线' } },
-              { n: 'family', p: { val: '2' } },
-              { n: 'charset', p: { val: '134' } },
-              { n: 'scheme', p: { val: 'minor' } },
-            ]
-          }
-        ]
+      { n: 'fonts', c: [
+        { n: 'font', c: [
+          { n: 'sz', p: { val: '12' } },
+          { n: 'color', p: { theme: '1' } },
+          { n: 'name', p: { val: '等线' } },
+          { n: 'family', p: { val: '2' } },
+          { n: 'charset', p: { val: '134' } },
+          { n: 'scheme', p: { val: 'minor' } },
+        ]},
+        { n: 'font', c: [
+          { n: 'sz', p: { val: '9' } },
+          { n: 'name', p: { val: '等线' } },
+          { n: 'family', p: { val: '2' } },
+          { n: 'charset', p: { val: '134' } },
+          { n: 'scheme', p: { val: 'minor' } },
+        ]}]
       },
-      {
-        n: 'fills',
-        p: { count: '2' },
-        c: [
-          { n: 'fill', c: [{ n: 'patternFill', p: { patternType: 'none' } }] },
-          { n: 'fill', c: [{ n: 'patternFill', p: { patternType: 'gray125' } }] },
-        ]
+      { n: 'fills', p: { count: '2' },c: [
+        { n: 'fill', c: [{ n: 'patternFill', p: { patternType: 'none' } }] },
+        { n: 'fill', c: [{ n: 'patternFill', p: { patternType: 'gray125' } }] }]
       },
-      {
-        n:'borders',
-        p: { count: '1' },
-        c: [
-          { n: 'border', c: [
-            { n: 'left' },
-            { n: 'right' },
-            { n: 'top' },
-            { n: 'bottom' },
-            { n: 'diagonal' },
-          ] },
-        ]
+      { n:'borders', p: { count: '1' }, c: [
+        { n: 'border', c: [
+          { n: 'left' },
+          { n: 'right' },
+          { n: 'top' },
+          { n: 'bottom' },
+          { n: 'diagonal' },
+        ]}]
       },
-      {
-        n: 'cellStyleXfs',
-        p: { count: '1' },
-        c: [
-          { n: 'xf', p: {
+      { n: 'cellStyleXfs', p: { count: '1' }, c: [
+        {
+          n: 'xf', 
+          p: {
             numFmtId: '0',
             fontId: '0',
             fillId: '0',
             borderId: '0'
-          }, c: [{ n:'alignment', p:{ vertical: 'center' } }]}
-        ]
+          },
+          c: [{ n:'alignment', p:{ vertical: 'center' } }]
+        }]
       },
-      {
-        n: 'cellXfs',
-        p: { count: '1' },
-        c: [
-          { n: 'xf', p: {
+      { n: 'cellXfs', p: { count: '1' }, c: [
+        { 
+          n: 'xf', 
+          p: {
             numFmtId: '0',
             fontId: '0',
             fillId: '0',
             borderId: '0',
             xfId: "0"
-          }, c: [{ n:'alignment', p:{ vertical: 'center' } }]}
-        ]
+          },
+          c: [{ n:'alignment', p:{ vertical: 'center' } }]
+        }]
       },
-      {
-        n: 'cellStyles',
-        p: { count: '1' },
-        c: [{ n: 'cellStyle', p: {
-          name: '常规',
-          xfId: '0',
-          builtinId: '0'
-        }}]
+      { n: 'cellStyles', p: { count: '1' }, c: [
+        {
+          n: 'cellStyle', 
+          p: {
+            name: '常规',
+            xfId: '0',
+            builtinId: '0'
+          }
+        }]
       },
       { n: 'dxfs', p: { count: '0' } },
-      {
+      { 
         n: 'tableStyles',
         p: {
           count: '0',
@@ -288,19 +240,16 @@ const generateStyleAst = () => {
           defaultPivotStyle: 'PivotStyleLight16'
         }
       },
-      {
-        n: 'extLst',
-        c: [
-          { n: 'ext', p:{
-            uri: '{EB79DEF2-80B8-43e5-95BD-54CBDDF9020C}',
-            'xmlns:x14': 'http://schemas.microsoft.com/office/spreadsheetml/2009/9/main'
-          }, c: [{ n: 'x14:slicerStyles', p: { defaultSlicerStyle: 'SlicerStyleLight1' } }]},
-          { n: 'ext', p:{
-            uri: '{9260A510-F301-46a8-8635-F512D64BE5F5}',
-            'xmlns:x15': 'http://schemas.microsoft.com/office/spreadsheetml/2010/11/main'
-          }, c: [{ n: 'x15:timelineStyles', p: { defaultTimelineStyle: 'TimeSlicerStyleLight1' } }]},
-        ]
-      }
+      { n: 'extLst', c: [
+        { n: 'ext', p:{
+          uri: '{EB79DEF2-80B8-43e5-95BD-54CBDDF9020C}',
+          'xmlns:x14': 'http://schemas.microsoft.com/office/spreadsheetml/2009/9/main'
+        }, c: [{ n: 'x14:slicerStyles', p: { defaultSlicerStyle: 'SlicerStyleLight1' } }]},
+        { n: 'ext', p:{
+          uri: '{9260A510-F301-46a8-8635-F512D64BE5F5}',
+          'xmlns:x15': 'http://schemas.microsoft.com/office/spreadsheetml/2010/11/main'
+        }, c: [{ n: 'x15:timelineStyles', p: { defaultTimelineStyle: 'TimeSlicerStyleLight1' } }]},
+      ]}
     ]
   };
 };
@@ -605,10 +554,17 @@ const generateSheetAst = () => {
       { n: 'sheetFormatPr', p: { baseColWidth: '10', defaultRowHeight: '16' } },
       // 单sheet数据
       { n: 'sheetData', c: [
-        { n: 'row', p: { r: '1', spans: '1:1' }, c:[
+        { n: 'row', p: { r: '1', spans: '1:9' }, c:[
           { n: 'c', p: { r: 'A1' }, c: [
             { n: 'v', t: 1 },
-          ]}
+          ]},
+          { n: 'c', p: { r: 'B1' } },
+          { n: 'c', p: { r: 'C1' } },
+          { n: 'c', p: { r: 'D1' } },
+          { n: 'c', p: { r: 'E1' } },
+          { n: 'c', p: { r: 'F1' } },
+          { n: 'c', p: { r: 'G1' } },
+          { n: 'c', p: { r: 'H1' } },
         ]}
       ]},
       { n: 'phoneticPr', p: { fontId: '1', type: 'noConversion' } },
@@ -629,6 +585,16 @@ class XLSX {
     for (let i=0; i!=s.length; ++i) view[i] = s.charCodeAt(i) & 0xFF;
     return buf;
   }
+  escapeHTML(str) {
+    return str.replace(/[<>"&]/g, (match) => {
+      switch(match){
+        case "<": return "&lt;"; 
+        case ">": return "&gt;";
+        case "&": return "&amp;"; 
+        case "\"": return "&quot;"; 
+      };
+    })
+  }
   writeTag(o) {
     let propertyString = '';
     if(o.p) propertyString = Object.keys(o.p).map(key => ` ${key}="${o.p[key]}"`).join('');
@@ -644,7 +610,7 @@ class XLSX {
   }
   write_zip(wb) {
     let zip = new JSZipSync();
-    let SheetNames = wb.SheetNames;
+    let SheetNames = wb.SheetNames.map(this.escapeHTML);
     // docProps/app.xml
     let appXmlPath = 'docProps/app.xml';
     zip.file(appXmlPath, this.writeXml(generateAppAst(SheetNames)));
