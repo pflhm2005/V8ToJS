@@ -218,7 +218,7 @@ const generateStyleAst = () => {
             borderId: '0',
             xfId: "0"
           },
-          c: [{ n:'alignment', p:{ vertical: 'center' } }]
+          c: [{ n:'alignment', p:{ vertical: 'center', horizontal: 'center' } }]
         }]
       },
       { n: 'cellStyles', p: { count: '1' }, c: [
@@ -532,7 +532,22 @@ const generateThemeAst = () => {
   };
 };
 
-const generateSheetAst = () => {
+
+const rowToNum = str => (str.split("").reverse().reduce((r, c, i) => {
+  return (r += (c.charCodeAt() - 64) * 26 ** i);
+}, 0) - 1);
+const generateSheetAst = (sheet) => {
+  let range = sheet.ref.split(':')[1];
+  let len = range.length, r = 0, c = 0;
+  for(let i = 0;i < len;i++) {
+    let unicode = range.charCodeAt(i) - 64;
+    if(unicode < 0 || unicode > 9) {
+      c = rowToNum(range.slice(0, i + 1));
+      r = Number(range.slice(i + 1));
+      break;
+    }
+  }
+  console.log(r, c);
   return {
     n: 'worksheet',
     p: {
@@ -554,18 +569,14 @@ const generateSheetAst = () => {
       { n: 'sheetFormatPr', p: { baseColWidth: '10', defaultRowHeight: '16' } },
       // 单sheet数据
       { n: 'sheetData', c: [
-        { n: 'row', p: { r: '1', spans: '1:9' }, c:[
-          { n: 'c', p: { r: 'A1' }, c: [
-            { n: 'v', t: 1 },
+        { n: 'row', p: { r: '1' }, c:[
+          { n: 'c', p: { r: 'A1', s: '1' }, c: [
+            { n: 'v', t: '基本信息' },
           ]},
-          { n: 'c', p: { r: 'B1' } },
-          { n: 'c', p: { r: 'C1' } },
-          { n: 'c', p: { r: 'D1' } },
-          { n: 'c', p: { r: 'E1' } },
-          { n: 'c', p: { r: 'F1' } },
-          { n: 'c', p: { r: 'G1' } },
-          { n: 'c', p: { r: 'H1' } },
         ]}
+      ]},
+      { n: 'mergeCells', p: { count: '1' }, c: [
+        { n: 'mergeCell', p: { ref: 'A1:H1' } }
       ]},
       { n: 'phoneticPr', p: { fontId: '1', type: 'noConversion' } },
       { n: 'pageMargins', p: { left: '0.7', right: '0.7', bottom: '0.75', header: '0.3', footer: '0.3' } },
@@ -604,10 +615,16 @@ class XLSX {
   writeXml(content) {
     return `${XML_ROOT_HEADER}${this.writeTag(content)}`;
   }
+  /**
+   * 返回二进制文件流
+   */
   write(wb, opt = {}){
     let zip = this.write_zip(wb, opt);
     return this.s2ab(zip.generate({ type: 'string' }));
   }
+  /**
+   * 生成xml文件
+   */
   write_zip(wb) {
     let zip = new JSZipSync();
     let SheetNames = wb.SheetNames.map(this.escapeHTML);
@@ -656,10 +673,48 @@ class XLSX {
     // sheet.xml
     for(let i = 0;i < SheetNames.length;i++) {
       let sheetPath = `xl/worksheets/sheet${i+1}.xml`;
-      zip.file(sheetPath, this.writeXml(generateSheetAst()));
+      let sheetName = SheetNames[i];
+      zip.file(sheetPath, this.writeXml(generateSheetAst(wb.Sheets[sheetName])));
     }
 
     return zip;
+  }
+
+  /**
+   * 一些工具方法
+   */
+  book_new() {
+    return { SheetNames: [], Sheets: {} };
+  }
+  numToSheetPos(n) {
+    let s = '';
+    for(++n;n;n = Math.floor((n - 1) / 26)) s = String.fromCharCode((n - 1) % 26 + 65) + s;
+    return s;
+  }
+  transferCellPos(r, c) {
+    return `${numToSheetPos(c)}${r+1}`;
+  }
+  aoa_to_sheet(ar) {
+    let ws = {};
+    let len = ar.length, r = 0, c = 0;
+    for(;r < len;r++) {
+      for(c = 0;c < ar[r].length;c++) {
+        let cell = { v: ar[r][c] };
+        if(cell.v === null) continue;
+        else cell.t = 's';
+        ws[transferCellPos(r, c)] = cell;
+      }
+    }
+    ws.ref = `A1:${transferCellPos(r - 1, Math.max(...ar.map(v => v.length)) - 1)}`;
+    return ws;
+  }
+  book_append_sheet(wb, ws, name = '') {
+    if(!name) {
+      let len = wb.SheetNames.length;
+      name = `Sheet${len+1}`;
+    }
+    wb.SheetNames.push(name);
+    wb.Sheets[name] = ws;
   }
 }
 window.XLSX = new XLSX();
