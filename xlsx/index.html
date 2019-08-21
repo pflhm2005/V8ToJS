@@ -13,25 +13,13 @@
   <script>
     let a = document.createElement('a');
 
-    // let wb = XLSX.book_new();
-    // let ws = XLSX.aoa_to_sheet([[1, 2, 3], [4, 5, 6]]);
-    // XLSX.book_append_sheet(wb, ws, "sheet12");
-    // let blob = new Blob([XLSX.write(wb)], {type:"application/octet-stream"});
+    let wb = XLSX.book_new();
+    let ws = XLSX.aoa_to_sheet([[1, 2, 3], [4, 5, 6]]);
+    XLSX.book_append_sheet(wb, ws, "sheet12");
+    let blob = new Blob([XLSX.write(wb)], {type:"application/octet-stream"});
     // let url = URL.createObjectURL(blob);
     // a.href = url;
     // a.download = '123.xlsx';
     // a.click();
-
-    let wb = {
-      SheetNames: ['error'],
-      Sheets: {
-        error: {},
-      }
-    }
-    let blob = new Blob([XLSX.write(wb)], {type:"application/octet-stream"});
-    let url = URL.createObjectURL(blob);
-    a.href = url;
-    a.download = 'error.xlsx';
-    a.click();
   </script>
 </html>

@@ -532,22 +532,27 @@ const generateThemeAst = () => {
   };
 };
 
-
-const rowToNum = str => (str.split("").reverse().reduce((r, c, i) => {
-  return (r += (c.charCodeAt() - 64) * 26 ** i);
-}, 0) - 1);
+const columnToNum = str => str.split('').reduce((r, c) => {
+  return r = r * 26 + (c.charCodeAt() - 64);
+}, 0);
+const numToColumn = (n) => {
+  let s = '';
+  for(++n;n;n = Math.floor((n - 1) / 26)) s = String.fromCharCode((n - 1) % 26 + 65) + s;
+  return s;
+}
 const generateSheetAst = (sheet) => {
-  // let range = sheet.ref.split(':')[1];
-  // let len = range.length, r = 0, c = 0;
-  // for(let i = 0;i < len;i++) {
-  //   let unicode = range.charCodeAt(i) - 64;
-  //   if(unicode < 0 || unicode > 9) {
-  //     c = rowToNum(range.slice(0, i + 1));
-  //     r = Number(range.slice(i + 1));
-  //     break;
-  //   }
-  // }
-  // console.log(r, c);
+  let range = sheet.ref.split(':')[1];
+  range = 'C10';
+  let len = range.length, r = 0, c = 0;
+  for(let i = 0;i < len;i++) {
+    let unicode = range.charCodeAt(i) - 64;
+    if(unicode < 0 || unicode > 26) {
+      c = columnToNum(range.slice(0, i));
+      r = Number(range.slice(i));
+      break;
+    }
+  }
+  console.log(r, c);
   return {
     n: 'worksheet',
     p: {
@@ -562,7 +567,7 @@ const generateSheetAst = (sheet) => {
       'xr:uid': '{8791C6D8-650A-F64A-B18E-34BEF5B11F63}',
     },
     c: [
-      { n: 'dimension', p: { ref: 'A1' } },
+      { n: 'dimension', p: { ref: sheet.ref } },
       { n: 'sheetViews', c:[
         { n: 'sheetView', p: { tabSelected: '1', workbookViewId: '0' } }
       ]},
@@ -620,7 +625,7 @@ class XLSX {
    */
   write(wb, opt = {}){
     let zip = this.write_zip(wb, opt);
-    return this.s2ab(zip.generate({ type: 'string' }));
+    // return this.s2ab(zip.generate({ type: 'string' }));
   }
   /**
    * 生成xml文件
@@ -650,7 +655,7 @@ class XLSX {
     zip.file(relsPath,this.writeXml(generateRelsAst(rels)));
     // xl/_rels/workbook.xml.rels
     let xmlRels = SheetNames.map((name, i) => {
-      return { Target: `worksheets/${name}.xml`, Type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet' };
+      return { Target: `worksheets/sheet${i+1}.xml`, Type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet' };
     }).concat([
       { Target: 'theme/theme1.xml', Type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme' },
       { Target: 'styles.xml', Type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles' },
@@ -674,7 +679,7 @@ class XLSX {
     for(let i = 0;i < SheetNames.length;i++) {
       let sheetPath = `xl/worksheets/sheet${i+1}.xml`;
       // let sheetName = SheetNames[i];
-      zip.file(sheetPath, this.writeXml(generateSheetAst()));
+      zip.file(sheetPath, this.writeXml(generateSheetAst(wb.Sheets[SheetNames[i]])));
     }
 
     return zip;
@@ -686,13 +691,8 @@ class XLSX {
   book_new() {
     return { SheetNames: [], Sheets: {} };
   }
-  numToSheetPos(n) {
-    let s = '';
-    for(++n;n;n = Math.floor((n - 1) / 26)) s = String.fromCharCode((n - 1) % 26 + 65) + s;
-    return s;
-  }
   transferCellPos(r, c) {
-    return `${this.numToSheetPos(c)}${r+1}`;
+    return `${numToColumn(c)}${r+1}`;
   }
   aoa_to_sheet(ar) {
     let ws = {};
