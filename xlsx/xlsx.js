@@ -229,7 +229,8 @@ const generateStyleAst = () => {
             fontId: '0',
             fillId: '0',
             borderId: '0',
-            xfId: "0"
+            xfId: "0",
+            applyAlignment: '1',
           },
           c: [{ n:'alignment', p:{ vertical: 'center', horizontal: 'center' } }]
         }]
@@ -584,7 +585,13 @@ const generateSheetAst = (sheet) => {
       let pos = `${numToColumn(j)}${i}`;
       // 默认不生成值为null的单元格 好像也不会出问题
       let cell = sheet[pos];
-      if(cell) rowChildren.push({ n: 'c', p: { r: pos }, c: [{ n: 'v', t: cell.v }] });
+      if(cell) {
+        let t = 's';
+        if(typeof cell.v === 'number') t = 'n';
+        rowChildren.push({ n: 'c', p: { r: pos, spans: `1:${c}`, t }, c: [{ n: 'v', t: cell.v }] });
+      } else {
+        rowChildren.push({ n: 'c' });
+      }
     }
     SheetData.push(rowAst);
   }
