@@ -34,6 +34,7 @@ const generateAppAst = (SheetNames) => {
 };
 
 const generateCoreAst = () => {
+  let date = new Date().toISOString().replace(/\.\d*/,"");
   return {
     n: 'cp:coreProperties',
     p: {
@@ -44,10 +45,10 @@ const generateCoreAst = () => {
       'xmlns:xsi': 'http://www.w3.org/2001/XMLSchema-instance',
     },
     c: [
-      { n: 'dc:creator', t: '陈 宇珩' },
-      { n: 'cp:lastModifiedBy', t: '陈 宇珩' },
-      { n: 'dcterms:created', p: { 'xsi:type': 'dcterms:W3CDTF' }, t: new Date().toLocaleString() },
-      { n: 'dcterms:modified', p: { 'xsi:type': 'dcterms:W3CDTF' }, t: new Date().toLocaleString() },
+      { n: 'dc:creator', t: 'feilong pang' },
+      { n: 'cp:lastModifiedBy', t: 'feilong pang' },
+      { n: 'dcterms:created', p: { 'xsi:type': 'dcterms:W3CDTF' }, t: date },
+      { n: 'dcterms:modified', p: { 'xsi:type': 'dcterms:W3CDTF' }, t: date },
     ],
   };
 };
@@ -56,7 +57,7 @@ const generateRelsAst = rels => {
   return {
     n: 'Relationships',
     p: { xmlns: 'http://schemas.openxmlformats.org/package/2006/relationships' },
-    c: rels.map((rel, i) => { return { n: 'Relationship', p: { Id: `rId${i + 1}`, Target: rel.Target, Type: rel.Type } }; })
+    c: rels.map((rel, i) => { return { n: 'Relationship', p: { Id: `rId${i + 1}`, Type: rel.Type, Target: rel.Target } }; })
   };
 };
 
@@ -276,18 +277,18 @@ const generateThemeAst = () => {
     c: [
       { n: 'a:themeElements', c: [
         { n: 'a:clrScheme', p: { name: 'Office' }, c: [
-          { name: 'a:dk1', c: [{ n: 'a:sysClr', p: { val: 'windowText', lastClr: '000000' } }] },
-          { name: 'a:lt1', c: [{ n: 'a:sysClr', p: { val: 'window', lastClr: 'FFFFFF' } }] },
-          { name: 'a:dk2', c: [{ n: 'a:srgbClr', p: { val: '44546A' } }] },
-          { name: 'a:lt2', c: [{ n: 'a:srgbClr', p: { val: 'E7E6E6' } }] },
-          { name: 'a:accent1', c: [{ n: 'a:srgbClr', p: { val: '4472C4' } }] },
-          { name: 'a:accent2', c: [{ n: 'a:srgbClr', p: { val: 'ED7D31' } }] },
-          { name: 'a:accent3', c: [{ n: 'a:srgbClr', p: { val: 'A5A5A5' } }] },
-          { name: 'a:accent4', c: [{ n: 'a:srgbClr', p: { val: 'FFC000' } }] },
-          { name: 'a:accent5', c: [{ n: 'a:srgbClr', p: { val: '5B9BD5' } }] },
-          { name: 'a:accent6', c: [{ n: 'a:srgbClr', p: { val: '70AD47' } }] },
-          { name: 'a:hlink', c: [{ n: 'a:srgbClr', p: { val: '0563C1' } }] },
-          { name: 'a:folHlink', c: [{ n: 'a:srgbClr', p: { val: '954F72' } }] },
+          { n: 'a:dk1', c: [{ n: 'a:sysClr', p: { val: 'windowText', lastClr: '000000' } }] },
+          { n: 'a:lt1', c: [{ n: 'a:sysClr', p: { val: 'window', lastClr: 'FFFFFF' } }] },
+          { n: 'a:dk2', c: [{ n: 'a:srgbClr', p: { val: '44546A' } }] },
+          { n: 'a:lt2', c: [{ n: 'a:srgbClr', p: { val: 'E7E6E6' } }] },
+          { n: 'a:accent1', c: [{ n: 'a:srgbClr', p: { val: '4472C4' } }] },
+          { n: 'a:accent2', c: [{ n: 'a:srgbClr', p: { val: 'ED7D31' } }] },
+          { n: 'a:accent3', c: [{ n: 'a:srgbClr', p: { val: 'A5A5A5' } }] },
+          { n: 'a:accent4', c: [{ n: 'a:srgbClr', p: { val: 'FFC000' } }] },
+          { n: 'a:accent5', c: [{ n: 'a:srgbClr', p: { val: '5B9BD5' } }] },
+          { n: 'a:accent6', c: [{ n: 'a:srgbClr', p: { val: '70AD47' } }] },
+          { n: 'a:hlink', c: [{ n: 'a:srgbClr', p: { val: '0563C1' } }] },
+          { n: 'a:folHlink', c: [{ n: 'a:srgbClr', p: { val: '954F72' } }] },
         ]},
         { n: 'a:fontScheme', p: { name: 'Office' }, c:[
           { n: 'a:majorFont', c: [
@@ -402,52 +403,53 @@ const generateThemeAst = () => {
             ]},
             { n: 'a:gradFill', p: { rotWithShape: '1' }, c: [
               { n: 'a:gsLst', c: [
-                { n: 'a:gs', p: { pos: '0', c: [
+                { n: 'a:gs', p: { pos: '0' }, c: [
                   { n: 'a:schemeClr', p: { val: 'phClr' }, c: [
                     { n: 'a:lumMod', p: { val: '110000' } },
                     { n: 'a:satMod', p: { val: '105000' } },
                     { n: 'a:tint', p: { val: '67000' } },
                   ]}
-                ]}},
-                { n: 'a:gs', p: { pos: '50000', c: [
+                ]},
+                { n: 'a:gs', p: { pos: '50000' }, c: [
                   { n: 'a:schemeClr', p: { val: 'phClr' }, c: [
                     { n: 'a:lumMod', p: { val: '105000' } },
                     { n: 'a:satMod', p: { val: '103000' } },
                     { n: 'a:tint', p: { val: '73000' } },
                   ]}
-                ]}},
-                { n: 'a:gs', p: { pos: '100000', c: [
+                ]},
+                { n: 'a:gs', p: { pos: '100000' }, c: [
                   { n: 'a:schemeClr', p: { val: 'phClr' }, c: [
                     { n: 'a:lumMod', p: { val: '105000' } },
                     { n: 'a:satMod', p: { val: '109000' } },
                     { n: 'a:tint', p: { val: '81000' } },
                   ]}
-                ]}},
-              ]}
+                ]},
+              ]},
+              { n: 'a:lin', p: { ang: '5400000', scaled: '0' } }
             ]},
             { n: 'a:gradFill', p: { rotWithShape: '1' }, c: [
               { n: 'a:gsLst', c: [
-                { n: 'a:gs', p: { pos: '0', c: [
+                { n: 'a:gs', p: { pos: '0' }, c: [
                   { n: 'a:schemeClr', p: { val: 'phClr' }, c: [
                     { n: 'a:satMod', p: { val: '103000' } },
                     { n: 'a:lumMod', p: { val: '102000' } },
                     { n: 'a:tint', p: { val: '94000' } },
                   ]}
-                ]}},
-                { n: 'a:gs', p: { pos: '50000', c: [
+                ]},
+                { n: 'a:gs', p: { pos: '50000' }, c: [
                   { n: 'a:schemeClr', p: { val: 'phClr' }, c: [
                     { n: 'a:satMod', p: { val: '110000' } },
                     { n: 'a:lumMod', p: { val: '100000' } },
-                    { n: 'a:tint', p: { val: '100000' } },
+                    { n: 'a:shade', p: { val: '100000' } },
                   ]}
-                ]}},
-                { n: 'a:gs', p: { pos: '100000', c: [
+                ]},
+                { n: 'a:gs', p: { pos: '100000' }, c: [
                   { n: 'a:schemeClr', p: { val: 'phClr' }, c: [
-                    { n: 'a:satMod', p: { val: '99000' } },
-                    { n: 'a:lumMod', p: { val: '120000' } },
-                    { n: 'a:tint', p: { val: '78000' } },
+                    { n: 'a:lumMod', p: { val: '99000' } },
+                    { n: 'a:satMod', p: { val: '120000' } },
+                    { n: 'a:shade', p: { val: '78000' } },
                   ]}
-                ]}},
+                ]},
               ]},
               { n: 'a:lin', p: { ang: '5400000', scaled: '0' } }
             ]},
@@ -501,7 +503,7 @@ const generateThemeAst = () => {
             { n: 'a:gradFill', p: { rotWithShape: '1' }, c: [
               { n: 'a:gsLst', c: [
                 { n: 'a:gs', p: { pos: '0' }, c:[
-                  { n: 'schemeClr', p: { val: 'phClr' }, c: [
+                  { n: 'a:schemeClr', p: { val: 'phClr' }, c: [
                     { n: 'a:tint', p: { val: '93000' } },
                     { n: 'a:satMod', p: { val: '150000' } },
                     { n: 'a:shade', p: { val: '98000' } },
@@ -509,7 +511,7 @@ const generateThemeAst = () => {
                   ]}
                 ]},
                 { n: 'a:gs', p: { pos: '50000' }, c:[
-                  { n: 'schemeClr', p: { val: 'phClr' }, c: [
+                  { n: 'a:schemeClr', p: { val: 'phClr' }, c: [
                     { n: 'a:tint', p: { val: '98000' } },
                     { n: 'a:satMod', p: { val: '130000' } },
                     { n: 'a:shade', p: { val: '90000' } },
@@ -517,7 +519,7 @@ const generateThemeAst = () => {
                   ]}
                 ]},
                 { n: 'a:gs', p: { pos: '100000' }, c:[
-                  { n: 'schemeClr', p: { val: 'phClr' }, c: [
+                  { n: 'a:schemeClr', p: { val: 'phClr' }, c: [
                     { n: 'a:shade', p: { val: '63000' } },
                     { n: 'a:satMod', p: { val: '120000' } },
                   ]}
@@ -590,9 +592,10 @@ const generateSheetAst = (sheet) => {
    * 处理单元格合并
    */
   let merge = sheet.merge || [];
-  let mergeAst = { n: 'mergeCells', p: { count: '0' }, c: [] };
+  let mergeAst = null;
   if(merge.length) {
-    let len = sheet.merge.length;
+    mergeAst = { n: 'mergeCells', p: { count: '0' }, c: [] };
+    let len = merge.length;
     mergeAst.p.count = len;
     mergeAst.c = merge.map(ref => { return { n: 'mergeCell', p: {ref} } });
   }
@@ -611,7 +614,7 @@ const generateSheetAst = (sheet) => {
       'xr:uid': '{8791C6D8-650A-F64A-B18E-34BEF5B11F63}',
     },
     c: [
-      { n: 'dimension', p: { ref: sheet.ref } },
+      { n: 'dimension', p: { ref: sheet.ref || 'A1' } },
       { n: 'sheetViews', c:[
         { n: 'sheetView', p: { tabSelected: '1', workbookViewId: '0' } }
       ]},
@@ -620,7 +623,7 @@ const generateSheetAst = (sheet) => {
       { n: 'sheetData', c: SheetData },
       mergeAst,
       { n: 'phoneticPr', p: { fontId: '1', type: 'noConversion' } },
-      { n: 'pageMargins', p: { left: '0.7', right: '0.7', bottom: '0.75', header: '0.3', footer: '0.3' } },
+      { n: 'pageMargins', p: { left: '0.7', right: '0.7', top: '0.75', bottom: '0.75', header: '0.3', footer: '0.3' } },
     ]
   };
 }
@@ -648,9 +651,10 @@ class XLSX {
     })
   }
   writeTag(o) {
+    if(!o) return '';
     let propertyString = '';
     if(o.p) propertyString = Object.keys(o.p).map(key => ` ${key}="${o.p[key]}"`).join('');
-    if(!o.t && !o.c) return `<${o.n}${propertyString}/>`;
+    if(!o.t && (!o.c)) return `<${o.n}${propertyString}/>`;
     else return `<${o.n}${propertyString}>${o.t || ''}${(o.c || []).map(v => this.writeTag(v)).join('')}</${o.n}>`;
   }
   writeXml(content) {
@@ -692,10 +696,10 @@ class XLSX {
     zip.file(relsPath,this.writeXml(generateRelsAst(rels)));
     // xl/_rels/workbook.xml.rels
     let xmlRels = SheetNames.map((name, i) => {
-      return { Target: `worksheets/sheet${i+1}.xml`, Type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet' };
+      return { Type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet', Target: `worksheets/sheet${i+1}.xml` };
     }).concat([
-      { Target: 'theme/theme1.xml', Type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme' },
-      { Target: 'styles.xml', Type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles' },
+      { Type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme', Target: 'theme/theme1.xml' },
+      { Type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles', Target: 'styles.xml' },
     ]);
     let xmlRelsPath = 'xl/_rels/workbook.xml.rels';
     zip.file(xmlRelsPath, this.writeXml(generateRelsAst(xmlRels)));
@@ -740,6 +744,10 @@ const escapeHTML = (str) => {
 }
 
 let _XLSX = new XLSX();
+/**
+ * 为了兼容xlsx插件 先暂时后面搞
+ * 如果切换到自己写的 考虑弄到prototype上
+ */
 _XLSX.utils = {
   book_new() {
     return { SheetNames: [], Sheets: {} };
