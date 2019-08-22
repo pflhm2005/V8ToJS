@@ -541,9 +541,10 @@ const numToColumn = (n) => {
   return s;
 }
 const generateSheetAst = (sheet) => {
+  // 表格默认从A1开始 所以只计算后面的值
   let range = sheet.ref.split(':')[1];
-  range = 'C10';
   let len = range.length, r = 0, c = 0;
+  // 计算得到数据的最大行列值
   for(let i = 0;i < len;i++) {
     let unicode = range.charCodeAt(i) - 64;
     if(unicode < 0 || unicode > 26) {
@@ -552,7 +553,36 @@ const generateSheetAst = (sheet) => {
       break;
     }
   }
-  console.log(r, c);
+  // 描述表格数据的数组
+  let SheetData = [];
+  /**
+   * 生成行 格式如下
+   * <row r="1"></row>
+   */
+  for(let i = 1;i <= r;i++) {
+    let rowAst = { n: 'row', p: { r: i }, c: [] };
+    let rowChildren = rowAst.c;
+    /**
+     * 生成列 内容插入row标签中
+     */
+    for(let j = 0;j < c;j++) {
+      let pos = `${numToColumn(j)}${i}`;
+      // 默认不生成值为null的单元格 好像也不会出问题
+      let cell = sheet[pos];
+      if(cell) rowChildren.push({ n: 'c', p: { r: pos }, c: [{ n: 'v', t: cell.v }] });
+    }
+    SheetData.push(rowAst);
+  }
+  /**
+   * 处理单元格合并
+   */
+  let merge = sheet.merge;
+  let mergeAst = { n: 'mergeCells', p: { count: '0' }, c: [] };
+  if(merge.length) {
+    let len = sheet.merge.length;
+    mergeAst.p.count = len;
+    mergeAst.c = merge.map(ref => { return { n: 'mergeCell', p: {ref} } });
+  }
   return {
     n: 'worksheet',
     p: {
@@ -573,16 +603,8 @@ const generateSheetAst = (sheet) => {
       ]},
       { n: 'sheetFormatPr', p: { baseColWidth: '10', defaultRowHeight: '16' } },
       // 单sheet数据
-      { n: 'sheetData', c: [
-        { n: 'row', p: { r: '1' }, c:[
-          { n: 'c', p: { r: 'A1', s: '1' }, c: [
-            { n: 'v', t: '基本信息' },
-          ]},
-        ]}
-      ]},
-      { n: 'mergeCells', p: { count: '1' }, c: [
-        { n: 'mergeCell', p: { ref: 'A1:H1' } }
-      ]},
+      { n: 'sheetData', c: SheetData },
+      mergeAst,
       { n: 'phoneticPr', p: { fontId: '1', type: 'noConversion' } },
       { n: 'pageMargins', p: { left: '0.7', right: '0.7', bottom: '0.75', header: '0.3', footer: '0.3' } },
     ]
@@ -626,12 +648,13 @@ class XLSX {
   write(wb, opt = {}){
     let zip = this.write_zip(wb, opt);
     // return this.s2ab(zip.generate({ type: 'string' }));
+    return zip.generateAsync({type:'string'}).then(str => this.s2ab(str));
   }
   /**
    * 生成xml文件
    */
   write_zip(wb) {
-    let zip = new JSZipSync();
+    let zip = new JSZip();
     let SheetNames = wb.SheetNames.map(this.escapeHTML);
     // docProps/app.xml
     let appXmlPath = 'docProps/app.xml';
@@ -678,8 +701,8 @@ class XLSX {
     // sheet.xml
     for(let i = 0;i < SheetNames.length;i++) {
       let sheetPath = `xl/worksheets/sheet${i+1}.xml`;
-      // let sheetName = SheetNames[i];
-      zip.file(sheetPath, this.writeXml(generateSheetAst(wb.Sheets[SheetNames[i]])));
+      let sheetName = SheetNames[i];
+      zip.file(sheetPath, this.writeXml(generateSheetAst(wb.Sheets[sheetName])));
     }
 
     return zip;
@@ -695,13 +718,16 @@ class XLSX {
     return `${numToColumn(c)}${r+1}`;
   }
   aoa_to_sheet(ar) {
-    let ws = {};
+    let ws = {
+      ref: '',
+      merge: []
+    };
     let len = ar.length, r = 0, c = 0;
     for(;r < len;r++) {
       for(c = 0;c < ar[r].length;c++) {
         let cell = { v: ar[r][c] };
         if(cell.v === null) continue;
-        else cell.t = 's';
+        // else cell.t = 's';
         ws[this.transferCellPos(r, c)] = cell;
       }
     }
