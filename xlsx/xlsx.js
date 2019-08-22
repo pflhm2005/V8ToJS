@@ -79,6 +79,7 @@ const generateCtAst = (SheetNames) => {
       }),
       { n: 'Override', p: { PartName: '/xl/theme/theme1.xml', ContentType: 'application/vnd.openxmlformats-officedocument.theme+xml'} },
       { n: 'Override', p: { PartName: '/xl/styles.xml', ContentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml'} },
+      { n: 'Override', p: { PartName: '/xl/sharedStrings.xml', ContentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml'} },
       { n: 'Override', p: { PartName: '/docProps/core.xml', ContentType: 'application/vnd.openxmlformats-package.core-properties+xml'} },
       { n: 'Override', p: { PartName: '/docProps/app.xml', ContentType: 'application/vnd.openxmlformats-officedocument.extended-properties+xml'} },
     ]
@@ -547,6 +548,24 @@ const generateThemeAst = () => {
   };
 };
 
+/**
+ * SharedString的映射表
+ */
+let uid = -1;
+let count = 0;
+let sharedStringMap = new Map();
+const LookOrInsert = (str) => {
+  count++;
+  let tar = sharedStringMap.get(str);
+  if(tar === undefined) {
+    uid++;
+    sharedStringMap.set(str, uid);
+    return uid;
+  } else {
+    return tar;
+  }
+}
+
 const columnToNum = str => str.split('').reduce((r, c) => {
   return r = r * 26 + (c.charCodeAt() - 64);
 }, 0);
@@ -576,7 +595,7 @@ const generateSheetAst = (sheet) => {
    * <row r="1"></row>
    */
   for(let i = 1;i <= r;i++) {
-    let rowAst = { n: 'row', p: { r: i }, c: [] };
+    let rowAst = { n: 'row', p: { r: i, spans: `1:${c}` }, c: [] };
     let rowChildren = rowAst.c;
     /**
      * 生成列 内容插入row标签中
@@ -587,10 +606,15 @@ const generateSheetAst = (sheet) => {
       let cell = sheet[pos];
       if(cell) {
         let t = 's';
-        if(typeof cell.v === 'number') t = 'n';
-        rowChildren.push({ n: 'c', p: { r: pos, spans: `1:${c}`, t }, c: [{ n: 'v', t: cell.v }] });
+        if(typeof cell.v === 'number') {
+          t = 'n';
+          rowChildren.push({ n: 'c', p: { r: pos, t }, c: [{ n: 'v', t: cell.v }] });
+        }  else {
+          let id = LookOrInsert(cell.v);
+          rowChildren.push({ n: 'c', p: { r: pos, t }, c: [{ n: 'v', t: id }] });
+        }
       } else {
-        rowChildren.push({ n: 'c' });
+        rowChildren.push({ n: 'c', p: { r: pos } });
       }
     }
     SheetData.push(rowAst);
@@ -635,6 +659,19 @@ const generateSheetAst = (sheet) => {
   };
 }
 
+const generateSharedStringAst = () => {
+  let c = [...sharedStringMap.keys()].map(t => {
+    return { n: 'si', c: [{ n: 't', t }] };
+  });
+  return { 
+    n: 'sst', 
+    p: { 
+      xmlns: 'http://schemas.openxmlformats.org/spreadsheetml/2006/main',
+      count,
+      uniqueCount: sharedStringMap.size,
+    }, c };
+}
+
 (function() {
 /**
  * excel导出类
@@ -661,8 +698,9 @@ class XLSX {
     if(!o) return '';
     let propertyString = '';
     if(o.p) propertyString = Object.keys(o.p).map(key => ` ${key}="${o.p[key]}"`).join('');
-    if(!o.t && (!o.c)) return `<${o.n}${propertyString}/>`;
-    else return `<${o.n}${propertyString}>${o.t || ''}${(o.c || []).map(v => this.writeTag(v)).join('')}</${o.n}>`;
+    if(o.t === undefined && !o.c) return `<${o.n}${propertyString}/>`;
+    else if(o.c !== undefined) return `<${o.n}${propertyString}>${(o.c || []).map(v => this.writeTag(v)).join('')}</${o.n}>`;
+    else return `<${o.n}${propertyString}>${o.t}</${o.n}>`;
   }
   writeXml(content) {
     return `${XML_ROOT_HEADER}${this.writeTag(content)}`;
@@ -672,6 +710,9 @@ class XLSX {
    */
   write(wb, opt = {}){
     let zip = this.write_zip(wb, opt);
+    uid = 0;
+    count = 0;
+    sharedStringMap.clear();
     return this.s2ab(zip.generate({ type: 'string' }));
     // return zip.generateAsync({type:'string'}).then(str => this.s2ab(str));
   }
@@ -707,6 +748,7 @@ class XLSX {
     }).concat([
       { Type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme', Target: 'theme/theme1.xml' },
       { Type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles', Target: 'styles.xml' },
+      { Type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings', Target: 'sharedStrings.xml' },
     ]);
     let xmlRelsPath = 'xl/_rels/workbook.xml.rels';
     zip.file(xmlRelsPath, this.writeXml(generateRelsAst(xmlRels)));
@@ -729,6 +771,10 @@ class XLSX {
       let sheetName = SheetNames[i];
       zip.file(sheetPath, this.writeXml(generateSheetAst(wb.Sheets[sheetName])));
     }
+
+    // xl/sharedStrings.xml
+    let sharedStringXmlPath = 'xl/sharedStrings.xml';
+    zip.file(sharedStringXmlPath, this.writeXml(generateSharedStringAst()))
 
     return zip;
   }

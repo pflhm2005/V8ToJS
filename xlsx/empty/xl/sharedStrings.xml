@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="8" uniqueCount="4">
+  <si>
+    <t>用户12323</t>
+  </si>
+  <si>
+    <t>封禁时间</t>
+  </si>
+  <si>
+    <t>封禁时长</t>
+  </si>
+  <si>
+    <t>封禁原因</t>
+  </si>
+</sst>
