@@ -100,7 +100,7 @@ const generateWorkBookAst = (SheetNames) => {
     },
     c: [
       { n: 'fileVersion', p:{ appName: 'xl', lastEdited: '7', lowestEdited: '7', rupBuild: '10812' } },
-      { n: 'workbookPr', defaultThemeVersion: '166925' },
+      { n: 'workbookPr', p: { defaultThemeVersion: '166925' } },
       {
         n: 'mc:AlternateContent',
         p: { 'xmlns:mc': 'http://schemas.openxmlformats.org/markup-compatibility/2006' },
@@ -127,7 +127,7 @@ const generateWorkBookAst = (SheetNames) => {
       },
       { n: 'bookViews', c: [
         // 这个属性是文档的宽高
-        { n: 'workbookView' }]
+        { n: 'workbookView', p: { xWindow: '280', yWindow: '460', windowWidth: '27220', windowHeight: '17040', 'xr2:uid': '{20CB6232-08ED-0D49-9DA6-2081B77F7626}' } }]
       },
       { n: 'sheets', c: SheetNames.map((name, i) => {
         return {
@@ -172,13 +172,13 @@ const generateStyleAst = () => {
     p: {
       xmlns: 'http://schemas.openxmlformats.org/spreadsheetml/2006/main',
       'xmlns:mc': 'http://schemas.openxmlformats.org/markup-compatibility/2006',
-      'mc:Ignorable': 'x14ac x16r2 xr0',
+      'mc:Ignorable': 'x14ac x16r2 xr',
       'xmlns:x14ac': 'http://schemas.microsoft.com/office/spreadsheetml/2009/9/ac',
       'xmlns:x16r2': 'http://schemas.microsoft.com/office/spreadsheetml/2015/02/main',
       'xmlns:xr': 'http://schemas.microsoft.com/office/spreadsheetml/2014/revision'
     },
     c: [
-      { n: 'fonts', c: [
+      { n: 'fonts', p: { count: '2' }, c: [
         { n: 'font', c: [
           { n: 'sz', p: { val: '12' } },
           { n: 'color', p: { theme: '1' } },
@@ -684,9 +684,9 @@ class XLSX {
 
     // _rels/.rels
     let rels = [
-      { Target: workbookXmlPath, Type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument' },
-      { Target: coreXmlPath, Type: 'http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties' },
-      { Target: appXmlPath, Type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties' },
+      { Type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument', Target: workbookXmlPath  },
+      { Type: 'http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties', Target: coreXmlPath },
+      { Type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties', Target: appXmlPath },
     ];
     let relsPath = '_rels/.rels';
     zip.file(relsPath,this.writeXml(generateRelsAst(rels)));
