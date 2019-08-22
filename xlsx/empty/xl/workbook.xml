@@ -7,17 +7,17 @@
   xmlns:xr6="http://schemas.microsoft.com/office/spreadsheetml/2016/revision6" 
   xmlns:xr10="http://schemas.microsoft.com/office/spreadsheetml/2016/revision10" 
   xmlns:xr2="http://schemas.microsoft.com/office/spreadsheetml/2015/revision2">
-  <fileVersion appName="xl" lastEdited="7" lowestEdited="7" rupBuild="10715"/>
+  <fileVersion appName="xl" lastEdited="7" lowestEdited="7" rupBuild="10812"/>
   <workbookPr defaultThemeVersion="166925"/>
   <mc:AlternateContent xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006">
     <mc:Choice Requires="x15">
-      <x15ac:absPath url="/Users/chenyuheng/Desktop/" 
+      <x15ac:absPath url="/Users/feilongpang/workspace/v8record/xlsx/" 
         xmlns:x15ac="http://schemas.microsoft.com/office/spreadsheetml/2010/11/ac"/>
     </mc:Choice>
   </mc:AlternateContent>
-  <xr:revisionPtr revIDLastSave="0" documentId="8_{AEE9E45D-3377-9744-89E1-B8EA0D667A7D}" xr6:coauthVersionLast="36" xr6:coauthVersionMax="36" xr10:uidLastSave="{00000000-0000-0000-0000-000000000000}"/>
+  <xr:revisionPtr revIDLastSave="0" documentId="8_{8651FDB5-6894-5C4E-9FD7-B14F453882CA}" xr6:coauthVersionLast="44" xr6:coauthVersionMax="44" xr10:uidLastSave="{00000000-0000-0000-0000-000000000000}"/>
   <bookViews>
-    <workbookView xWindow="680" yWindow="960" windowWidth="27840" windowHeight="15920" xr2:uid="{2C22B70C-1A7A-1146-96DB-331B324DFAF9}"/>
+    <workbookView xWindow="280" yWindow="460" windowWidth="27220" windowHeight="17040" xr2:uid="{20CB6232-08ED-0D49-9DA6-2081B77F7626}"/>
   </bookViews>
   <sheets>
     <sheet name="Sheet1" sheetId="1" r:id="rId1"/>
@@ -27,6 +27,13 @@
     <ext uri="{140A7094-0E35-4892-8432-C4D2E57EDEB5}" 
       xmlns:x15="http://schemas.microsoft.com/office/spreadsheetml/2010/11/main">
       <x15:workbookPr chartTrackingRefBase="1"/>
+    </ext>
+    <ext uri="{B58B0392-4F1F-4190-BB64-5DF3571DCE5F}" 
+      xmlns:xcalcf="http://schemas.microsoft.com/office/spreadsheetml/2018/calcfeatures">
+      <xcalcf:calcFeatures>
+        <xcalcf:feature name="microsoft.com:RD"/>
+        <xcalcf:feature name="microsoft.com:FV"/>
+      </xcalcf:calcFeatures>
     </ext>
   </extLst>
 </workbook>

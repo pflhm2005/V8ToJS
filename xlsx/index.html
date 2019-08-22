@@ -13,18 +13,23 @@
   <script src="./xlsx.js"></script>
   <script>
     let a = document.createElement('a');
-
-    let wb = XLSX.book_new();
-    let ws = XLSX.aoa_to_sheet([[1, null, 3], [4, 5, 6]]);
-    ws.merge.push('A1:B1');
-    XLSX.book_append_sheet(wb, ws, "sheet12");
-    // let wbBlob = XLSX.write(wb);
-    XLSX.write(wb).then(wbBlob => {
+    let wb = {
+      SheetNames: ['sheet1'],
+      Sheets: {
+        sheet1: {}
+      }
+    };
+    // let wb = XLSX.book_new();
+    // let ws = XLSX.aoa_to_sheet([[1, null, 3], [4, 5, 6]]);
+    // ws.merge.push('A1:B1');
+    // XLSX.book_append_sheet(wb, ws, "sheet12");
+    let wbBlob = XLSX.write(wb);
+    // XLSX.write(wb).then(wbBlob => {
       let blob = new Blob([wbBlob], {type:"application/octet-stream"});
       let url = URL.createObjectURL(blob);
       a.href = url;
-      a.download = '123.xlsx';
+      a.download = 'empty1.xlsx';
       a.click();
-    });
+    // });
   </script>
 </html>

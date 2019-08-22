@@ -99,7 +99,7 @@ const generateWorkBookAst = (SheetNames) => {
       'xmlns:xr2': 'http://schemas.microsoft.com/office/spreadsheetml/2015/revision2',
     },
     c: [
-      { n: 'fileVersion', p:{ appName: 'xl', lastEdited: '7', lowestEdited: '7', rupBuild: '10715' } },
+      { n: 'fileVersion', p:{ appName: 'xl', lastEdited: '7', lowestEdited: '7', rupBuild: '10812' } },
       { n: 'workbookPr', defaultThemeVersion: '166925' },
       {
         n: 'mc:AlternateContent',
@@ -120,8 +120,8 @@ const generateWorkBookAst = (SheetNames) => {
           revIDLastSave: '0',
           // 这个是随机的ID
           documentId: '8_{AEE9E45D-3377-9744-89E1-B8EA0D667A7D}',
-          'xr6:coauthVersionLast': '36',
-          'xr6:coauthVersionMax': '36',
+          'xr6:coauthVersionLast': '44',
+          'xr6:coauthVersionMax': '44',
           'xr10:uidLastSave': '{00000000-0000-0000-0000-000000000000}',
         }
       },
@@ -148,6 +148,18 @@ const generateWorkBookAst = (SheetNames) => {
             'xmlns:x15': 'http://schemas.microsoft.com/office/spreadsheetml/2010/11/main',
           },
           c: [{ n:'x15:workbookPr', p: { chartTrackingRefBase: '1' } }],
+        },
+        // 新的属性
+        {
+          n: 'ext',
+          p: {
+            uri: '{B58B0392-4F1F-4190-BB64-5DF3571DCE5F}',
+            'xmlns:xcalcf': 'http://schemas.microsoft.com/office/spreadsheetml/2018/calcfeatures',
+          },
+          c: [{ n:'xcalcf:calcFeatures', c:[
+            { n: 'xcalcf:feature', p: { name: 'microsoft.com:RD' } },
+            { n: 'xcalcf:feature', p: { name: 'microsoft.com:FV' } },
+          ]}],
         }]
       }
     ]
@@ -542,7 +554,8 @@ const numToColumn = (n) => {
 }
 const generateSheetAst = (sheet) => {
   // 表格默认从A1开始 所以只计算后面的值
-  let range = sheet.ref.split(':')[1];
+  let range = 'A1';
+  if(sheet.ref) range = sheet.ref.split(':')[1];
   let len = range.length, r = 0, c = 0;
   // 计算得到数据的最大行列值
   for(let i = 0;i < len;i++) {
@@ -576,7 +589,7 @@ const generateSheetAst = (sheet) => {
   /**
    * 处理单元格合并
    */
-  let merge = sheet.merge;
+  let merge = sheet.merge || [];
   let mergeAst = { n: 'mergeCells', p: { count: '0' }, c: [] };
   if(merge.length) {
     let len = sheet.merge.length;
@@ -594,6 +607,7 @@ const generateSheetAst = (sheet) => {
       'xmlns:xr': 'http://schemas.microsoft.com/office/spreadsheetml/2014/revision',
       'xmlns:xr2': 'http://schemas.microsoft.com/office/spreadsheetml/2015/revision2',
       'xmlns:xr3': 'http://schemas.microsoft.com/office/spreadsheetml/2016/revision3',
+      // 这个ID是随机的
       'xr:uid': '{8791C6D8-650A-F64A-B18E-34BEF5B11F63}',
     },
     c: [
@@ -647,15 +661,15 @@ class XLSX {
    */
   write(wb, opt = {}){
     let zip = this.write_zip(wb, opt);
-    // return this.s2ab(zip.generate({ type: 'string' }));
-    return zip.generateAsync({type:'string'}).then(str => this.s2ab(str));
+    return this.s2ab(zip.generate({ type: 'string' }));
+    // return zip.generateAsync({type:'string'}).then(str => this.s2ab(str));
   }
   /**
    * 生成xml文件
    */
   write_zip(wb) {
-    let zip = new JSZip();
-    let SheetNames = wb.SheetNames.map(this.escapeHTML);
+    let zip = new JSZipSync();
+    let SheetNames = wb.SheetNames;
     // docProps/app.xml
     let appXmlPath = 'docProps/app.xml';
     zip.file(appXmlPath, this.writeXml(generateAppAst(SheetNames)));
@@ -707,16 +721,29 @@ class XLSX {
 
     return zip;
   }
+}
+/**
+ * 一些工具方法
+ */
+const transferCellPos = (r, c) => {
+  return `${numToColumn(c)}${r+1}`;
+}
+const escapeHTML = (str) => {
+  return str.replace(/[<>"&]/g, (match) => {
+    switch(match){
+      case "<": return "&lt;"; 
+      case ">": return "&gt;";
+      case "&": return "&amp;"; 
+      case "\"": return "&quot;"; 
+    };
+  })
+}
 
-  /**
-   * 一些工具方法
-   */
+let _XLSX = new XLSX();
+_XLSX.utils = {
   book_new() {
     return { SheetNames: [], Sheets: {} };
-  }
-  transferCellPos(r, c) {
-    return `${numToColumn(c)}${r+1}`;
-  }
+  },
   aoa_to_sheet(ar) {
     let ws = {
       ref: '',
@@ -728,20 +755,21 @@ class XLSX {
         let cell = { v: ar[r][c] };
         if(cell.v === null) continue;
         // else cell.t = 's';
-        ws[this.transferCellPos(r, c)] = cell;
+        ws[transferCellPos(r, c)] = cell;
       }
     }
-    ws.ref = `A1:${this.transferCellPos(r - 1, Math.max(...ar.map(v => v.length)) - 1)}`;
+    ws.ref = `A1:${transferCellPos(r - 1, Math.max(...ar.map(v => v.length)) - 1)}`;
     return ws;
-  }
+  },
   book_append_sheet(wb, ws, name = '') {
     if(!name) {
       let len = wb.SheetNames.length;
       name = `Sheet${len+1}`;
     }
+    name = escapeHTML(name);
     wb.SheetNames.push(name);
     wb.Sheets[name] = ws;
   }
-}
-window.XLSX = new XLSX();
+};
+window.XLSX = _XLSX;
 }(window));
