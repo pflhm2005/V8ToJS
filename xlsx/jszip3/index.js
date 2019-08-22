@@ -1,6 +1,6 @@
 import ZipObject from './ZipObject';
 import StreamHelper from './StreamHelper';
-import ZipFileWorker from './ZipFileWorker';
+import ZipFileWorker from './Workers';
 
 import {
   getTypeOf,
@@ -67,7 +67,7 @@ class JSZip {
    * @param {Function} onUpdate 回调函数
    * @return {StreamHelper}
    */
-  generateAsync(opt, onUpdate) {
+  generate(opt, onUpdate) {
     return this.generateInternalStream(opt).accumulate(onUpdate);
   }
   generateInternalStream(opt) {
@@ -95,7 +95,10 @@ class JSZip {
         compressWorker() { return new GenericWorker('STORE compression'); },
         uncompressWorker() { return new GenericWorker('STORE decompression'); }
       }
-
+      /**
+       * 这里是一个链式对象 顺序如下
+       * zipFileWorker => DataLengthProbe => GenericWorker => DataLengthProbe => Crc32Probe => DateWork
+       */
       file._compressWorker(compression, {}).withStreamInfo('file', {
         name: filename,
         dir: file.dir,

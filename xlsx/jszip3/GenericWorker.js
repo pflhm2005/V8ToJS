@@ -24,6 +24,7 @@ export default class GenericWorker extends EventEmitter {
   registerPrevious(previous) {
     this.streamInfo = previous.streamInfo;
     Object.assign(this.streamInfo, this.extraStreamInfo);
+    this.previous = previous;
     previous.on('data', (chunk) => this.processChunk(chunk));
     previous.on('end', _ => this.end());
     previous.on('error', (e) => this.error(e));
@@ -51,15 +52,13 @@ export default class GenericWorker extends EventEmitter {
     return true;
   }
 
+  /**
+   * 从这里开始压缩
+   */
   resume() {
     if(!this.isPaused || this.isFinished) return false;
     this.isPaused = false;
-    let withError = false;
-    if(this.generatedError) {
-      this.error(this.generatedError);
-      withError = true;
-    }
     if(this.previous) this.previous.resume();
-    return !withError;
+    return true;
   }
 }

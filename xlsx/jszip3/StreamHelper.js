@@ -75,8 +75,6 @@ export default class StreamHelper extends EventEmitter {
     });
   }
   resume(){
-    setTimeout(() => {
-      this._worker.resume();
-    }, 0);
+    this._worker.resume();
   }
 }
