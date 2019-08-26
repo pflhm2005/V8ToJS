@@ -37,6 +37,7 @@ class Declaration extends AstNode {
     this.var_ = null;
   }
   var() { return this.var_; }
+  set_var(v) { this.var_ = v; }
 }
 
 class VariableDeclaration extends Declaration {
@@ -46,8 +47,8 @@ class VariableDeclaration extends Declaration {
   }
 }
 
-class Expression extends AstNode {
-  constructor(pos, type) {
+export class Expression extends AstNode {
+  constructor(pos = 0, type = 0) {
     super(pos, type);
   }
 }

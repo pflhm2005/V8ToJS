@@ -1,4 +1,7 @@
-import { AstNodeFactory } from './AST';
+import { 
+  Expression,
+  AstNodeFactory
+} from './AST';
 import DeclarationParsingResult from './DeclarationParsingResult';
 import AstRawString from './AstRawString';
 import FuncNameInferrer from './FuncNameInferrer';
@@ -55,46 +58,46 @@ class Parser extends ParserBase {
     this.fni_ = new FuncNameInferrer();
     this.use_counts_ = new Array(kUseCounterFeatureCount).fill(0);
   }
-  
+  // 源码返回一个空指针
+  NullExpression() {
+    return new Expression();
+  }
+  /**
+   * @returns {Expression}
+   */
   ExpressionFromIdentifier(name, start_position, infer = kYes) {
-    /**
-     * 这个fni_暂时不知道干啥的
-     */
+    // 这个fni_暂时不知道干啥的
     if(infer === kYes) {
       this.fni_.PushVariableName(name);
     }
-    /**
-     * 在当前的作用域下生成一个新的变量
-     */
-    return this.expression_scope().NewVariable(name, start_position);
+    // 在当前的作用域下生成一个新的变量
+    return this.expression_scope_.NewVariable(name, start_position);
   }
   DeclareIdentifier(name, start_position) {
-    return this.expression_scope().Declare(name, start_position);
+    return this.expression_scope_.Declare(name, start_position);
   }
   DeclareVariable(name, kind, mode, init, scope, was_added, begin, end = kNoSourcePosition) {
     let declaration;
     // var声明的变量需要提升
     if(mode === kVar && !scope.is_declaration_scope()) {
-      declaration = this.factory().NewNestedVariableDeclaration(scope, begin);
+      declaration = this.ast_node_factory_.NewNestedVariableDeclaration(scope, begin);
     }
     // let、const 
+    // 返回一个VariableDeclaration实例
     else {
-      declaration = this.factory().NewVariableDeclaration(begin);
+      declaration = this.ast_node_factory_.NewVariableDeclaration(begin);
     }
     this.Declare(declaration, name, kind, mode, init. scope, was_added. begin, end);
     return declaration.var();
   }
   Declare(declaration, name, variable_kind, mode, init, scope, was_added, var_begin_pos, var_end_pos) {
-    // 这两个参数作为引用传入方法 JS没办法啊
+    // 这两个参数作为引用传入方法 JS只能用这个操作了
     // bool local_ok = true;
     // bool sloppy_mode_block_scope_function_redefinition = false;
-    // 
-    let local_ok = true;
     // 普通模式下 在作用域内容重定义
-    let sloppy_mode_block_scope_function_redefinition = false;
-    let result = scope.DeclareVariable(
+    let { local_ok, sloppy_mode_block_scope_function_redefinition } = scope.DeclareVariable(
       declaration, name, var_begin_pos, mode, variable_kind, init, was_added,
-      sloppy_mode_block_scope_function_redefinition, local_ok);
+      false, true);
     if(!local_ok) {
       // 标记错误地点 end未传入时仅仅高亮start一个字符
       let loc = new Location(var_begin_pos, var_end_pos !== kNoSourcePosition ? var_end_pos : var_begin_pos + 1);
@@ -102,7 +105,7 @@ class Parser extends ParserBase {
       else throw new Error(loc, kVarRedeclaration);
     }
     // 重定义计数
-    else if(local_ok) {
+    else if(sloppy_mode_block_scope_function_redefinition) {
       ++this.use_counts_[kSloppyModeBlockScopedFunctionRedefinition];
     }
   }
@@ -119,9 +122,6 @@ export default class ParserBase {
     this.fni_ = new FuncNameInferrer();
     this.expression_scope_ = null;
   }
-  factory() { return this.ast_node_factory_; }
-  scope() { return this.scope_; }
-  expression_scope() { return this.expression_scope_; }
   IsLet(identifier) { return identifier === this.ast_value_factory_.let_string(); }
   UNREACHABLE() {
     this.scanner.UNREACHABLE();
@@ -276,18 +276,23 @@ export default class ParserBase {
         pattern = this.ParseBindingPattern();
       }
 
-      let variable_loc = this.scanner.location();
+      let variable_loc = new Location();
 
       let value = this.NullExpression();
       let value_beg_pos = kNoSourcePosition;
       if(this.Check('Token::ASSIGN')) {
-        value_beg_pos = this.peek_position();
-        value = this.ParseAssignmentExpression();
-      } else {
+        {
+          value_beg_pos = this.peek_position();
+          value = this.ParseAssignmentExpression();
+        }
+        variable_loc.end_pos = this.end_position();
 
+        // 处理a = function(){};
       }
+      // 处理for in、for of
+      else {}
 
-      let initializer_position = this.end_position();
+      
 
     } while (this.Check('Token::COMMA'));
 
@@ -312,6 +317,6 @@ export default class ParserBase {
     return result;
   }
   NewRawVariable(name, pos) {
-    return this.factory().NewVariableProxy(name, NORMAL_VARIABLE, pos);
+    return this.ast_node_factory_.NewVariableProxy(name, NORMAL_VARIABLE, pos);
   }
 }

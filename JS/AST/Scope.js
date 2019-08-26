@@ -108,8 +108,8 @@ class Scope extends ZoneObject {
     return new DeclarationScope();
   }
   /**
-   * 
-   * @param {Declaration} declaration 右值
+   * 根据name生成一个Variable实例 绑定到Declaration上面
+   * @param {Declaration} declaration 声明表达式
    * @param {AstRawString*} name 变量名
    * @param {int} pos 声明位置
    * @param {VariableMode} mode kVar、kLet、kConst
@@ -133,7 +133,7 @@ class Scope extends ZoneObject {
        * 属于动态声明的变量
        */
       if(this.is_eval_scope() && this.is_sloppy(this.language_mode()) && mode === kVar) {
-        variable = this.NonLocal(name, kDynamic);
+        // variable = this.NonLocal(name, kDynamic);
         variable.set_is_used();
       }
       // 正常声明
@@ -148,10 +148,11 @@ class Scope extends ZoneObject {
 
     this.decls_.push(declaration);
     declaration.set_var(variable);
-    return variable;
+    return { was_added, sloppy_mode_block_scope_function_redefinition };
   }
   DeclareLocal(name, mode, kind, was_added, init_flag) {
-    let variable = this.Declare(this.zone(), name, mode, kind, init_flag, kNotAssigned, was_added);
+    let { was_added, variable } = this.variables_.Declare(this.zone(), this, name, mode, kind, init_flag, kNotAssigned, was_added);
+    if(was_added) this.locals_.push(result.variable);
 
     // 作用域判断
     if(this.is_script_scope() || this.is_module_scope()) {
@@ -159,12 +160,6 @@ class Scope extends ZoneObject {
       variable.set_is_used();
     }
     return variable;
-  }
-  Declare(zone, name, mode, kind, initialization_flag, maybe_assigned_flag, was_added) {
-    // 这里调用的是VariableMap上的方法
-    let result = this.variables_.Declare(zone, this, name, mode, kind, initialization_flag, maybe_assigned_flag, was_added);
-    if(result.was_added) this.locals_.push(result.variable);
-    return result.variable;
   }
   /**
    * JS新出的Map类 has仅仅返回true、false

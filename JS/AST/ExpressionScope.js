@@ -21,6 +21,7 @@ import {
 
 import {
   kTooManyVariables,
+  kLetInLexicalBinding,
 } from './MessageTemplate';
 
 const kNoSourcePosition = -1;
@@ -46,18 +47,16 @@ class ExpressionScope {
   IsLexicalDeclaration() { return this.type_ === kLexicalDeclaration; }
   /**
    * 下面三个方法 源码将类向下强转类型
-   * JS做不到 只能取巧
+   * JS做不到 不搞了
    */
-  AsExpressionParsingScope() {
-    return new ExpressionParsingScope(this.parser_, this.type_).TrackVariable();
-  }
-  AsParameterDeclarationParsingScope(parser) {
-    return new ParameterDeclarationParsingScope(parser);
-  }
-  AsVariableDeclarationParsingScope(parser, mode, names) {
-    return new VariableDeclarationParsingScope(parser, mode, names);
-  }
+  // AsExpressionParsingScope() { return new ExpressionParsingScope(this.parser_, this.type_).TrackVariable(); }
+  // AsParameterDeclarationParsingScope(parser) { return new ParameterDeclarationParsingScope(parser); }
+  // AsVariableDeclarationParsingScope(parser, mode, names) { return new VariableDeclarationParsingScope(parser, mode, names); }
 
+  /**
+   * 生成一个VariableProxy与一个Variable并进行绑定
+   * @returns {VariableProxy}
+   */
   NewVariable(name, pos) {
     // 生成一个新的VariableProxy实例
     let result = this.parser_.NewRawVariable(name, pos);
@@ -66,18 +65,18 @@ class ExpressionScope {
      * 所以这里先将声明部分放入待完成容器中
      */
     if(this.CanBeExpression()) {
-      this.AsExpressionParsingScope().TrackVariable(result);
+      new ExpressionParsingScope().TrackVariable(result);
     }
     // 简单的单值赋值
     else {
       /**
        * 源码变量名是var JS这里要改一下
-       * 
+       * 可以直接跳去看this.parser_.DeclareVariable
        */
       let variable = this.Declare(name, pos);
       // var声明语句
-      if(this.IsVarDeclaration() && !this.parser_.scope().is_declaration_scope()) {
-        this.parser_.scope().AddUnresolved(result);
+      if(this.IsVarDeclaration() && !this.parser_.scope_.is_declaration_scope()) {
+        this.parser_.scope_.AddUnresolved(result);
       } else {
         result.BindTo(variable);
       }
@@ -89,9 +88,9 @@ class ExpressionScope {
    */
   Declare(name, pos = kNoSourcePosition) {
     if(this.type_ === kParameterDeclaration) {
-      return this.AsParameterDeclarationParsingScope(this.parser_).Declare(name, pos);
+      return new ParameterDeclarationParsingScope(this.parser_).Declare(name, pos);
     }
-    return this.AsVariableDeclarationParsingScope(this.parser_, this.mode_, this.names_).Declare(name, pos);
+    return new VariableDeclarationParsingScope(this.parser_, this.mode_, this.names_).Declare(name, pos);
   }
 }
 
@@ -102,7 +101,7 @@ class ExpressionParsingScope extends ExpressionScope {
   }
   TrackVariable(variable) {
     if(!this.CanBeDeclaration()) {
-      this.parser_.scope().AddUnresolved(variable);
+      this.parser_.scope_.AddUnresolved(variable);
     }
   }
 }
@@ -116,23 +115,26 @@ export class VariableDeclarationParsingScope extends ExpressionScope {
   /**
    * 这个子类只有一个方法
    * 还不如干脆当成静态方法调用
+   * name是标识符
    */
   Declare(name, pos) {
     let kind = NORMAL_VARIABLE;
     // 标记是否成功添加HashMap 即第一次声明该变量
     let was_added = false;
     let variable = this.parser_.DeclareVariable(name, kind, this.mode_, 
-      Variable.DefaultInitializationFlag(this.mode_), this.parser_.scope(), was_added, pos);
+      Variable.DefaultInitializationFlag(this.mode_), this.parser_.scope_, was_added, pos);
     // 一个作用域最多可声明2^23 - 1个变量
-    if(this.was_added && this.parser_.scope().num_var() > kMaxNumFunctionLocals) {
+    if(this.was_added && this.parser_.scope_.num_var() > kMaxNumFunctionLocals) {
       throw new Error(kTooManyVariables);
     }
     if(this.names_) this.names_.Add(name, this.parser_.zone());
     if(this.IsLexicalDeclaration()) {
+      // 所有关键词的字符串已经在map表中 直接做对比
       if(this.parser_.IsLet(name)) {
-        
+        throw new Error(kLetInLexicalBinding);
       }
-    }
+    } else {}
+    return variable;
   }
 }
 

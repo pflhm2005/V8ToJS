@@ -53,12 +53,73 @@
   F(undefined, "undefined")                     \
   F(value, "value")
 
+
+/**
+ * F(let, "let")
+ * const AstRawString* let_string() const {
+ *  return string_constants_->let_string();
+ * }
+*/
 #define F(name, str)                           \
   const AstRawString* name##_string() const {  \
     return string_constants_->name##_string(); \
   }
   AST_STRING_CONSTANTS(F)
 #undef F
+
+class AstStringConstants final {
+ public:
+  AstStringConstants::AstStringConstants(Isolate* isolate, uint64_t hash_seed)
+      : zone_(isolate->allocator(), ZONE_NAME),
+        string_table_(AstRawString::Compare),
+        hash_seed_(hash_seed) {
+    DCHECK_EQ(ThreadId::Current(), isolate->thread_id());
+  #define F(name, str)                                                       \
+    {                                                                        \
+      const char* data = str;                                                \
+      Vector<const uint8_t> literal(reinterpret_cast<const uint8_t*>(data),  \
+                                    static_cast<int>(strlen(data)));         \
+      uint32_t hash_field = StringHasher::HashSequentialString<uint8_t>(     \
+          literal.begin(), literal.length(), hash_seed_);                    \
+      name##_string_ = new (&zone_) AstRawString(true, literal, hash_field); \
+      /* The Handle returned by the factory is located on the roots */       \
+      /* array, not on the temporary HandleScope, so this is safe.  */       \
+      name##_string_->set_string(isolate->factory()->name##_string());       \
+      base::HashMap::Entry* entry =                                          \
+          string_table_.InsertNew(name##_string_, name##_string_->Hash());   \
+      DCHECK_NULL(entry->value);                                             \
+      entry->value = reinterpret_cast<void*>(1);                             \
+    }
+    AST_STRING_CONSTANTS(F)
+  #undef F
+  }
+
+/**
+ * F(let, "let")
+ * const AstRawString* let_string() const { return let_string_; }
+*/
+#define F(name, str) \
+  const AstRawString* name##_string() const { return name##_string_; }
+  AST_STRING_CONSTANTS(F)
+#undef F
+
+  uint64_t hash_seed() const { return hash_seed_; }
+  const base::CustomMatcherHashMap* string_table() const {
+    return &string_table_;
+  }
+
+ private:
+  Zone zone_;
+  base::CustomMatcherHashMap string_table_;
+  uint64_t hash_seed_;
+
+#define F(name, str) AstRawString* name##_string_;
+  AST_STRING_CONSTANTS(F)
+#undef F
+
+  DISALLOW_COPY_AND_ASSIGN(AstStringConstants);
+};
+
 
 class AstValueFactory {
   public:
