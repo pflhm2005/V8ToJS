@@ -58,8 +58,12 @@ class ExpressionScope {
    * @returns {VariableProxy}
    */
   NewVariable(name, pos) {
-    // 生成一个新的VariableProxy实例
-    let result = this.parser_.NewRawVariable(name, pos);
+    /**
+     * 生成一个新的VariableProxy实例
+     * 为了方便 这里省去中间步骤
+     */
+    // let result = this.parser_.NewRawVariable(name, pos);
+    let result = new VariableProxy(name, variable_kind, pos);
     /**
      * 当右值是复杂表达式时 需要进行完整的解析 例如let a = (1 + 1);
      * 所以这里先将声明部分放入待完成容器中
@@ -67,11 +71,12 @@ class ExpressionScope {
     if(this.CanBeExpression()) {
       new ExpressionParsingScope().TrackVariable(result);
     }
-    // 简单的单值赋值
+    // 简单的单值赋值语句
     else {
       /**
        * 源码变量名是var JS这里要改一下
        * 可以直接跳去看this.parser_.DeclareVariable
+       * @returns {VariableDeclaration}
        */
       let variable = this.Declare(name, pos);
       // var声明语句
@@ -85,6 +90,8 @@ class ExpressionScope {
   }
   /**
    * 当type_确定时 此时的向下强转不存在参数丢失问题
+   * 这里分为变量的赋值与声明赋值
+   * 即let a = 1、function fn(a = 1) {}
    */
   Declare(name, pos = kNoSourcePosition) {
     if(this.type_ === kParameterDeclaration) {
@@ -113,9 +120,9 @@ export class VariableDeclarationParsingScope extends ExpressionScope {
     this.names_ = names;
   }
   /**
-   * 这个子类只有一个方法
-   * 还不如干脆当成静态方法调用
+   * 回一个AstNode
    * name是标识符
+   * @returns {VariableDeclaration}
    */
   Declare(name, pos) {
     let kind = NORMAL_VARIABLE;
@@ -123,11 +130,15 @@ export class VariableDeclarationParsingScope extends ExpressionScope {
     let was_added = false;
     let variable = this.parser_.DeclareVariable(name, kind, this.mode_, 
       Variable.DefaultInitializationFlag(this.mode_), this.parser_.scope_, was_added, pos);
-    // 一个作用域最多可声明2^23 - 1个变量
+
+    if(this.names_) this.names_.Add(name, this.parser_.zone());
+    /**
+     * 一个作用域最多可声明2^23 - 1个变量
+     * 下面的代码可以不用关心 全是错误处理
+     */
     if(this.was_added && this.parser_.scope_.num_var() > kMaxNumFunctionLocals) {
       throw new Error(kTooManyVariables);
     }
-    if(this.names_) this.names_.Add(name, this.parser_.zone());
     if(this.IsLexicalDeclaration()) {
       // 所有关键词的字符串已经在map表中 直接做对比
       if(this.parser_.IsLet(name)) {

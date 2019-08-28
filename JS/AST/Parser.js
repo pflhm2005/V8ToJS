@@ -63,7 +63,8 @@ class Parser extends ParserBase {
     return new Expression();
   }
   /**
-   * @returns {Expression}
+   * 返回一个变量代理 继承于Expression类
+   * @returns {VariableProxy}
    */
   ExpressionFromIdentifier(name, start_position, infer = kYes) {
     // 这个fni_暂时不知道干啥的
@@ -82,8 +83,11 @@ class Parser extends ParserBase {
     if(mode === kVar && !scope.is_declaration_scope()) {
       declaration = this.ast_node_factory_.NewNestedVariableDeclaration(scope, begin);
     }
-    // let、const 
-    // 返回一个VariableDeclaration实例
+    /**
+     * let、const 声明
+     * 这里才是返回一个VariableDeclaration实例
+     * 即new VariableDeclaration(begin)
+     */
     else {
       declaration = this.ast_node_factory_.NewVariableDeclaration(begin);
     }
@@ -98,6 +102,7 @@ class Parser extends ParserBase {
     let { local_ok, sloppy_mode_block_scope_function_redefinition } = scope.DeclareVariable(
       declaration, name, var_begin_pos, mode, variable_kind, init, was_added,
       false, true);
+    // 下面代码大部分情况不会走
     if(!local_ok) {
       // 标记错误地点 end未传入时仅仅高亮start一个字符
       let loc = new Location(var_begin_pos, var_end_pos !== kNoSourcePosition ? var_end_pos : var_begin_pos + 1);
@@ -263,6 +268,23 @@ export default class ParserBase {
         parsing_result.descriptor.mode === kLet) {
           /**
            * 生成一个Expression实例
+           * 过程总结如下：
+           * 1、生成一个VariableProxy实例(继承于Expressio) 
+           * 该类负责管理VariableDeclaration 并记录了变量是否被赋值、是否被使用等等
+           * 2、生成一个VariableDeclaration实例(继承于AstNode)
+           * 该类管理Variable 并描述了变量的位置、声明类型(变量、参数、表达式)等
+           * 3、在合适的Scope中生成一个Variable实例 插入到Map中
+           * 该类描述了变量的作用域、名称等等
+           * 
+           * 整个过程有如下细节
+           * (1)有两种情况下 该声明会被标记为unresolved丢进一个容器
+           * 第一是赋值右值为复杂表达式 复杂表达式需要重新走最外层的完整解析解析
+           * 例如let a = '123'.split('').map(v => v ** 2);
+           * 第二种情况是var类型的声明 由于需要向上搜索合适的作用域 声明需要后置处理
+           * (2)let、const与var生成的AstNode类型不一致 var属于NestedVariable
+           * (3)有一个作用域链 类似于原型链 从里向外通过outer_scope属性连着
+           * (4)var类型的声明会向上一直搜索is_declaration_scope_为1的作用域
+           * (5)生成Variable后 const声明会被标记必须被立即赋值
            */
           pattern = this.parser.ExpressionFromIdentifier(name, decl_pos);
         } else {
@@ -291,9 +313,6 @@ export default class ParserBase {
       }
       // 处理for in、for of
       else {}
-
-      
-
     } while (this.Check('Token::COMMA'));
 
     parsing_result.bindings_loc = new Location(bindings_start, this.end_position());
@@ -316,7 +335,7 @@ export default class ParserBase {
     const result = this.scanner.CurrentSymbol(this.ast_value_factory_);
     return result;
   }
-  NewRawVariable(name, pos) {
-    return this.ast_node_factory_.NewVariableProxy(name, NORMAL_VARIABLE, pos);
-  }
+  // NewRawVariable(name, pos) {
+  //   return this.ast_node_factory_.NewVariableProxy(name, NORMAL_VARIABLE, pos);
+  // }
 }
