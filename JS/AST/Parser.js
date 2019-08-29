@@ -173,6 +173,11 @@ export default class ParserBase {
   ParseStatementListItem() {
     switch(this.peek()) {
       case 'Token::LET':
+        /**
+         * 这里调用了PeekAhead 会影响Next方法
+         * 调用后cur,next,next_next的值变化如下
+         * [null, LET, null] => [null, LET, IDENTIFIER];
+         */
         if(this.IsNextLetKeyword()) {
           return this.ParseVariableStatement(kStatementListItem, null);
         }
@@ -216,7 +221,11 @@ export default class ParserBase {
     parsing_result.descriptor.kind = NORMAL_VARIABLE;
     parsing_result.descriptor.declaration_pos = this.peek_position();
     parsing_result.descriptor.initialization_pos = this.peek_position();
-    // 设置声明mode
+    /**
+     * 这里调用了Consume 变动了游标
+     * [null, LET, IDENTIFIER] => [LET, IDENTIFIER, null]
+     * 返回了LET
+     */
     switch(this.peek()) {
       case 'Token::VAR':
         parsing_result.descriptor.mode = kVar;
@@ -243,7 +252,9 @@ export default class ParserBase {
     this.expression_scope_ = new VariableDeclarationParsingScope(this.parser_, parsing_result.descriptor.mode, names);
     // 获取合适的作用域
     let target_scope = IsLexicalVariableMode(parsing_result.descriptor.mode) ? this.scope_ : this.scope_.GetDeclarationScope();
-    
+    // TODO
+    let declaration_it = target_scope.declarations().end();
+
     let bindings_start = this.peek_position();
     /**
      * 可以一次性声明多个变量
@@ -259,7 +270,12 @@ export default class ParserBase {
       let pattern = null;
       // 检查下一个token是否是标识符
       if(IsAnyIdentifier(this.peek())) {
-        // 解析变量名字符串
+        /**
+         * 解析变量名字符串
+         * 这里调用了Next 会对sanner的游标进行调证
+         * [LET, IDENTIFIER, null] => [IDENTIFIER, ASSIGN, null]
+         * 返回IDENTIFIER
+         */
         name = this.ParseAndClassifyIdentifier(this.Next());
         // 检查下一个token是否是赋值运算符
         if(this.peek() === 'Token::ASSIGN' || 
@@ -302,6 +318,10 @@ export default class ParserBase {
 
       let value = this.NullExpression();
       let value_beg_pos = kNoSourcePosition;
+      /**
+       * 这里的Check调用了Scanner.Next()方法
+       * [IDENTIFIER, ASSIGN, null] => [ASSIGN, NUMBER, null]
+       */
       if(this.Check('Token::ASSIGN')) {
         {
           value_beg_pos = this.peek_position();
@@ -309,10 +329,26 @@ export default class ParserBase {
         }
         variable_loc.end_pos = this.end_position();
 
-        // 处理a = function(){};
+        /**
+         * 处理a = function(){};
+         * 下面的先不管
+         */
       }
       // 处理for in、for of
       else {}
+
+      let initializer_position = this.end_position();
+      // TODO
+      let declaration_end = target_scope.declarations().end();
+      for(;declaration_it !== declaration_end;++declaration_it) {
+        declaration_it.var().set_initializer_position(initializer_position);
+      }
+
+      // TODO
+      let decl = new DeclarationParsingResult(pattern, value);
+      decl.value_beg_pos = value_beg_pos;
+
+      parsing_result.declarations.push(decl);
     } while (this.Check('Token::COMMA'));
 
     parsing_result.bindings_loc = new Location(bindings_start, this.end_position());
