@@ -283,7 +283,7 @@ export default class ParserBase {
         (var_context === kForStatement && this.PeekInOrOf()) ||
         parsing_result.descriptor.mode === kLet) {
           /**
-           * 生成一个Expression实例
+           * @returns {Expression}
            * 过程总结如下：
            * 1、生成一个VariableProxy实例(继承于Expressio) 
            * 该类负责管理VariableDeclaration 并记录了变量是否被赋值、是否被使用等等
@@ -294,7 +294,7 @@ export default class ParserBase {
            * 
            * 整个过程有如下细节
            * (1)有两种情况下 该声明会被标记为unresolved丢进一个容器
-           * 第一是赋值右值为复杂表达式 复杂表达式需要重新走最外层的完整解析解析
+           * 第一是赋值右值为复杂表达式 复杂表达式需要重新走Parse的完整解析
            * 例如let a = '123'.split('').map(v => v ** 2);
            * 第二种情况是var类型的声明 由于需要向上搜索合适的作用域 声明需要后置处理
            * (2)let、const与var生成的AstNode类型不一致 var属于NestedVariable
