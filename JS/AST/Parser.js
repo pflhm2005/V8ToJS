@@ -173,11 +173,6 @@ export default class ParserBase {
   ParseStatementListItem() {
     switch(this.peek()) {
       case 'Token::LET':
-        /**
-         * 这里调用了PeekAhead 会影响Next方法
-         * 调用后cur,next,next_next的值变化如下
-         * [null, LET, null] => [null, LET, IDENTIFIER];
-         */
         if(this.IsNextLetKeyword()) {
           return this.ParseVariableStatement(kStatementListItem, null);
         }
@@ -189,6 +184,11 @@ export default class ParserBase {
    * 语句的形式应该是 (var | const | let) (Identifier) (=) (AssignmentExpression)
    */
   IsNextLetKeyword() {
+    /**
+     * 这里调用了PeekAhead 会影响Next方法
+     * 调用后cur,next,next_next的值变化如下
+     * [null, LET, null] => [null, LET, IDENTIFIER];
+     */
     let next_next = this.PeekAhead();
     /**
      * let后面跟{、}、a、static、let、yield、await、get、set、async是合法的(至少目前是合法的)
