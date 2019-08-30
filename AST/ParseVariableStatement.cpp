@@ -128,6 +128,28 @@ typename ParserBase<Impl>::StatementT ParserBase<Impl>::ParseVariableStatement(
   return impl()->BuildInitializationBlock(&parsing_result);
 }
 
+void ExpectSemicolon() {
+  // Check for automatic semicolon insertion according to
+  // the rules given in ECMA-262, section 7.9, page 21.
+  Token::Value tok = peek();
+  if (V8_LIKELY(tok == Token::SEMICOLON)) {
+    Next();
+    return;
+  }
+  if (V8_LIKELY(scanner()->HasLineTerminatorBeforeNext() ||
+                Token::IsAutoSemicolon(tok))) {
+    return;
+  }
+
+  if (scanner()->current_token() == Token::AWAIT && !is_async_function()) {
+    ReportMessageAt(scanner()->location(),
+                    MessageTemplate::kAwaitNotInAsyncFunction, kSyntaxError);
+    return;
+  }
+
+  ReportUnexpectedToken(Next());
+}
+
 template <typename Impl>
 void ParserBase<Impl>::ParseVariableDeclarations(
     VariableDeclarationContext var_context,

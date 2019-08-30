@@ -1,4 +1,7 @@
 import Location from '../base/Location';
+import {
+  kNoSourcePosition
+} from '../base/Const';
 
 /**
  * mode、kind分别是声明类型

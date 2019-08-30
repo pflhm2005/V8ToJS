@@ -8,44 +8,20 @@ import {
 // indicates whether a hash code has been computed.  If the hash code has
 // been computed the 2nd bit tells whether the string can be used as an
 // array index.
-const kHashNotComputedMask = 1;
 const kIsNotArrayIndexMask = 1 << 1;
 const kNofHashBitFields = 2;
 
 // Shift constant retrieving hash code from hash field.
-const kHashShift = kNofHashBitFields;
+export const kHashShift = kNofHashBitFields;
 
-// constexpr int kIntSize = sizeof(int);
-const kIntSize = 8;
-
-// Maximum object size that gets allocated into regular pages. Objects larger
-// than that size are allocated in large object space and are never moved in
-// memory. This also applies to new space allocation, since objects are never
-// migrated from new space to large object space. Takes double alignment into
-// account.
-//
-// Current value: half of the page size.
-// const kMaxRegularHeapObjectSize = (1 << (kPageSizeBits - 1));
-
-const kBitsPerByte = 8;
-const kBitsPerByteLog2 = 3;
-// const kBitsPerSystemPointer = kSystemPointerSize * kBitsPerByte;
-const kBitsPerInt = kIntSize * kBitsPerByte;
-
-
-// class ArrayIndexValueBits : public BitField<unsigned int, kNofHashBitFields, kArrayIndexValueBits>{};
-// class ArrayIndexLengthBits : public BitField<unsigned int, kNofHashBitFields + kArrayIndexValueBits, kArrayIndexLengthBits> {};
-// template <class T, int shift, int size, class U = uint32_t>
-// class BitField {
-// static constexpr U kShift = shift;
-// static constexpr U kSize = size;
-// }
+// Only these bits are relevant in the hash, since the top two are shifted
+// out.
+const kHashBitMask = 0xffffffff >> kHashShift;
 
 // For strings which are array indexes the hash value has the string length
 // mixed into the hash, mainly to avoid a hash value of zero which would be
 // the case for the string '0'. 24 bits are used for the array index value.
 const kArrayIndexValueBits = 24;
-const kArrayIndexLengthBits = kBitsPerInt - kArrayIndexValueBits - kNofHashBitFields; // 38
 
 
 // Maximum number of characters to consider when trying to convert a string
@@ -58,7 +34,7 @@ const kMaxHashCalcLength = 16383;
 
 const kZeroHash = 27;
 
-  const ArrayIndexValueBits_kShift = kNofHashBitFields; // 2
+const ArrayIndexValueBits_kShift = kNofHashBitFields; // 2
 const ArrayIndexLengthBits_kShift = kNofHashBitFields + kArrayIndexValueBits; // 26
 
 export default class StringHasher {
@@ -95,12 +71,27 @@ export default class StringHasher {
       return this.GetTrivialHash(length);
     }
 
-    let running_hash = seed;
-    for(let i =0;i < length;i++) {
-      running_hash = this.AddCharacterCore(running_hash, chars[i].charCodeAt());
+    let AddCharacterCore = (running_hash, c) => {
+      running_hash += c;
+      running_hash += (running_hash << 10);
+      running_hash ^= (running_hash >> 6);
+      return running_hash;
+    }
+    let GetHashCore = () => {
+      running_hash += (running_hash << 3);
+      running_hash ^= (running_hash >> 11);
+      running_hash += (running_hash << 15);
+      let hash = (running_hash & kHashBitMask);
+      let mask = (hash - 1) >> 31;
+      return running_hash | (kZeroHash & mask);
     }
 
-    return (this.GetHashCore(running_hash) << kHashShift) | kIsNotArrayIndexMask;
+    let running_hash = seed;
+    for(let i =0;i < length;i++) {
+      running_hash = AddCharacterCore(running_hash, chars[i].charCodeAt());
+    }
+
+    return (GetHashCore(running_hash) << kHashShift) | kIsNotArrayIndexMask;
   }
   /**
    * 1、非数字直接返回false
@@ -128,19 +119,5 @@ export default class StringHasher {
   }
   GetTrivialHash(length) {
     return (length << kHashShift) | kIsNotArrayIndexMask;
-  }
-  AddCharacterCore(running_hash, c) {
-    running_hash += c;
-    running_hash += (running_hash << 10);
-    running_hash ^= (running_hash >> 6);
-    return running_hash;
-  }
-  GetHashCore() {
-    running_hash += (running_hash << 3);
-    running_hash ^= (running_hash >> 11);
-    running_hash += (running_hash << 15);
-    let hash = (running_hash & kHashBitMask);
-    mask = (hash - 1) >> 31;
-    return running_hash | (kZeroHash & mask);
   }
 }

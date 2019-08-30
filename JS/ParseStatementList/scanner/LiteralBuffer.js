@@ -14,6 +14,7 @@ export default class LiteralBuffer {
      */
     this.is_one_byte_ = null;
   }
+  is_one_byte() { return this.is_one_byte_ };
   /**
    * 启动这个时默认字符串为单字节
    */

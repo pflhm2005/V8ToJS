@@ -157,6 +157,7 @@ class AstValueFactory {
           literal.begin(), literal.length(), hash_seed_);
       return GetString(hash_field, true, literal);
     }
+    uint32_t Hash() const { return hash_field_ >> Name::kHashShift; }
     AstRawString* GetString(uint32_t hash_field, bool is_one_byte,
                                          Vector<const byte> literal_bytes) {
       // literal_bytes here points to whatever the user passed, and this is OK

@@ -20,6 +20,8 @@ import {
   THIS_VARIABLE,
   SLOPPY_BLOCK_FUNCTION_VARIABLE,
   SLOPPY_FUNCTION_NAME_VARIABLE,
+
+  kNoSourcePosition,
 } from '../base/Const';
 
 import {
@@ -35,8 +37,6 @@ import {
 const kStatementListItem = 0;
 const kStatement = 1;
 const kForStatement = 2;
-
-const kNoSourcePosition = -1;
 
 const kYes = 0;
 const kNo = 1;
@@ -57,10 +57,11 @@ class ParserBase {
     this.fni_ = new FuncNameInferrer();
     this.expression_scope_ = null;
   }
-  IsLet(identifier) { return identifier === this.ast_value_factory_.let_string(); }
+  IsLet(identifier) { return identifier === 'let'; }
   UNREACHABLE() {
     this.scanner.UNREACHABLE();
   }
+  NullExpression() { return null; }
   peek() {
     return this.scanner.peek();
   }
@@ -115,8 +116,8 @@ class ParserBase {
    */
   IsNextLetKeyword() {
     /**
-     * 这里调用了PeekAhead 会影响Next方法
-     * 调用后cur,next,next_next的值变化如下
+     * 这里调用了PeekAhead后赋值了next_next_ 会影响Next方法
+     * 调用后cur、next_、next_next_的值变化如下
      * [null, LET, null] => [null, LET, IDENTIFIER];
      */
     let next_next = this.PeekAhead();
@@ -144,15 +145,22 @@ class ParserBase {
   }
   ParseVariableStatement(var_context, names) {
     let parsing_result = new DeclarationParsingResult();
-    this.ParseVariableDeclarations(var_context, parsing_result, names);
-    // this.ExpectSemicolon();
+    let result = this.ParseVariableDeclarations(var_context, parsing_result, names);
+    /**
+     * 处理自动插入semicolon
+     * 见ECMA-262 11.9 Automatic Semicolon Insertion
+     * 简要翻译如下；
+     * 在若干情况下 源代码需要自动插入分号
+     */
+    this.ExpectSemicolon();
+    return this.BuildInitializationBlock(result);
   }
   ParseVariableDeclarations(var_context, parsing_result, names) {
     parsing_result.descriptor.kind = NORMAL_VARIABLE;
     parsing_result.descriptor.declaration_pos = this.peek_position();
     parsing_result.descriptor.initialization_pos = this.peek_position();
     /**
-     * 这里调用了Consume 变动了游标
+     * 游标变动
      * [null, LET, IDENTIFIER] => [LET, IDENTIFIER, null]
      * 返回了LET
      */
@@ -191,7 +199,7 @@ class ParserBase {
      * let a = 1, b, c;
      */
     do {
-      let fni_state = new State(this.fni_);
+      // let fni_state = new State(this.fni_);
 
       let decl_pos = this.peek_position();
       // 变量名 => AstRawString*
@@ -201,19 +209,27 @@ class ParserBase {
       // 检查下一个token是否是标识符
       if (IsAnyIdentifier(this.peek())) {
         /**
-         * 解析变量名字符串
-         * 这里调用了Next 会对sanner的游标进行调证
+         * 解析变量名 总体流程如下
+         * 1、区分单字节字符串与双字符串 目前只考虑ascii码小于128的单字节
+         * 2、确定类型后 由AstValueFactory类统一处理字符串实例的生成
+         * 3、根据字符串的特征计算Hash值 有如下四种情况
+         * (1)单字符 计算后 将值缓存到一个名为one_character_strings_的容器 下次直接返回
+         * (2)纯数字字符串且小于2^32(int类型可保存范围内) 会转换为数字后进行Hash计算
+         * (3)出现ascii码大于127会特殊处理 暂时不管
+         * (4)其余情况会以一个种子为基准 遍历每一个字符的ascii码进行位运算 最后算出一个Hash值
+         * 最后会返回一个AstRawString实例与一个Hash值 并缓存到一个全局的Map中
+         * 
+         * 游标变动
          * [LET, IDENTIFIER, null] => [IDENTIFIER, ASSIGN, null]
-         * 返回IDENTIFIER
+         * @returns {AstRawString}
          */
         name = this.ParseAndClassifyIdentifier(this.Next());
         // 检查下一个token是否是赋值运算符
         if (this.peek() === 'Token::ASSIGN' || 
-        // for in、for of
-        (var_context === kForStatement && this.PeekInOrOf()) ||
+        // 判断for in、for of语法 这个暂时不解析
+        // (var_context === kForStatement && this.PeekInOrOf()) ||
         parsing_result.descriptor.mode === kLet) {
           /**
-           * @returns {Expression}
            * 过程总结如下：
            * 1、生成一个VariableProxy实例(继承于Expressio) 
            * 该类负责管理VariableDeclaration 并记录了变量是否被赋值、是否被使用等等
@@ -227,29 +243,38 @@ class ParserBase {
            * 第一是赋值右值为复杂表达式 复杂表达式需要重新走Parse的完整解析
            * 例如let a = '123'.split('').map(v => v ** 2);
            * 第二种情况是var类型的声明 由于需要向上搜索合适的作用域 声明需要后置处理
-           * (2)let、const与var生成的AstNode类型不一致 var属于NestedVariable
-           * (3)有一个作用域链 类似于原型链 从里向外通过outer_scope属性连着
+           * (2)let、const与var生成的AstNode类型不一致 var属于NestedVariable({var a=1;{var a=2;}})
+           * (3)有一个作用域链 类似于原型链 从里向外通过outer_scope属性(类似于__proto__)连着
            * (4)var类型的声明会向上一直搜索is_declaration_scope_为1的作用域
-           * (5)生成Variable后 const声明会被标记必须被立即赋值
+           * (5)由于检测到了赋值运算符 所以这里的变量属性都会被标记可能被赋值
+           * @returns {Expression}
            */
           pattern = this.ExpressionFromIdentifier(name, decl_pos);
-        } else {
-          // 声明未定义的语句 let a;
+        }
+        /**
+         * 声明未定义的语句 let a;
+         * 跳过了一些步骤 变量的很多属性都是未定义的状态
+         */ 
+        else {
           this.DeclareIdentifier(name, decl_pos);
           pattern = this.NullExpression();
         }
-      } else {
-        // 声明未定义的语句
+      }
+      /**
+       * let后面不一定必须跟标识符
+       * let { a, b } = object也是合法的
+       */ 
+      else {
         name = this.NullIdentifier();
         pattern = this.ParseBindingPattern();
       }
-
+      
       let variable_loc = new Location();
 
       let value = this.NullExpression();
       let value_beg_pos = kNoSourcePosition;
       /**
-       * 这里的Check调用了Scanner.Next()方法
+       * 游标变动
        * [IDENTIFIER, ASSIGN, null] => [ASSIGN, SMI, null]
        */
       if (this.Check('Token::ASSIGN')) {
@@ -257,7 +282,7 @@ class ParserBase {
           value_beg_pos = this.peek_position();
           /**
            * 这里处理赋值
-           * 大部分情况下这是一个右值 从简到繁(源码使用了一个Precedence来处理各类情况)如下
+           * 大部分情况下这是一个简单右值 从简到繁(源码使用了一个Precedence变量来进行渐进解析)如下
            * (1)单值字面量 null、true、false、1、1.1、1n、'1'
            * (2)一元运算 +1、++a 形如+function(){}、!function(){}会被特殊处理
            * (3)二元运算 'a' + 'b'、1 + 2
@@ -280,11 +305,17 @@ class ParserBase {
       else {}
 
       let initializer_position = this.end_position();
-      // 当成简单的遍历
+      /**
+       * 当成简单的遍历
+       * 这里的逻辑JS极难模拟 做简化处理
+       */
       let declaration_end = target_scope.declarations().end();
-      for(;declaration_it !== declaration_end;declaration_it = declaration_it.next_) {
-        declaration_it.var().set_initializer_position(initializer_position);
-      }
+      if(declaration_it === null) declaration_end.var().initializer_position_ = initializer_position;
+      // else {
+      //   for(;declaration_it !== declaration_end;declaration_it = declaration_it.next_) {
+      //     declaration_it.var().set_initializer_position(initializer_position);
+      //   }
+      // }
 
       let decl = new Declaration(pattern, value);
       decl.value_beg_pos = value_beg_pos;
@@ -293,6 +324,7 @@ class ParserBase {
     } while (this.Check('Token::COMMA'));
 
     parsing_result.bindings_loc = new Location(bindings_start, this.end_position());
+    return parsing_result;
   }
   ParseAndClassifyIdentifier(next) {
     if (IsAnyIdentifier(next, 'IDENTIFIER', 'ASYNC')) {
@@ -315,7 +347,18 @@ class ParserBase {
   // NewRawVariable(name, pos) {
   //   return this.ast_node_factory_.NewVariableProxy(name, NORMAL_VARIABLE, pos);
   // }
+
+
+  ParseAssignmentExpression() {
+    return null;
+  }
+  ExpectSemicolon() {
+    
+  }
 }
+
+
+
 
 /**
  * 源码中的impl 作为模板参数传入ParseBase 同时也继承于该类
@@ -325,7 +368,7 @@ class ParserBase {
 export default class Parser extends ParserBase {
   constructor(scanner) {
     super(scanner);
-    this.fni_ = new FuncNameInferrer();
+    // this.fni_ = new FuncNameInferrer();
     this.use_counts_ = new Array(kUseCounterFeatureCount).fill(0);
   }
   // 源码返回一个空指针
@@ -337,10 +380,10 @@ export default class Parser extends ParserBase {
    * @returns {VariableProxy}
    */
   ExpressionFromIdentifier(name, start_position, infer = kYes) {
-    // 这个fni_暂时不知道干啥的
-    if (infer === kYes) {
-      this.fni_.PushVariableName(name);
-    }
+    // 这个fni_暂时不知道干啥的 TODO
+    // if (infer === kYes) {
+    //   this.fni_.PushVariableName(name);
+    // }
     // 在当前的作用域下生成一个新的变量
     return this.expression_scope_.NewVariable(name, start_position);
   }
@@ -361,15 +404,15 @@ export default class Parser extends ParserBase {
     else {
       declaration = this.ast_node_factory_.NewVariableDeclaration(begin);
     }
-    this.Declare(declaration, name, kind, mode, init. scope, was_added. begin, end);
+    this.Declare(declaration, name, kind, mode, init, scope, was_added. begin, end);
     return declaration.var();
   }
   Declare(declaration, name, variable_kind, mode, init, scope, was_added, var_begin_pos, var_end_pos) {
     // 这两个参数作为引用传入方法 JS只能用这个操作了
-    // bool local_ok = true;
+    let local_ok = true;
     // bool sloppy_mode_block_scope_function_redefinition = false;
     // 普通模式下 在作用域内容重定义
-    let { local_ok, sloppy_mode_block_scope_function_redefinition } = scope.DeclareVariable(
+    let { sloppy_mode_block_scope_function_redefinition } = scope.DeclareVariable(
       declaration, name, var_begin_pos, mode, variable_kind, init, was_added,
       false, true);
     // 下面代码大部分情况不会走

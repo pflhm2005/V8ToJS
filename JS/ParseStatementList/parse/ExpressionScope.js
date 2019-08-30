@@ -1,7 +1,7 @@
-import { Variable } from '../ast/Ast';
+import { Variable, VariableProxy } from '../ast/Ast';
 
 import {
-  kLastLexicalVariableMode,
+  NORMAL_VARIABLE,
 
   kExpression,
   kMaybeArrowParameterDeclaration,
@@ -60,7 +60,7 @@ class ExpressionScope {
      * 为了方便 这里省去中间步骤
      */
     // let result = this.parser_.NewRawVariable(name, pos);
-    let result = new VariableProxy(name, variable_kind, pos);
+    let result = new VariableProxy(name, NORMAL_VARIABLE, pos);
     /**
      * 当右值是复杂表达式时 需要进行完整的解析 例如let a = (1 + 1);
      * 所以这里先将声明部分放入待完成容器中
@@ -127,8 +127,7 @@ export class VariableDeclarationParsingScope extends ExpressionScope {
     let was_added = false;
     let variable = this.parser_.DeclareVariable(name, kind, this.mode_, 
       Variable.DefaultInitializationFlag(this.mode_), this.parser_.scope_, was_added, pos);
-
-    if (this.names_) this.names_.Add(name, this.parser_.zone());
+    if (this.names_) this.names_.push(name);
     /**
      * 一个作用域最多可声明2^23 - 1个变量
      * 下面的代码可以不用关心 全是错误处理
@@ -138,7 +137,7 @@ export class VariableDeclarationParsingScope extends ExpressionScope {
     }
     if (this.IsLexicalDeclaration()) {
       // 所有关键词的字符串已经在map表中 直接做对比
-      if (this.parser_.IsLet(name)) {
+      if (this.parser_.IsLet(name.literal_bytes_)) {
         throw new Error(kLetInLexicalBinding);
       }
     } else {}

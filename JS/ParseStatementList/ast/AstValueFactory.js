@@ -32,7 +32,7 @@ export default class AstValueFactory {
   GetString(hash_field, is_one_byte, literal_bytes) {
     let new_string = new AstRawString(is_one_byte, literal_bytes, hash_field);
     // 这里实际传的key是对象的指针
-    let entry = this.LookupOrInsert(key, key.Hash());
+    let entry = this.LookupOrInsert(new_string, new_string.Hash());
     /**
      * 源码由HashMap返回
      * key是一个void*、value是对应的hash值
@@ -47,7 +47,7 @@ export default class AstValueFactory {
       // 感觉是这么个逻辑
       // entry->key = new_string;
       // entry->value = reinterpret_cast<void*>(1);
-      this.string_table_.set(key, 1);
+      this.string_table_.set(new_string, 1);
     }
     // 源码将void*强转返回 => reinterpret_cast<AstRawString*>
     return new_string;

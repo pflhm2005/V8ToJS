@@ -1,4 +1,9 @@
-import { kVar, kDynamic, kConst } from "../base/Const";
+import { 
+  kVar,
+  kDynamic,
+  kConst,
+  kNotAssigned,
+} from "../base/Const";
 import { Variable } from "../ast/AST";
 import ThreadedList from '../base/ThreadedList';
 
@@ -28,21 +33,22 @@ class VariableMap {
   }
   LookupOrInsert(name, hash) {
     if (!this.variables_.has(name)){
-      this.variables_.set(name, hash);
-      return null;
+      let p = { hash, value: null };
+      this.variables_.set(name, p);
+      return p;
     }
     return this.variables_.get(name);
   }
   Declare(zone, scope, name, mode, kind, initialization_flag, maybe_assigned_flag, was_added) {
     let p = this.LookupOrInsert(name, name.Hash(), zone);
-    was_added = p === null;
+    was_added = p.value === null;
     if (was_added) {
-      variable = new Variable(scope, name, mode, kind, initialization_flag, maybe_assigned_flag);
-      // this.LookupOrInsert(name, variable);
+      let variable = new Variable(scope, name, mode, kind, initialization_flag, maybe_assigned_flag);
+      p.value = variable;
     }
     return {
       was_added,
-      variable,
+      variable: p.value
     };
   }
 }
@@ -159,7 +165,7 @@ export default class Scope extends ZoneObject {
   }
   DeclareLocal(name, mode, kind, was_added_param, init_flag) {
     let { was_added, variable } = this.variables_.Declare(this.zone(), this, name, mode, kind, init_flag, kNotAssigned, was_added_param);
-    if (was_added) this.locals_.push(result.variable);
+    if (was_added) this.locals_.push(variable);
 
     // 作用域判断
     if (this.is_script_scope() || this.is_module_scope()) {

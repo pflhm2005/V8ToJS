@@ -8,6 +8,7 @@ class ThreadedList {
     this.list = [];
   }
   end() {
+    if(!this.list.length) return null;
     return this.list[this.list.length - 1];
   }
   /**

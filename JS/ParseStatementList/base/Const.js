@@ -18,6 +18,7 @@ export const TokenEnumList = [
   'LET',
   'STATIC',
   'FUTURE_STRICT_RESERVED_WORD',
+  'ESCAPED_STRICT_RESERVED_WORD',
 ];
 
 /**
@@ -89,3 +90,14 @@ export const kLexicalDeclaration = 5;
  * 语句类型
  */
 export const kVariableDeclaration = 0;
+
+/**
+ * 变量赋值标记
+ */
+export const kNotAssigned = 0;
+export const kMaybeAssigned = 1;
+
+/**
+ * 用于初始化与非法判断
+ */
+export const kNoSourcePosition = -1;
