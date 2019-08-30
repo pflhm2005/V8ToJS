@@ -21,17 +21,17 @@ import {
   THIS_VARIABLE,
   SLOPPY_BLOCK_FUNCTION_VARIABLE,
   SLOPPY_FUNCTION_NAME_VARIABLE,
-} from '../Const';
+} from '../base/Const';
 
 import {
   IsAnyIdentifier,
   IsLexicalVariableMode,
-} from '../Util';
+} from '../base/Util';
 
 import {
   kParamDupe,
   kVarRedeclaration,
-} from '../MessageTemplate';
+} from '../base/MessageTemplate';
 
 const kStatementListItem = 0;
 const kStatement = 1;

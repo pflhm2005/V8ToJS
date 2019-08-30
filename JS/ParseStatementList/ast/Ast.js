@@ -1,7 +1,7 @@
 import { 
   kVar,
   kVariableDeclaration,
-} from "../Const";
+} from "../base/Const";
 
 const update = () => {};
 const decode = () => {};

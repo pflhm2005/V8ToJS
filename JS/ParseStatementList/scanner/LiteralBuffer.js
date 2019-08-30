@@ -1,4 +1,4 @@
-import { Latin1_kMaxChar, kOneByteSize } from '../Const';
+import { Latin1_kMaxChar, kOneByteSize } from '../base/Const';
 
 export default class LiteralBuffer {
   constructor() {

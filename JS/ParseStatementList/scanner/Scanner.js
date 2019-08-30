@@ -1,7 +1,7 @@
 import Stream from './Stream';
-import PerfectKeywordHash from '../PerfectKeywordHash';
+import PerfectKeywordHash from './PerfectKeywordHash';
 import TokenDesc from './TokenDesc';
-import Location from './Location';
+import Location from '../base/Location';
 
 import { 
   kMaxAscii, 

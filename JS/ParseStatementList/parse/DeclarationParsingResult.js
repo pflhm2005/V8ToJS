@@ -1,4 +1,4 @@
-import Location from '../scanner/Location';
+import Location from '../base/Location';
 
 /**
  * mode、kind分别是声明类型

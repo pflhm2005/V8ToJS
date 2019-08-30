@@ -1,4 +1,4 @@
-import { kVar, kDynamic, kConst } from "../Const";
+import { kVar, kDynamic, kConst } from "../base/Const";
 import { Variable } from "../ast/AST";
 
 class ZoneObject {};
