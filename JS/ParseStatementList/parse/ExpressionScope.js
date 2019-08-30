@@ -1,4 +1,4 @@
-import { Variable } from './AST';
+import { Variable } from '../ast/Ast';
 
 import {
   kLastLexicalVariableMode,

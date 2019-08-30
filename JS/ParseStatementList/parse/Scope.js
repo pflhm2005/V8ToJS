@@ -1,5 +1,5 @@
-import { kVar, kDynamic, kConst } from "./Const";
-import { Variable } from "./AST";
+import { kVar, kDynamic, kConst } from "../Const";
+import { Variable } from "../ast/AST";
 
 class ZoneObject {};
 
@@ -63,7 +63,12 @@ class Scope extends ZoneObject {
     // variables may be implicitly 'declared' by being used (possibly in
     // an inner scope) with no intervening with statements or eval calls.
     this.variables_ = new VariableMap();
-    // ThreadedList<Declaration> decls;
+    /**
+     * ThreadedList<Declaration> decls
+     * 这是一个类似于链表的数据结构
+     * 主属性有tail_、head_两个属性 其中tail_是二维指针、head_是一维指针
+     * 这是因为传入该list里的都是指向Declaration实例的指针
+     */
     this.decls_ = [];
     // In case of non-scopeinfo-backed scopes, this contains the variables of the
     // map above in order of addition.
@@ -95,6 +100,7 @@ class Scope extends ZoneObject {
 
   // 当前作用域标记
   is_declaration_scope() { return this.is_declaration_scope_; }
+  declarations() { return this.decls_; }
   outer_scope() { return this.outer_scope_; }
   // 这里形成一个作用域链
   GetDeclarationScope() {
@@ -146,7 +152,7 @@ class Scope extends ZoneObject {
       // if() {}
     }
 
-    this.decls_.push(declaration);
+    this.decls_.Add(declaration);
     declaration.set_var(variable);
     return { was_added, sloppy_mode_block_scope_function_redefinition };
   }

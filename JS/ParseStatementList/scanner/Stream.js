@@ -1,4 +1,4 @@
-import  { UnicodeToAsciiMapping } from './Util';
+import  { UnicodeToAsciiMapping } from '../Util';
 
 export default class Stream {
   constructor(source_string) {

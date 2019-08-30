@@ -215,6 +215,17 @@ ParserBase<Impl>::ParsePostfixExpression() {
 
 template <typename Impl>
 typename ParserBase<Impl>::ExpressionT
+ParserBase<Impl>::ParseLeftHandSideExpression() {
+  // LeftHandSideExpression ::
+  //   (NewExpression | MemberExpression) ...
+
+  ExpressionT result = ParseMemberExpression();
+  if (!Token::IsPropertyOrCall(peek())) return result;
+  return ParseLeftHandSideContinuation(result);
+}
+
+template <typename Impl>
+typename ParserBase<Impl>::ExpressionT
 ParserBase<Impl>::ParseMemberExpression() {
   // MemberExpression ::
   //   (PrimaryExpression | FunctionLiteral | ClassLiteral)
@@ -235,13 +246,244 @@ ParserBase<Impl>::ParseMemberExpression() {
 
 template <typename Impl>
 typename ParserBase<Impl>::ExpressionT
-ParserBase<Impl>::ParseLeftHandSideExpression() {
-  // LeftHandSideExpression ::
-  //   (NewExpression | MemberExpression) ...
+ParserBase<Impl>::ParsePrimaryExpression() {
+  CheckStackOverflow();
 
-  ExpressionT result = ParseMemberExpression();
-  if (!Token::IsPropertyOrCall(peek())) return result;
-  return ParseLeftHandSideContinuation(result);
+  // PrimaryExpression ::
+  //   'this'
+  //   'null'
+  //   'true'
+  //   'false'
+  //   Identifier
+  //   Number
+  //   String
+  //   ArrayLiteral
+  //   ObjectLiteral
+  //   RegExpLiteral
+  //   ClassLiteral
+  //   '(' Expression ')'
+  //   TemplateLiteral
+  //   do Block
+  //   AsyncFunctionLiteral
+
+  int beg_pos = peek_position();
+  Token::Value token = peek();
+
+  if (Token::IsAnyIdentifier(token)) {
+    Consume(token);
+
+    FunctionKind kind = FunctionKind::kArrowFunction;
+
+    if (V8_UNLIKELY(token == Token::ASYNC &&
+                    !scanner()->HasLineTerminatorBeforeNext() &&
+                    !scanner()->literal_contains_escapes())) {
+      // async function ...
+      if (peek() == Token::FUNCTION) return ParseAsyncFunctionLiteral();
+
+      // async Identifier => ...
+      if (peek_any_identifier() && PeekAhead() == Token::ARROW) {
+        token = Next();
+        beg_pos = position();
+        kind = FunctionKind::kAsyncArrowFunction;
+      }
+    }
+
+    if (V8_UNLIKELY(peek() == Token::ARROW)) {
+      ArrowHeadParsingScope parsing_scope(impl(), kind);
+      IdentifierT name = ParseAndClassifyIdentifier(token);
+      ClassifyParameter(name, beg_pos, end_position());
+      ExpressionT result =
+          impl()->ExpressionFromIdentifier(name, beg_pos, InferName::kNo);
+      next_arrow_function_info_.scope = parsing_scope.ValidateAndCreateScope();
+      return result;
+    }
+
+    IdentifierT name = ParseAndClassifyIdentifier(token);
+    return impl()->ExpressionFromIdentifier(name, beg_pos);
+  }
+
+  if (Token::IsLiteral(token)) {
+    return impl()->ExpressionFromLiteral(Next(), beg_pos);
+  }
+
+  switch (token) {
+    case Token::NEW:
+      return ParseMemberWithPresentNewPrefixesExpression();
+
+    case Token::THIS: {
+      Consume(Token::THIS);
+      return impl()->ThisExpression();
+    }
+
+    case Token::ASSIGN_DIV:
+    case Token::DIV:
+      return ParseRegExpLiteral();
+
+    case Token::FUNCTION:
+      return ParseFunctionExpression();
+
+    case Token::SUPER: {
+      const bool is_new = false;
+      return ParseSuperExpression(is_new);
+    }
+    case Token::IMPORT:
+      if (!allow_harmony_dynamic_import()) break;
+      return ParseImportExpressions();
+
+    case Token::LBRACK:
+      return ParseArrayLiteral();
+
+    case Token::LBRACE:
+      return ParseObjectLiteral();
+
+    case Token::LPAREN: {
+      Consume(Token::LPAREN);
+      if (Check(Token::RPAREN)) {
+        // ()=>x.  The continuation that consumes the => is in
+        // ParseAssignmentExpressionCoverGrammar.
+        if (peek() != Token::ARROW) ReportUnexpectedToken(Token::RPAREN);
+        next_arrow_function_info_.scope =
+            NewFunctionScope(FunctionKind::kArrowFunction);
+        return factory()->NewEmptyParentheses(beg_pos);
+      }
+      Scope::Snapshot scope_snapshot(scope());
+      ArrowHeadParsingScope maybe_arrow(impl(), FunctionKind::kArrowFunction);
+      // Heuristically try to detect immediately called functions before
+      // seeing the call parentheses.
+      if (peek() == Token::FUNCTION ||
+          (peek() == Token::ASYNC && PeekAhead() == Token::FUNCTION)) {
+        function_state_->set_next_function_is_likely_called();
+      }
+      AcceptINScope scope(this, true);
+      ExpressionT expr = ParseExpressionCoverGrammar();
+      expr->mark_parenthesized();
+      Expect(Token::RPAREN);
+
+      if (peek() == Token::ARROW) {
+        next_arrow_function_info_.scope = maybe_arrow.ValidateAndCreateScope();
+        scope_snapshot.Reparent(next_arrow_function_info_.scope);
+      } else {
+        maybe_arrow.ValidateExpression();
+      }
+
+      return expr;
+    }
+
+    case Token::CLASS: {
+      Consume(Token::CLASS);
+      int class_token_pos = position();
+      IdentifierT name = impl()->NullIdentifier();
+      bool is_strict_reserved_name = false;
+      Scanner::Location class_name_location = Scanner::Location::invalid();
+      if (peek_any_identifier()) {
+        name = ParseAndClassifyIdentifier(Next());
+        class_name_location = scanner()->location();
+        is_strict_reserved_name =
+            Token::IsStrictReservedWord(scanner()->current_token());
+      }
+      return ParseClassLiteral(name, class_name_location,
+                               is_strict_reserved_name, class_token_pos);
+    }
+
+    case Token::TEMPLATE_SPAN:
+    case Token::TEMPLATE_TAIL:
+      return ParseTemplateLiteral(impl()->NullExpression(), beg_pos, false);
+
+    case Token::MOD:
+      if (allow_natives() || extension_ != nullptr) {
+        return ParseV8Intrinsic();
+      }
+      break;
+
+    default:
+      break;
+  }
+
+  ReportUnexpectedToken(Next());
+  return impl()->FailureExpression();
+}
+
+Expression* Parser::ExpressionFromLiteral(Token::Value token, int pos) {
+  switch (token) {
+    case Token::NULL_LITERAL:
+      return factory()->NewNullLiteral(pos);
+    case Token::TRUE_LITERAL:
+      return factory()->NewBooleanLiteral(true, pos);
+    case Token::FALSE_LITERAL:
+      return factory()->NewBooleanLiteral(false, pos);
+    case Token::SMI: {
+      uint32_t value = scanner()->smi_value();
+      return factory()->NewSmiLiteral(value, pos);
+    }
+    case Token::NUMBER: {
+      double value = scanner()->DoubleValue();
+      return factory()->NewNumberLiteral(value, pos);
+    }
+    case Token::BIGINT:
+      return factory()->NewBigIntLiteral(
+          AstBigInt(scanner()->CurrentLiteralAsCString(zone())), pos);
+    case Token::STRING: {
+      return factory()->NewStringLiteral(GetSymbol(), pos);
+    }
+    default:
+      DCHECK(false);
+  }
+  return FailureExpression();
+}
+
+Literal* NewSmiLiteral(int number, int pos) {
+  return new (zone_) Literal(number, pos);
+}
+
+ParseMemberExpressionContinuation(ExpressionT expression) {
+  if (!Token::IsMember(peek())) return expression;
+  return DoParseMemberExpressionContinuation(expression);
+}
+
+template <typename Impl>
+typename ParserBase<Impl>::ExpressionT
+ParserBase<Impl>::DoParseMemberExpressionContinuation(ExpressionT expression) {
+  DCHECK(Token::IsMember(peek()));
+  // Parses this part of MemberExpression:
+  // ('[' Expression ']' | '.' Identifier | TemplateLiteral)*
+  do {
+    switch (peek()) {
+      case Token::LBRACK: {
+        Consume(Token::LBRACK);
+        int pos = position();
+        AcceptINScope scope(this, true);
+        ExpressionT index = ParseExpressionCoverGrammar();
+        expression = factory()->NewProperty(expression, index, pos);
+        impl()->PushPropertyName(index);
+        Expect(Token::RBRACK);
+        break;
+      }
+      case Token::PERIOD: {
+        Consume(Token::PERIOD);
+        int pos = peek_position();
+        ExpressionT key = ParsePropertyOrPrivatePropertyName();
+        expression = factory()->NewProperty(expression, key, pos);
+        break;
+      }
+      default: {
+        DCHECK(Token::IsTemplate(peek()));
+        int pos;
+        if (scanner()->current_token() == Token::IDENTIFIER) {
+          pos = position();
+        } else {
+          pos = peek_position();
+          if (expression->IsFunctionLiteral()) {
+            // If the tag function looks like an IIFE, set_parenthesized() to
+            // force eager compilation.
+            expression->AsFunctionLiteral()->SetShouldEagerCompile();
+          }
+        }
+        expression = ParseTemplateLiteral(expression, pos, true);
+        break;
+      }
+    }
+  } while (Token::IsMember(peek()));
+  return expression;
 }
 
 template <typename Impl>

@@ -168,7 +168,11 @@ void ParserBase<Impl>::ParseVariableDeclarations(
   Scope* target_scope = IsLexicalVariableMode(parsing_result->descriptor.mode)
                             ? scope()
                             : scope()->GetDeclarationScope();
-
+  /**
+   * declarations()返回ThreadedList<Declaration> decls_
+   * end()返回tail_
+   * 即容器的尾部迭代器
+   */ 
   auto declaration_it = target_scope->declarations()->end();
 
   int bindings_start = peek_position();
@@ -259,6 +263,7 @@ void ParserBase<Impl>::ParseVariableDeclarations(
     }
 
     int initializer_position = end_position();
+    // 声明处理完后scope中新的尾部
     auto declaration_end = target_scope->declarations()->end();
     for (; declaration_it != declaration_end; ++declaration_it) {
       declaration_it->var()->set_initializer_position(initializer_position);

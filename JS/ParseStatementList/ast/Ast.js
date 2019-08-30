@@ -1,10 +1,7 @@
-import { VariableProxy } from './AST';
-
 import { 
   kVar,
-
   kVariableDeclaration,
-} from "./Const";
+} from "../Const";
 
 const update = () => {};
 const decode = () => {};

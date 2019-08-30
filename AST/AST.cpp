@@ -154,6 +154,7 @@ class Variable final : public ZoneObject {
     void set_maybe_assigned() {
       bit_field_ = MaybeAssignedFlagField::update(bit_field_, kMaybeAssigned);
     }
+    void set_initializer_position(int pos) { initializer_position_ = pos; }
   private:
     Scope* scope_;
     const AstRawString* name_;

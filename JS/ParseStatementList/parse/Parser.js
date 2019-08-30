@@ -1,11 +1,11 @@
 import { 
   Expression,
   AstNodeFactory
-} from './AST';
+} from '../ast/Ast';
 import DeclarationParsingResult from './DeclarationParsingResult';
-import AstRawString from './AstRawString';
+import AstRawString from '../ast/AstRawString';
 import FuncNameInferrer from './FuncNameInferrer';
-import Location from './Location';
+import Location from '../scanner/Location';
 
 import { VariableDeclarationParsingScope } from './ExpressionScope';
 import Scope from './Scope';
@@ -21,17 +21,17 @@ import {
   THIS_VARIABLE,
   SLOPPY_BLOCK_FUNCTION_VARIABLE,
   SLOPPY_FUNCTION_NAME_VARIABLE,
-} from './Const';
+} from '../Const';
 
 import {
   IsAnyIdentifier,
   IsLexicalVariableMode,
-} from './Util';
+} from '../Util';
 
 import {
   kParamDupe,
   kVarRedeclaration,
-} from './MessageTemplate';
+} from '../MessageTemplate';
 
 const kStatementListItem = 0;
 const kStatement = 1;
@@ -320,11 +320,23 @@ export default class ParserBase {
       let value_beg_pos = kNoSourcePosition;
       /**
        * 这里的Check调用了Scanner.Next()方法
-       * [IDENTIFIER, ASSIGN, null] => [ASSIGN, NUMBER, null]
+       * [IDENTIFIER, ASSIGN, null] => [ASSIGN, SMI, null]
        */
       if(this.Check('Token::ASSIGN')) {
         {
           value_beg_pos = this.peek_position();
+          /**
+           * 这里处理赋值
+           * 大部分情况下这是一个右值 从简到繁(源码使用了一个Precedence来处理各类情况)如下
+           * (1)单值字面量 null、true、false、1、1.1、1n、'1'
+           * (2)一元运算 +1、++a 形如+function(){}、!function(){}会被特殊处理
+           * (3)二元运算 'a' + 'b'、1 + 2
+           * (4){}对象、[]数组、``模板字符串
+           * 等等情况 实在太过繁琐
+           * 除了上述情况 被赋值的可能也是一个左值 比如遇到如下的特殊Token
+           * import、async、new、this、function、任意标识符(分为普通变量与箭头函数)等等
+           * 由于左值的解析相当于一个完整的新表达式 因此不必列举出来
+           */
           value = this.ParseAssignmentExpression();
         }
         variable_loc.end_pos = this.end_position();
