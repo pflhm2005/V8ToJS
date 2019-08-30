@@ -63,6 +63,7 @@ struct DeclarationParsingResult {
   Scanner::Location first_initializer_loc;
   Scanner::Location bindings_loc;
 };
+
 struct DeclarationDescriptor {
   VariableMode mode;
   VariableKind kind;

@@ -84,9 +84,9 @@ const kPerfectKeywordHashTable = [
 
 export default class PerfectKeywordHash {
   static GetToken(str, len) {
-    if(IsInRange(len, MIN_WORD_LENGTH, MAX_WORD_LENGTH)) {
+    if (IsInRange(len, MIN_WORD_LENGTH, MAX_WORD_LENGTH)) {
       let key = PerfectKeywordHash.Hash(str, len) & 0x3f;
-      if(len === kPerfectKeywordLengthTable[key]) {
+      if (len === kPerfectKeywordLengthTable[key]) {
         const s = kPerfectKeywordHashTable[key].name;
         let l = s.length;
         let i = -1;
@@ -95,7 +95,7 @@ export default class PerfectKeywordHash {
          * 做字符严格校对 形如avr会被识别为变量
          */
         while(i++ !== l) {
-          if(s[i] !== str[i]) return 'Token::IDENTIFIER';
+          if (s[i] !== str[i]) return 'Token::IDENTIFIER';
         }
         return kPerfectKeywordHashTable[key].value;
       }

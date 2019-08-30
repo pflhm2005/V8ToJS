@@ -1,5 +1,6 @@
 import { kVar, kDynamic, kConst } from "../base/Const";
 import { Variable } from "../ast/AST";
+import ThreadedList from '../base/ThreadedList';
 
 class ZoneObject {};
 
@@ -20,13 +21,13 @@ class VariableMap {
     this.variables_ = new Map();
   }
   Lookup(name) {
-    if(this.variables_.has(name)) {
+    if (this.variables_.has(name)) {
       return this.variables_.get(name);
     }
     return null;
   }
   LookupOrInsert(name, hash) {
-    if(!this.variables_.has(name)){
+    if (!this.variables_.has(name)){
       this.variables_.set(name, hash);
       return null;
     }
@@ -35,7 +36,7 @@ class VariableMap {
   Declare(zone, scope, name, mode, kind, initialization_flag, maybe_assigned_flag, was_added) {
     let p = this.LookupOrInsert(name, name.Hash(), zone);
     was_added = p === null;
-    if(was_added) {
+    if (was_added) {
       variable = new Variable(scope, name, mode, kind, initialization_flag, maybe_assigned_flag);
       // this.LookupOrInsert(name, variable);
     }
@@ -46,7 +47,7 @@ class VariableMap {
   }
 }
 
-class Scope extends ZoneObject {
+export default class Scope extends ZoneObject {
   constructor(zone, outer_scope = null, scope_type = SCRIPT_SCOPE) {
     super();
     this.outer_scope_ = outer_scope;
@@ -69,7 +70,7 @@ class Scope extends ZoneObject {
      * 主属性有tail_、head_两个属性 其中tail_是二维指针、head_是一维指针
      * 这是因为传入该list里的都是指向Declaration实例的指针
      */
-    this.decls_ = [];
+    this.decls_ = new ThreadedList();
     // In case of non-scopeinfo-backed scopes, this contains the variables of the
     // map above in order of addition.
     // base::ThreadedList<Variable> locals_;
@@ -127,18 +128,18 @@ class Scope extends ZoneObject {
    */
   DeclareVariable(declaration, name, pos, mode, kind, init, was_added, sloppy_mode_block_scope_function_redefinition, ok) {
     // 变量提升 往上搜索第一个有效作用域
-    if(mode === kVar && !this.is_declaration_scope()) {
+    if (mode === kVar && !this.is_declaration_scope()) {
       return this.GetDeclarationScope().DeclareVariable(declaration, name, pos, mode, kind, init, was_added, sloppy_mode_block_scope_function_redefinition, ok);
     }
     let variable = this.LookupLocal(name);
     was_added = variable === null;
     // 第一次声明
-    if(was_added) {
+    if (was_added) {
       /**
        * "eval(var a = 1;)"
        * 属于动态声明的变量
        */
-      if(this.is_eval_scope() && this.is_sloppy(this.language_mode()) && mode === kVar) {
+      if (this.is_eval_scope() && this.is_sloppy(this.language_mode()) && mode === kVar) {
         // variable = this.NonLocal(name, kDynamic);
         variable.set_is_used();
       }
@@ -149,20 +150,20 @@ class Scope extends ZoneObject {
     } else {
       variable.set_maybe_assigned();
       // 重复定义处理
-      // if() {}
+      // if () {}
     }
 
     this.decls_.Add(declaration);
     declaration.set_var(variable);
     return { was_added, sloppy_mode_block_scope_function_redefinition };
   }
-  DeclareLocal(name, mode, kind, was_added, init_flag) {
-    let { was_added, variable } = this.variables_.Declare(this.zone(), this, name, mode, kind, init_flag, kNotAssigned, was_added);
-    if(was_added) this.locals_.push(result.variable);
+  DeclareLocal(name, mode, kind, was_added_param, init_flag) {
+    let { was_added, variable } = this.variables_.Declare(this.zone(), this, name, mode, kind, init_flag, kNotAssigned, was_added_param);
+    if (was_added) this.locals_.push(result.variable);
 
     // 作用域判断
-    if(this.is_script_scope() || this.is_module_scope()) {
-      if(mode !== kConst) variable.set_maybe_assigned();
+    if (this.is_script_scope() || this.is_module_scope()) {
+      if (mode !== kConst) variable.set_maybe_assigned();
       variable.set_is_used();
     }
     return variable;
@@ -176,9 +177,9 @@ class Scope extends ZoneObject {
   }
 }
 
-class DeclarationScope extends Scope {
-  constructor() {
-    
-  }
-}
+// class DeclarationScope extends Scope {
+//   constructor() {
+//     super();
+//   }
+// }
 

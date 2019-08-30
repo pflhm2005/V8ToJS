@@ -26,7 +26,7 @@ export class FuncNameInferrer {
   IsOpen() { return this.scope_depth_ > 0; }
   PushVariableName(name) {
     // dot_result_string是形如obj.key的声明 不属于新的变量声明
-    if(this.IsOpen() && name !== this.ast_value_factory_.dot_result_string()) {
+    if (this.IsOpen() && name !== this.ast_value_factory_.dot_result_string()) {
       this.names_stack_.push(new Name(name, kVariableName));
     }
   }

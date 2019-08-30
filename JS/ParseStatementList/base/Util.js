@@ -133,11 +133,11 @@ export { UnicodeToAsciiMapping }
  * @param {chat} higher_limit 高位字符
  */
 export const IsInRange = (c, lower_limit, higher_limit) => {
-  if(typeof lower_limit === 'string' && typeof higher_limit === 'string') {
+  if (typeof lower_limit === 'string' && typeof higher_limit === 'string') {
     lower_limit = lower_limit.charCodeAt();
     higher_limit = higher_limit.charCodeAt();
   }
-  if(typeof c === 'string') c = c.charCodeAt();
+  if (typeof c === 'string') c = c.charCodeAt();
   return (c >= lower_limit) && (c <= higher_limit);
 }
 
@@ -215,11 +215,11 @@ const IsAlphaNumeric = (c) => {
  * 没有char类型真的坑
  */
 export const IsAsciiIdentifier = (c) => {
-  if(typeof c === 'number' && c > 9) c = UnicodeToAsciiMapping[c];
+  if (typeof c === 'number' && c > 9) c = UnicodeToAsciiMapping[c];
   return IsAlphaNumeric(c) || c === '$' || c === '_';
 }
 export const IsIdentifierStart = (c) => {
-  if(typeof c === 'number') c = UnicodeToAsciiMapping[c];
+  if (typeof c === 'number') c = UnicodeToAsciiMapping[c];
   return ('A' <= c && c <= 'Z') || ('a' <= c && c <= 'z') || c === '_';
 }
 
@@ -248,7 +248,7 @@ const BuildAsciiCharFlags = (c) => {
 }
 const kAsciiCharFlags = UnicodeToAsciiMapping.map(c => BuildAsciiCharFlags(c));
 export const IsWhiteSpaceOrLineTerminator = (c) => {
-  // if(!IsInRange(c, 0, 127)) return IsWhiteSpaceOrLineTerminatorSlow(c);
+  // if (!IsInRange(c, 0, 127)) return IsWhiteSpaceOrLineTerminatorSlow(c);
   return kAsciiCharFlags[c] & kIsWhiteSpaceOrLineTerminator;
 }
 

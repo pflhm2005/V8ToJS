@@ -46,7 +46,7 @@ export default class Stream {
    * 撤销Advance操作
    */
   Back() {
-    if(this.buffer_cursor_ > this.buffer_start_) {
+    if (this.buffer_cursor_ > this.buffer_start_) {
       this.buffer_cursor_--;
     } else {
       this.ReadBlockAt(this.pos() - 1);
@@ -74,7 +74,7 @@ export default class Stream {
 
     let next_cursor_pos = find_if(this.buffer_, this.buffer_cursor_, this.buffer_end_, callback);
 
-    if(next_cursor_pos === this.buffer_end_) {
+    if (next_cursor_pos === this.buffer_end_) {
       this.buffer_cursor_ = this.buffer_end_;
       return null;
     } else {
@@ -87,9 +87,9 @@ export default class Stream {
    * 同时会做初始化
    */
   Peek() {
-    if(this.buffer_cursor_ < this.buffer_end_) {
+    if (this.buffer_cursor_ < this.buffer_end_) {
       return this.buffer_[this.buffer_cursor_];
-    } else if(this.ReadBlockChecked()) {
+    } else if (this.ReadBlockChecked()) {
       return this.buffer_[this.buffer_cursor_];
     } else {
       return null;

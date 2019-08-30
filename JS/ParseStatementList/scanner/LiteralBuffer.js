@@ -25,8 +25,8 @@ export default class LiteralBuffer {
    * 只关心单字节字符 所以那两个方法不给出实现了
    */
   AddChar(code_unit) {
-    if(this.is_one_byte_) {
-      if(code_unit <= Latin1_kMaxChar) {
+    if (this.is_one_byte_) {
+      if (code_unit <= Latin1_kMaxChar) {
         return this.AddOneByteChar(code_unit);
       }
       this.ConvertToTwoByte();

@@ -14,13 +14,13 @@ export default class AstValueFactory {
     return this.GetOneByteStringInternal(literal);
   }
   GetOneByteStringInternal(literal) {
-    if(literal.length === 1 && literal[0] < kMaxOneCharStringValue) {
+    if (literal.length === 1 && literal[0] < kMaxOneCharStringValue) {
       let key = literal[0];
       /**
        * 单字符变量第一次出现会进这里
        * one_character_strings_是一个长度为128的Vector 保存每一个字符生成的hash值
        */
-      if(one_character_strings_[key] === null) {
+      if (one_character_strings_[key] === null) {
         let hash_field = StringHasher.HashSequentialString(literal, 1, this.hash_seed_);
         one_character_strings_[key] = this.GetString(hash_field, true, literal);
       }
@@ -37,7 +37,7 @@ export default class AstValueFactory {
      * 源码由HashMap返回
      * key是一个void*、value是对应的hash值
      */
-    if(entry === null) {
+    if (entry === null) {
       // 在指定的内存上初始化对象 对JS来说毫无意义
       // int length = literal_bytes.length();
       // byte* new_literal_bytes = zone_->NewArray<byte>(length);
@@ -58,7 +58,7 @@ export default class AstValueFactory {
    * @param {Number} value Hash值
    */
   LookupOrInsert(key, value) {
-    if(this.string_table_.has(key)) {
+    if (this.string_table_.has(key)) {
       this.string_table_.get(key);
       return key;
     }

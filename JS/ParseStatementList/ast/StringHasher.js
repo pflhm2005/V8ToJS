@@ -25,11 +25,11 @@ const kIntSize = 8;
 // account.
 //
 // Current value: half of the page size.
-const kMaxRegularHeapObjectSize = (1 << (kPageSizeBits - 1));
+// const kMaxRegularHeapObjectSize = (1 << (kPageSizeBits - 1));
 
 const kBitsPerByte = 8;
 const kBitsPerByteLog2 = 3;
-const kBitsPerSystemPointer = kSystemPointerSize * kBitsPerByte;
+// const kBitsPerSystemPointer = kSystemPointerSize * kBitsPerByte;
 const kBitsPerInt = kIntSize * kBitsPerByte;
 
 
@@ -76,22 +76,22 @@ export default class StringHasher {
      * 这里所做的操作是尝试将数字字符串转换为纯数字
      * 判断字符串长度是否在1 - 10之间
      */
-    if(IsInRange(length, 1, kMaxArrayIndexSize)) {
+    if (IsInRange(length, 1, kMaxArrayIndexSize)) {
       /**
        * 1、判断第一位是否是数字
        * 2、长度为1或者第一位不是0
        */
-      if(IsDecimalDigit(chars[0]) && (length === 1 || chars[0] !== 0)) {
+      if (IsDecimalDigit(chars[0]) && (length === 1 || chars[0] !== 0)) {
         /**
          * 这里通过与0的Unicode计算后得到实际数值
          */
         this.number = chars[0] - '0';
         let i = 1;
         do{
-          if(i === length) return this.MakeArrayIndexHash(this.number, length);
+          if (i === length) return this.MakeArrayIndexHash(this.number, length);
         } while(this.TryAddIndexChar(this.number, chars[i++]))
       }
-    } else if(length > kMaxHashCalcLength) {
+    } else if (length > kMaxHashCalcLength) {
       return this.GetTrivialHash(length);
     }
 
@@ -110,9 +110,9 @@ export default class StringHasher {
    * 例如12345 index初始值为1 叠加过程为 1 => 12 => 123 => 1234 => 12345
    */
   TryAddIndexChar(index, c) {
-    if(!IsDecimalDigit(c)) return false;
+    if (!IsDecimalDigit(c)) return false;
     let d = c - '0';
-    if(index > 429496729 - ((d + 3) >> 3)) return false;
+    if (index > 429496729 - ((d + 3) >> 3)) return false;
     index = index * 10 + d;
     this.number = index;
     return true;

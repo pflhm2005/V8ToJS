@@ -2,10 +2,9 @@ import {
   Expression,
   AstNodeFactory
 } from '../ast/Ast';
-import DeclarationParsingResult from './DeclarationParsingResult';
-import AstRawString from '../ast/AstRawString';
-import FuncNameInferrer from './FuncNameInferrer';
-import Location from '../scanner/Location';
+import { DeclarationParsingResult, Declaration } from './DeclarationParsingResult';
+import AstValueFactory from '../ast/AstValueFactory';
+import Location from '../base/Location';
 
 import { VariableDeclarationParsingScope } from './ExpressionScope';
 import Scope from './Scope';
@@ -48,81 +47,12 @@ const kCreatedInitialized = 1;
 const kSloppyModeBlockScopedFunctionRedefinition = 22;
 const kUseCounterFeatureCount = 76;
 
-/**
- * 源码中的impl 作为模板参数传入ParseBase 同时也继承于该类
- * class Parser : public ParserBase<Parser>
- * Parser、ParserBase基本上是一个类
- */
-class Parser extends ParserBase {
-  constructor() {
-    this.fni_ = new FuncNameInferrer();
-    this.use_counts_ = new Array(kUseCounterFeatureCount).fill(0);
-  }
-  // 源码返回一个空指针
-  NullExpression() {
-    return new Expression();
-  }
-  /**
-   * 返回一个变量代理 继承于Expression类
-   * @returns {VariableProxy}
-   */
-  ExpressionFromIdentifier(name, start_position, infer = kYes) {
-    // 这个fni_暂时不知道干啥的
-    if(infer === kYes) {
-      this.fni_.PushVariableName(name);
-    }
-    // 在当前的作用域下生成一个新的变量
-    return this.expression_scope_.NewVariable(name, start_position);
-  }
-  DeclareIdentifier(name, start_position) {
-    return this.expression_scope_.Declare(name, start_position);
-  }
-  DeclareVariable(name, kind, mode, init, scope, was_added, begin, end = kNoSourcePosition) {
-    let declaration;
-    // var声明的变量需要提升
-    if(mode === kVar && !scope.is_declaration_scope()) {
-      declaration = this.ast_node_factory_.NewNestedVariableDeclaration(scope, begin);
-    }
-    /**
-     * let、const 声明
-     * 这里才是返回一个VariableDeclaration实例
-     * 即new VariableDeclaration(begin)
-     */
-    else {
-      declaration = this.ast_node_factory_.NewVariableDeclaration(begin);
-    }
-    this.Declare(declaration, name, kind, mode, init. scope, was_added. begin, end);
-    return declaration.var();
-  }
-  Declare(declaration, name, variable_kind, mode, init, scope, was_added, var_begin_pos, var_end_pos) {
-    // 这两个参数作为引用传入方法 JS只能用这个操作了
-    // bool local_ok = true;
-    // bool sloppy_mode_block_scope_function_redefinition = false;
-    // 普通模式下 在作用域内容重定义
-    let { local_ok, sloppy_mode_block_scope_function_redefinition } = scope.DeclareVariable(
-      declaration, name, var_begin_pos, mode, variable_kind, init, was_added,
-      false, true);
-    // 下面代码大部分情况不会走
-    if(!local_ok) {
-      // 标记错误地点 end未传入时仅仅高亮start一个字符
-      let loc = new Location(var_begin_pos, var_end_pos !== kNoSourcePosition ? var_end_pos : var_begin_pos + 1);
-      if(variable_kind === PARAMETER_VARIABLE) throw new Error(loc, kParamDupe);
-      else throw new Error(loc, kVarRedeclaration);
-    }
-    // 重定义计数
-    else if(sloppy_mode_block_scope_function_redefinition) {
-      ++this.use_counts_[kSloppyModeBlockScopedFunctionRedefinition];
-    }
-  }
-}
-
-export default class ParserBase {
+class ParserBase {
   constructor(scanner) {
-    scanner.Initialize();
+    // scanner.Initialize();
     this.scanner = scanner;
     this.ast_value_factory_ = new AstValueFactory();
     this.ast_node_factory_ = new AstNodeFactory();
-    this.parser =  new Parser();
     this.scope_ = new Scope();
     this.fni_ = new FuncNameInferrer();
     this.expression_scope_ = null;
@@ -148,7 +78,7 @@ export default class ParserBase {
     return this.scanner.location().beg_pos;
   }
   peek_position() {
-    return this.scanner.peek_position().beg_pos;
+    return this.scanner.peek_location().beg_pos;
   }
   end_position() {
     return this.scanner.location().end_pos;
@@ -159,7 +89,7 @@ export default class ParserBase {
   }
   Check(token) {
     let next = this.scanner.peek();
-    if(next === token) {
+    if (next === token) {
       this.Consume(next);
       return true;
     }
@@ -173,7 +103,7 @@ export default class ParserBase {
   ParseStatementListItem() {
     switch(this.peek()) {
       case 'Token::LET':
-        if(this.IsNextLetKeyword()) {
+        if (this.IsNextLetKeyword()) {
           return this.ParseVariableStatement(kStatementListItem, null);
         }
         break;
@@ -207,7 +137,7 @@ export default class ParserBase {
       case 'Token::ASYNC':
         return true;
       case 'Token::FUTURE_STRICT_RESERVED_WORD':
-        return is_sloppy(language_mode());
+        // return is_sloppy(language_mode());
       default:
         return false;
     }
@@ -215,7 +145,7 @@ export default class ParserBase {
   ParseVariableStatement(var_context, names) {
     let parsing_result = new DeclarationParsingResult();
     this.ParseVariableDeclarations(var_context, parsing_result, names);
-    this.ExpectSemicolon();
+    // this.ExpectSemicolon();
   }
   ParseVariableDeclarations(var_context, parsing_result, names) {
     parsing_result.descriptor.kind = NORMAL_VARIABLE;
@@ -247,9 +177,9 @@ export default class ParserBase {
      * 源码中该变量类型是 ZonePtrList<const AstRawString>* names
      * 由于传进来是一个nullptr 这里手动重置为数组
      */
-    if(!names) names = [];
+    if (!names) names = [];
     // 这一步的目的是设置scope参数
-    this.expression_scope_ = new VariableDeclarationParsingScope(this.parser_, parsing_result.descriptor.mode, names);
+    this.expression_scope_ = new VariableDeclarationParsingScope(this, parsing_result.descriptor.mode, names);
     // 获取合适的作用域
     let target_scope = IsLexicalVariableMode(parsing_result.descriptor.mode) ? this.scope_ : this.scope_.GetDeclarationScope();
     // TODO
@@ -269,7 +199,7 @@ export default class ParserBase {
       // 抽象语法树节点 => Expression*
       let pattern = null;
       // 检查下一个token是否是标识符
-      if(IsAnyIdentifier(this.peek())) {
+      if (IsAnyIdentifier(this.peek())) {
         /**
          * 解析变量名字符串
          * 这里调用了Next 会对sanner的游标进行调证
@@ -278,7 +208,7 @@ export default class ParserBase {
          */
         name = this.ParseAndClassifyIdentifier(this.Next());
         // 检查下一个token是否是赋值运算符
-        if(this.peek() === 'Token::ASSIGN' || 
+        if (this.peek() === 'Token::ASSIGN' || 
         // for in、for of
         (var_context === kForStatement && this.PeekInOrOf()) ||
         parsing_result.descriptor.mode === kLet) {
@@ -302,15 +232,15 @@ export default class ParserBase {
            * (4)var类型的声明会向上一直搜索is_declaration_scope_为1的作用域
            * (5)生成Variable后 const声明会被标记必须被立即赋值
            */
-          pattern = this.parser.ExpressionFromIdentifier(name, decl_pos);
+          pattern = this.ExpressionFromIdentifier(name, decl_pos);
         } else {
           // 声明未定义的语句 let a;
-          this.parser.DeclareIdentifier(name, decl_pos);
+          this.DeclareIdentifier(name, decl_pos);
           pattern = this.NullExpression();
         }
       } else {
         // 声明未定义的语句
-        name = this.parser.NullIdentifier();
+        name = this.NullIdentifier();
         pattern = this.ParseBindingPattern();
       }
 
@@ -322,7 +252,7 @@ export default class ParserBase {
        * 这里的Check调用了Scanner.Next()方法
        * [IDENTIFIER, ASSIGN, null] => [ASSIGN, SMI, null]
        */
-      if(this.Check('Token::ASSIGN')) {
+      if (this.Check('Token::ASSIGN')) {
         {
           value_beg_pos = this.peek_position();
           /**
@@ -350,14 +280,13 @@ export default class ParserBase {
       else {}
 
       let initializer_position = this.end_position();
-      // TODO
+      // 当成简单的遍历
       let declaration_end = target_scope.declarations().end();
-      for(;declaration_it !== declaration_end;++declaration_it) {
+      for(;declaration_it !== declaration_end;declaration_it = declaration_it.next_) {
         declaration_it.var().set_initializer_position(initializer_position);
       }
 
-      // TODO
-      let decl = new DeclarationParsingResult(pattern, value);
+      let decl = new Declaration(pattern, value);
       decl.value_beg_pos = value_beg_pos;
 
       parsing_result.declarations.push(decl);
@@ -366,7 +295,7 @@ export default class ParserBase {
     parsing_result.bindings_loc = new Location(bindings_start, this.end_position());
   }
   ParseAndClassifyIdentifier(next) {
-    if(IsAnyIdentifier(next, 'IDENTIFIER', 'ASYNC')) {
+    if (IsAnyIdentifier(next, 'IDENTIFIER', 'ASYNC')) {
       let name = this.GetIdentifier();
       return name;
     }
@@ -386,4 +315,73 @@ export default class ParserBase {
   // NewRawVariable(name, pos) {
   //   return this.ast_node_factory_.NewVariableProxy(name, NORMAL_VARIABLE, pos);
   // }
+}
+
+/**
+ * 源码中的impl 作为模板参数传入ParseBase 同时也继承于该类
+ * class Parser : public ParserBase<Parser>
+ * Parser、ParserBase基本上是一个类
+ */
+export default class Parser extends ParserBase {
+  constructor(scanner) {
+    super(scanner);
+    this.fni_ = new FuncNameInferrer();
+    this.use_counts_ = new Array(kUseCounterFeatureCount).fill(0);
+  }
+  // 源码返回一个空指针
+  NullExpression() {
+    return new Expression();
+  }
+  /**
+   * 返回一个变量代理 继承于Expression类
+   * @returns {VariableProxy}
+   */
+  ExpressionFromIdentifier(name, start_position, infer = kYes) {
+    // 这个fni_暂时不知道干啥的
+    if (infer === kYes) {
+      this.fni_.PushVariableName(name);
+    }
+    // 在当前的作用域下生成一个新的变量
+    return this.expression_scope_.NewVariable(name, start_position);
+  }
+  DeclareIdentifier(name, start_position) {
+    return this.expression_scope_.Declare(name, start_position);
+  }
+  DeclareVariable(name, kind, mode, init, scope, was_added, begin, end = kNoSourcePosition) {
+    let declaration;
+    // var声明的变量需要提升
+    if (mode === kVar && !scope.is_declaration_scope()) {
+      declaration = this.ast_node_factory_.NewNestedVariableDeclaration(scope, begin);
+    }
+    /**
+     * let、const 声明
+     * 这里才是返回一个VariableDeclaration实例
+     * 即new VariableDeclaration(begin)
+     */
+    else {
+      declaration = this.ast_node_factory_.NewVariableDeclaration(begin);
+    }
+    this.Declare(declaration, name, kind, mode, init. scope, was_added. begin, end);
+    return declaration.var();
+  }
+  Declare(declaration, name, variable_kind, mode, init, scope, was_added, var_begin_pos, var_end_pos) {
+    // 这两个参数作为引用传入方法 JS只能用这个操作了
+    // bool local_ok = true;
+    // bool sloppy_mode_block_scope_function_redefinition = false;
+    // 普通模式下 在作用域内容重定义
+    let { local_ok, sloppy_mode_block_scope_function_redefinition } = scope.DeclareVariable(
+      declaration, name, var_begin_pos, mode, variable_kind, init, was_added,
+      false, true);
+    // 下面代码大部分情况不会走
+    if (!local_ok) {
+      // 标记错误地点 end未传入时仅仅高亮start一个字符
+      let loc = new Location(var_begin_pos, var_end_pos !== kNoSourcePosition ? var_end_pos : var_begin_pos + 1);
+      if (variable_kind === PARAMETER_VARIABLE) throw new Error(loc, kParamDupe);
+      else throw new Error(loc, kVarRedeclaration);
+    }
+    // 重定义计数
+    else if (sloppy_mode_block_scope_function_redefinition) {
+      ++this.use_counts_[kSloppyModeBlockScopedFunctionRedefinition];
+    }
+  }
 }

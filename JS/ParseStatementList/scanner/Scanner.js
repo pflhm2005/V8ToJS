@@ -13,7 +13,7 @@ import {
   DECIMAL,
   DECIMAL_WITH_LEADING_ZERO,
   kCharacterLookaheadBufferSize,
-} from './Const';
+} from '../base/Const';
 
 import {
   TerminatesLiteral,
@@ -33,14 +33,14 @@ import {
   IsDecimalNumberKind,
   IsValidBigIntKind,
   IsWhiteSpaceOrLineTerminator,
-} from './Util';
+} from '../base/Util';
 
 import {
   kStrictDecimalWithLeadingZero,
   kZeroDigitNumericSeparator,
   kContinuousNumericSeparator,
   kTrailingNumericSeparator,
-} from './MessageTemplate';
+} from '../base/MessageTemplate';
 
 /**
  * v8新特性
@@ -94,7 +94,7 @@ export default class Scanner {
      */
     let previous = this.current_;
     this.current_ = this.next_;
-    if(this.next_next().token === 'Token::UNINITIALIZED') {
+    if (this.next_next().token === 'Token::UNINITIALIZED') {
       this.next_ = previous;
       previous.after_line_terminator = false;
       this.Scan(previous);
@@ -124,9 +124,9 @@ export default class Scanner {
    * next_保持不变、将下一个token解析到next_next_上 
    */
   PeekAhead() {
-    if(this.next_next().token !== 'Token::UNINITIALIZED') return this.next_next().token;
+    if (this.next_next().token !== 'Token::UNINITIALIZED') return this.next_next().token;
     let temp = this.next_;
-    this.next = this.next_next_;
+    this.next_ = this.next_next_;
     this.next().after_line_terminator = false;
     this.Scan();
     this.next_next_ = this.next_;
@@ -170,7 +170,7 @@ export default class Scanner {
     let token = null;
     do {
       this.next().location.beg_pos = this.source_pos();
-      if(this.c0_ < kMaxAscii) {
+      if (this.c0_ < kMaxAscii) {
         token = UnicodeToToken[this.c0_];
 
         switch(token) {
@@ -209,8 +209,8 @@ export default class Scanner {
   UNREACHABLE() { throw new Error('unreachable code'); }
   Select(...args) {
     this.Advance();
-    if(args.length === 1) return args[0];
-    else if(UnicodeToAsciiMapping[this.c0_] === args[0]) {
+    if (args.length === 1) return args[0];
+    else if (UnicodeToAsciiMapping[this.c0_] === args[0]) {
       this.Advance();
       return args[1];
     }
@@ -222,12 +222,12 @@ export default class Scanner {
   SkipWhiteSpace() {
     let start_position = this.source_pos();
     while(IsWhiteSpaceOrLineTerminator(this.c0_)) {
-      if(!this.next().after_line_terminator) {
+      if (!this.next().after_line_terminator) {
         this.next().after_line_terminator = true;
       }
       this.Advance();
     }
-    if(this.source_pos() === start_position) return 'Token::ILLEGAL';
+    if (this.source_pos() === start_position) return 'Token::ILLEGAL';
 
     return 'Token::WHITESPACE';
   }
@@ -242,95 +242,95 @@ export default class Scanner {
     let as_start = !seen_period;
     let start_pos = this.source_pos();
     // 处理简写
-    if(seen_period) {
+    if (seen_period) {
       this.AddLiteralChar('.');
-      if(allow_harmony_numeric_separator() && this.c0_ === '_') return 'TOKEN:ILLEGAL';
-      if(!this.ScanDecimalDigits()) return 'TOKEN:ILLEGAL';
+      if (allow_harmony_numeric_separator() && this.c0_ === '_') return 'TOKEN:ILLEGAL';
+      if (!this.ScanDecimalDigits()) return 'TOKEN:ILLEGAL';
     } else {
       /**
        * 共有数字0、0exxx、0Exxx、0.xxx、二进制、十六进制、八进制、0开头的十进制、隐式八进制九种情况
        */
-      if(UnicodeToAsciiMapping[this.c0_] === '0') {
+      if (UnicodeToAsciiMapping[this.c0_] === '0') {
         this.AddLiteralCharAdvance();
 
-        if(AsciiAlphaToLower(this.c0_) === 'x') {
+        if (AsciiAlphaToLower(this.c0_) === 'x') {
           this.AddLiteralCharAdvance();
           kind = HEX;
-          if(!this.ScanHexDigits()) return 'TOKEN:ILLEGAL';
-        } else if(AsciiAlphaToLower(this.c0_) === 'o') {
+          if (!this.ScanHexDigits()) return 'TOKEN:ILLEGAL';
+        } else if (AsciiAlphaToLower(this.c0_) === 'o') {
           this.AddLiteralCharAdvance();
           kind = OCTAL;
-          if(!this.ScanOctalDigits()) return 'Token::ILLEGAL';
-        } else if(AsciiAlphaToLower(this.c0_) === 'b') {
+          if (!this.ScanOctalDigits()) return 'Token::ILLEGAL';
+        } else if (AsciiAlphaToLower(this.c0_) === 'b') {
           this.AddLiteralCharAdvance();
           kind = BINARY;
-          if(!this.ScanBinaryDigits()) return 'Token::ILLEGAL';
-        } else if(IsOctalDigit(this.c0_)) {
+          if (!this.ScanBinaryDigits()) return 'Token::ILLEGAL';
+        } else if (IsOctalDigit(this.c0_)) {
           kind = IMPLICIT_OCTAL;
           // 这里的第二个参数kind是作为引用传入 JS没这个东西 只能改一下返回值
-          if(!(kind = this.ScanImplicitOctalDigits(start_pos, kind))) return 'Token::ILLEGAL';
-          if(kind === DECIMAL_WITH_LEADING_ZERO) as_start = false;
-        } else if(IsNonOctalDecimalDigit(this.c0_)) {
+          if (!(kind = this.ScanImplicitOctalDigits(start_pos, kind))) return 'Token::ILLEGAL';
+          if (kind === DECIMAL_WITH_LEADING_ZERO) as_start = false;
+        } else if (IsNonOctalDecimalDigit(this.c0_)) {
           kind = DECIMAL_WITH_LEADING_ZERO;
-        } else if(allow_harmony_numeric_separator() && UnicodeToAsciiMapping[this.c0_] === '_') {
+        } else if (allow_harmony_numeric_separator() && UnicodeToAsciiMapping[this.c0_] === '_') {
           ReportScannerError(Location(source_pos(), source_pos() + 1), kZeroDigitNumericSeparator);
           return 'Token::ILLEGAL';
         }
       }
 
       // 到这里代表是普通的十进制数字
-      if(IsDecimalNumberKind(kind)) {
+      if (IsDecimalNumberKind(kind)) {
         // 如果是0开头的十进制数字 则不会进入这里
-        if(as_start) {
+        if (as_start) {
           let value = 0;
           /**
            * 这里value同样作为引用传入 JS没有引用修改了返回值
            * 由于0同样是假值 这里以null为非法标记
            */
-          if((value = this.ScanDecimalAsSmi(value)) === null) return 'Token::ILLEGAL';
-          if(this.next().literal_chars.one_byte_literal().length <= 10
+          if ((value = this.ScanDecimalAsSmi(value)) === null) return 'Token::ILLEGAL';
+          if (this.next().literal_chars.one_byte_literal().length <= 10
             && value <= Smi_kMaxValue
             && this.c0_ !== '.'
             && !IsIdentifierStart(this.c0_)) {
             this.next().smi_value = value;
 
-            if(kind === DECIMAL_WITH_LEADING_ZERO) {
+            if (kind === DECIMAL_WITH_LEADING_ZERO) {
               this.octal_pos_ = new Location(start_pos, this.source_pos());
               this.octal_message_ = kStrictDecimalWithLeadingZero;
             }
             return 'Token::SMI';
           }
         }
-        if(!this.ScanDecimalDigits()) return 'Token::ILLEGAL';
-        if(UnicodeToAsciiMapping[this.c0_] === '.') {
+        if (!this.ScanDecimalDigits()) return 'Token::ILLEGAL';
+        if (UnicodeToAsciiMapping[this.c0_] === '.') {
           seen_period = true;
           this.AddLiteralCharAdvance();
-          if(allow_harmony_numeric_separator() && UnicodeToAsciiMapping[this.c0_] === '_') return 'Token::ILLEGAL';
-          if(!this.ScanDecimalDigits()) return 'Token::ILLEGAL';
+          if (allow_harmony_numeric_separator() && UnicodeToAsciiMapping[this.c0_] === '_') return 'Token::ILLEGAL';
+          if (!this.ScanDecimalDigits()) return 'Token::ILLEGAL';
         }
       }
     }
     // 大整数判断
     let is_bigint = false;
-    if(UnicodeToAsciiMapping[this.c0_] === 'n' && !seen_period && IsValidBigIntKind(kind)) {
+    if (UnicodeToAsciiMapping[this.c0_] === 'n' && !seen_period && IsValidBigIntKind(kind)) {
       // 这里根据长度快速判断大整数合法性
       const kMaxBigIntCharacters = BigInt_kMaxLengthBits / 4;
       let length = this.source_pos() - this.start_pos - (kind != DECIMAL ? 2 : 0);
-      if(length > kMaxBigIntCharacters) return 'Token::ILLEGAL';
+      if (length > kMaxBigIntCharacters) return 'Token::ILLEGAL';
 
       is_bigint = true;
       this.Advance();
     }
     // 处理指数
-    else if(AsciiAlphaToLower(this.c0_) === 'e') {
-      if(!IsDecimalNumberKind(kind)) return 'Token::ILLEGAL';
+    else if (AsciiAlphaToLower(this.c0_) === 'e') {
+      if (!IsDecimalNumberKind(kind)) return 'Token::ILLEGAL';
       this.AddLiteralCharAdvance();
-      if(!this.ScanSignedInteger()) return 'Token::ILLEGAL';
+      if (!this.ScanSignedInteger()) return 'Token::ILLEGAL';
     }
 
     // ...
 
-    if(kind === DECIMAL_WITH_LEADING_ZERO) {
+    if (kind === DECIMAL_WITH_LEADING_ZERO) {
       this.octal_pos_ = new Location(start_pos, this.source_pos());
       this.octal_message_ = kStrictDecimalWithLeadingZero
     }
@@ -342,14 +342,14 @@ export default class Scanner {
    * 第二个参数标记是否需要检验第一个数字
    */
   ScanDigitsWithNumericSeparators(predicate, is_check_first_digit) {
-    if(is_check_first_digit && !predicate(this.c0_)) return false;
+    if (is_check_first_digit && !predicate(this.c0_)) return false;
 
     let separator_seen = false;
     while(predicate(this.c0_)|| UnicodeToAsciiMapping[this.c0_] === '_') {
-      if(UnicodeToAsciiMapping[this.c0_] === '_') {
+      if (UnicodeToAsciiMapping[this.c0_] === '_') {
         this.Advance();
         // 连续两个下划线是不合法的
-        if(UnicodeToAsciiMapping[this.c0_] === '_') {
+        if (UnicodeToAsciiMapping[this.c0_] === '_') {
           ReportScannerError(new Location(source_pos(), source_pos() + 1), kContinuousNumericSeparator);
           return false;
         }
@@ -360,7 +360,7 @@ export default class Scanner {
       this.AddLiteralCharAdvance();
     }
     // 数字不能以下划线结尾
-    if(separator_seen) {
+    if (separator_seen) {
       ReportScannerError(new Location(source_pos(), source_pos() + 1), kTrailingNumericSeparator);
       return false;
     }
@@ -372,40 +372,40 @@ export default class Scanner {
    * 基本上都是走同一个方法
    */
   ScanDecimalDigits() {
-    if(allow_harmony_numeric_separator()) return this.ScanDigitsWithNumericSeparators(IsDecimalDigit, false);
+    if (allow_harmony_numeric_separator()) return this.ScanDigitsWithNumericSeparators(IsDecimalDigit, false);
     while(IsDecimalDigit(this.c0_)) this.AddLiteralCharAdvance();
     return true;
   }
   ScanHexDigits() {
-    if(allow_harmony_numeric_separator()) return this.ScanDigitsWithNumericSeparators(IsHexDigit, true);
+    if (allow_harmony_numeric_separator()) return this.ScanDigitsWithNumericSeparators(IsHexDigit, true);
     // 0x后面至少需要有一个数字
-    if(!IsHexDigit(this.c0_)) return false;
+    if (!IsHexDigit(this.c0_)) return false;
     while(IsHexDigit(this.c0_)) this.AddLiteralCharAdvance();
     return true;
   }
   ScanOctalDigits() {
-    if(allow_harmony_numeric_separator()) return this.ScanDigitsWithNumericSeparators(IsOctalDigit, true);
+    if (allow_harmony_numeric_separator()) return this.ScanDigitsWithNumericSeparators(IsOctalDigit, true);
     // 0o后面至少需要有一个数字
-    if(!IsOctalDigit(this.c0_)) return false;
+    if (!IsOctalDigit(this.c0_)) return false;
     while(IsOctalDigit(this.c0_)) this.AddLiteralCharAdvance();
     return true;
   }
   ScanBinaryDigits() {
-    if(allow_harmony_numeric_separator()) return this.ScanDigitsWithNumericSeparators(IsBinaryDigit, true);
+    if (allow_harmony_numeric_separator()) return this.ScanDigitsWithNumericSeparators(IsBinaryDigit, true);
     // 0b后面至少需要有一个数字
-    if(!IsBinaryDigit(this.c0_)) return false;
+    if (!IsBinaryDigit(this.c0_)) return false;
     while(IsBinaryDigit(this.c0_)) this.AddLiteralCharAdvance();
     return true;
   }
   ScanImplicitOctalDigits(start_pos, kind) {
     kind = IMPLICIT_OCTAL;
     while(true) {
-      if(IsNonOctalDecimalDigit(this.c0_)) {
+      if (IsNonOctalDecimalDigit(this.c0_)) {
         kind = DECIMAL_WITH_LEADING_ZERO;
         // 应该返回true
         return DECIMAL_WITH_LEADING_ZERO;
       }
-      if(!IsOctalDigit(this.c0_)) {
+      if (!IsOctalDigit(this.c0_)) {
         this.octal_pos_ = new Location(start_pos, this.source_pos());
         // this.octal_message_ = kStrictOctalLiteral;
         // 应该返回true
@@ -415,7 +415,7 @@ export default class Scanner {
     }
   }
   ScanDecimalAsSmi(value) {
-    if(allow_harmony_numeric_separator()) return this.ScanDecimalAsSmiWithNumericSeparators(value);
+    if (allow_harmony_numeric_separator()) return this.ScanDecimalAsSmiWithNumericSeparators(value);
     while(IsDecimalDigit(this.c0_)) {
       value = 10 * value + (String.fromCharCode(this.c0_) - '0');
       let first_char = this.c0_;
@@ -428,9 +428,9 @@ export default class Scanner {
   ScanDecimalAsSmiWithNumericSeparators(value) {
     let separator_seen = false;
     while(IsDecimalDigit(this.c0_) || UnicodeToAsciiMapping[this.c0_] === '_') {
-      if(UnicodeToAsciiMapping[this.c0_] === '_') {
+      if (UnicodeToAsciiMapping[this.c0_] === '_') {
         this.Advance();
-        if(UnicodeToAsciiMapping[this.c0_] === '_') {
+        if (UnicodeToAsciiMapping[this.c0_] === '_') {
           ReportScannerError(new Location(source_pos(), source_pos() + 1), kContinuousNumericSeparator);
           return null;
         }
@@ -443,7 +443,7 @@ export default class Scanner {
       this.Advance();
       this.AddLiteralChar(first_char);
     }
-    if(separator_seen) {
+    if (separator_seen) {
       ReportScannerError(new Location(source_pos(), source_pos() + 1), kTrailingNumericSeparator);
       return null;
     }
@@ -451,8 +451,8 @@ export default class Scanner {
   }
   // 处理指数
   ScanSignedInteger() {
-    if(UnicodeToAsciiMapping[this.c0_] === '+' || UnicodeToAsciiMapping[this.c0_] === '-') this.AddLiteralCharAdvance();
-    if(!IsDecimalDigit(this.c0_)) return false;
+    if (UnicodeToAsciiMapping[this.c0_] === '+' || UnicodeToAsciiMapping[this.c0_] === '-') this.AddLiteralCharAdvance();
+    if (!IsDecimalDigit(this.c0_)) return false;
     return this.ScanDecimalDigits();
   }
   /**
@@ -470,16 +470,16 @@ export default class Scanner {
      */
     let escaped = false;
     let can_be_keyword = true;
-    if(this.c0_ < kMaxAscii) {
+    if (this.c0_ < kMaxAscii) {
       // 转义字符以'\'字符开头
-      if(this.c0_ !== '\\') {
+      if (this.c0_ !== '\\') {
         let scan_flags = character_scan_flags[this.c0_];
         // 这个地方比较迷 没看懂
         scan_flags >>= 1;
         this.AddLiteralChar(this.c0_);
         this.AdvanceUntil((c0) => {
           // 当某个字符的Ascii值大于127 进入慢解析
-          if(c0 > kMaxAscii) {
+          if (c0 > kMaxAscii) {
             scan_flags |= kIdentifierNeedsSlowPath;
             return true;
           }
@@ -487,7 +487,7 @@ export default class Scanner {
           let char_flags = character_scan_flags[c0];
           scan_flags |= char_flags;
           // 用bitmap判断是否结束
-          if(TerminatesLiteral(char_flags)) {
+          if (TerminatesLiteral(char_flags)) {
             return true;
           } else {
             this.AddLiteralChar(c0);
@@ -495,8 +495,8 @@ export default class Scanner {
           }
         });
         // 基本上都是进这里
-        if(!IdentifierNeedsSlowPath(scan_flags)) {
-          if(!CanBeKeyword(scan_flags)) return 'Token::IDENTIFIER';
+        if (!IdentifierNeedsSlowPath(scan_flags)) {
+          if (!CanBeKeyword(scan_flags)) return 'Token::IDENTIFIER';
           // 源码返回一个新的vector容器 这里简单处理成一个字符串
           let str = this.next().literal_chars.one_byte_literal();
           return this.KeywordOrIdentifierToken(str, str.length);
@@ -506,7 +506,7 @@ export default class Scanner {
         escaped = true;
         // let c = this.ScanIdentifierUnicodeEscape();
         // 合法变量以大小写字母_开头
-        // if(c === '\\' || !IsIdentifierStart(c)) return 'Token::ILLEGAL';
+        // if (c === '\\' || !IsIdentifierStart(c)) return 'Token::ILLEGAL';
         // this.AddLiteralChar(c);
         // can_be_keyword = CharCanBeKeyword(c);
       }
@@ -534,7 +534,7 @@ export default class Scanner {
          * uint8_t char_flags = character_scan_flags[c0];
          * if (MayTerminateString(char_flags)) return true;
          */
-        if(["\'", "\""].includes(UnicodeToAsciiMapping[c0])) return true;
+        if (["\'", "\""].includes(UnicodeToAsciiMapping[c0])) return true;
         this.AddLiteralChar(c0);
         return false;
       });
@@ -560,7 +560,7 @@ export default class Scanner {
    * 处理标识符
    */
   CurrentSymbol(ast_value_factory) {
-    if(this.is_literal_one_byte()) {
+    if (this.is_literal_one_byte()) {
       return ast_value_factory.GetOneByteString(this.literal_one_byte_string());
     }
   }

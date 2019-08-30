@@ -23,10 +23,6 @@ class AstNode {
   encode() {}
 }
 
-export class Declaration extends AstNode {
-  
-}
-
 class Declaration extends AstNode {
   constructor(pos, type) {
     super(pos, type);
@@ -35,6 +31,10 @@ class Declaration extends AstNode {
   }
   var() { return this.var_; }
   set_var(v) { this.var_ = v; }
+
+  // Declarations list threaded through the declarations.
+  // Declaration** next() { return &next_; }
+  // Declaration* next_;
 }
 
 class VariableDeclaration extends Declaration {
@@ -62,6 +62,7 @@ const kCreatedInitialized = 1;
 class ZoneObject {}
 export class Variable extends ZoneObject {
   constructor(scope, name, mode, kind, initialization_flag, maybe_assigned_flag = kNotAssigned) {
+    super();
     this.scope_ = scope;
     this.name_ = name;
     this.local_if_not_shadowed_ = false;
@@ -94,7 +95,7 @@ export class VariableProxy extends Expression {
     this.set_var(variable);
     this.set_is_resolved();
     variable.set_is_used();
-    if(this.is_assigned()) variable.set_maybe_assigned();
+    if (this.is_assigned()) variable.set_maybe_assigned();
   }
 }
 

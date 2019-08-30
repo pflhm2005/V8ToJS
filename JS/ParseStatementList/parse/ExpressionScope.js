@@ -3,26 +3,23 @@ import { Variable } from '../ast/Ast';
 import {
   kLastLexicalVariableMode,
 
-  kVarDeclaration,
-  kLexicalDeclaration,
-
   kExpression,
   kMaybeArrowParameterDeclaration,
   kMaybeAsyncArrowParameterDeclaration,
   kParameterDeclaration,
   kVarDeclaration,
   kLexicalDeclaration,
-} from './Const';
+} from '../base/Const';
 
 import {
   IsLexicalVariableMode,
   IsInRange,
-} from './Util';
+} from '../base/Util';
 
 import {
   kTooManyVariables,
   kLetInLexicalBinding,
-} from './MessageTemplate';
+} from '../base/MessageTemplate';
 
 const kNoSourcePosition = -1;
 
@@ -31,7 +28,7 @@ const kMaxNumFunctionLocals = (1 << 23) - 1;
 class ExpressionScope {
   constructor(parser, type) {
     this.parser_ = parser;
-    this.parent_ = parser_.expression_scope_;
+    this.parent_ = parser.expression_scope_;
     this.type_ = type;
   }
   CanBeParameterDeclaration() {
@@ -68,7 +65,7 @@ class ExpressionScope {
      * 当右值是复杂表达式时 需要进行完整的解析 例如let a = (1 + 1);
      * 所以这里先将声明部分放入待完成容器中
      */
-    if(this.CanBeExpression()) {
+    if (this.CanBeExpression()) {
       new ExpressionParsingScope().TrackVariable(result);
     }
     // 简单的单值赋值语句
@@ -80,7 +77,7 @@ class ExpressionScope {
        */
       let variable = this.Declare(name, pos);
       // var声明语句
-      if(this.IsVarDeclaration() && !this.parser_.scope_.is_declaration_scope()) {
+      if (this.IsVarDeclaration() && !this.parser_.scope_.is_declaration_scope()) {
         this.parser_.scope_.AddUnresolved(result);
       } else {
         result.BindTo(variable);
@@ -94,7 +91,7 @@ class ExpressionScope {
    * 即let a = 1、function fn(a = 1) {}
    */
   Declare(name, pos = kNoSourcePosition) {
-    if(this.type_ === kParameterDeclaration) {
+    if (this.type_ === kParameterDeclaration) {
       return new ParameterDeclarationParsingScope(this.parser_).Declare(name, pos);
     }
     return new VariableDeclarationParsingScope(this.parser_, this.mode_, this.names_).Declare(name, pos);
@@ -107,7 +104,7 @@ class ExpressionParsingScope extends ExpressionScope {
     this.variable_list_ = [];
   }
   TrackVariable(variable) {
-    if(!this.CanBeDeclaration()) {
+    if (!this.CanBeDeclaration()) {
       this.parser_.scope_.AddUnresolved(variable);
     }
   }
@@ -131,17 +128,17 @@ export class VariableDeclarationParsingScope extends ExpressionScope {
     let variable = this.parser_.DeclareVariable(name, kind, this.mode_, 
       Variable.DefaultInitializationFlag(this.mode_), this.parser_.scope_, was_added, pos);
 
-    if(this.names_) this.names_.Add(name, this.parser_.zone());
+    if (this.names_) this.names_.Add(name, this.parser_.zone());
     /**
      * 一个作用域最多可声明2^23 - 1个变量
      * 下面的代码可以不用关心 全是错误处理
      */
-    if(this.was_added && this.parser_.scope_.num_var() > kMaxNumFunctionLocals) {
+    if (this.was_added && this.parser_.scope_.num_var() > kMaxNumFunctionLocals) {
       throw new Error(kTooManyVariables);
     }
-    if(this.IsLexicalDeclaration()) {
+    if (this.IsLexicalDeclaration()) {
       // 所有关键词的字符串已经在map表中 直接做对比
-      if(this.parser_.IsLet(name)) {
+      if (this.parser_.IsLet(name)) {
         throw new Error(kLetInLexicalBinding);
       }
     } else {}
