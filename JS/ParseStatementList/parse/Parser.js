@@ -232,7 +232,7 @@ class ParserBase {
       // 检查下一个token是否是标识符
       if (IsAnyIdentifier(this.peek())) {
         /**
-         * 解析变量名 总体流程如下
+         * 解析变量名并返回一个字符串对象 总体流程如下
          * 1、区分单字节字符串与双字符串 目前只考虑ascii码小于128的单字节
          * 2、确定类型后 由AstValueFactory类统一处理字符串实例的生成
          * 3、根据字符串的特征计算Hash值 有如下四种情况
@@ -285,7 +285,7 @@ class ParserBase {
       }
       /**
        * let后面不一定必须跟标识符
-       * let { a, b } = object也是合法的
+       * let [] a, b ] = [1, 2]也是合法的
        */ 
       else {
         name = this.NullIdentifier();
