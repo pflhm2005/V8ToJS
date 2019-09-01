@@ -1,4 +1,5 @@
 import {
+  keywords,
   TokenEnumList,
 
   kTerminatesLiteral,
@@ -20,99 +21,10 @@ import {
   DECIMAL_WITH_LEADING_ZERO,
 
   kLastLexicalVariableMode,
-} from './Const';
 
-/**
- * 关键词表 也包括一些保留关键词(还有一些特殊情况下有意义的字符)
- * 其中key代表首字符 值分别为关键词字符以及枚举类型
- * 有时候觉得宏就是个灾难 有时候觉得真香
- */
-const keywords = {
-  a: [
-    { value: 'async', type: 'Token::ASYNC' },
-    { value: 'await', type: 'Token::AWAIT' },
-  ],
-  b: [
-    { value: 'break', type: 'Token::BREAK' },
-    { value: 'case', type: 'Token::CASE' },
-  ],
-  c: [
-    { value: 'case', type: 'Token::CASE' },
-    { value: 'catch', type: 'Token::CATCH' },
-    { value: 'class', type: 'Token::CLASS' },
-    { value: 'const', type: 'Token::CONST' },
-    { value: 'continue', type: 'Token::CONTINUE' },
-  ],
-  d: [
-    { value: 'debugger', type: 'Token::DEBUGGER' },
-    { value: 'default', type: 'Token::DEFAULT' },
-    { value: 'delete', type: 'Token::DELETE' },
-    { value: 'do', type: 'Token::DO' },
-  ],
-  e: [
-    { value: 'else', type: 'Token::ELSE' },
-    { value: 'enum', type: 'Token::ENUM' },
-    { value: 'export', type: 'Token::EXPORT' },
-    { value: 'extends', type: 'Token::EXTENDS' },
-  ],
-  f: [
-    { value: 'false', type: 'Token::FALSE_LITERAL' },
-    { value: 'finally', type: 'Token::FINALLY' },
-    { value: 'for', type: 'Token::FOR' },
-    { value: 'function', type: 'Token::FUNCTION' },
-  ],
-  g: [
-    { value: 'get', type: 'Token::GET' },
-  ],
-  i: [
-    { value: 'if', type: 'Token::IF' },
-    { value: 'implements', type: 'Token::FUTURE_STRICT_RESERVED_WORD' },
-    { value: 'import', type: 'Token::IMPORT' },
-    { value: 'in', type: 'Token::IN' },
-    { value: 'instanceof', type: 'Token::INSTANCEOF' },
-    { value: 'interface', type: 'Token::FUTURE_STRICT_RESERVED_WORD' },
-  ],
-  l: [
-    { value: 'let', type: 'Token::LET' },
-  ],
-  n: [
-    { value: 'new', type: 'Token::NEW' },
-    { value: 'null', type: 'Token::NULL_LITERAL' },
-  ],
-  p: [
-    { value: 'package', type: 'Token::FUTURE_STRICT_RESERVED_WORD' },
-    { value: 'private', type: 'Token::FUTURE_STRICT_RESERVED_WORD' },
-    { value: 'protected', type: 'Token::FUTURE_STRICT_RESERVED_WORD' },
-    { value: 'public', type: 'Token::FUTURE_STRICT_RESERVED_WORD' },
-  ],
-  r: [
-    { value: 'return', type: 'Token::RETURN' },
-  ],
-  s: [
-    { value: 'set', type: 'Token::SET' },
-    { value: 'static', type: 'Token::STATIC' },
-    { value: 'super', type: 'Token::SUPER' },
-    { value: 'switch', type: 'Token::SWITCH' },
-  ],
-  t: [
-    { value: 'this', type: 'Token::THIS' },
-    { value: 'throw', type: 'Token::THROW' },
-    { value: 'true', type: 'Token::TRUE_LITERAL' },
-    { value: 'try', type: 'Token::TRY' },
-    { value: 'typeof', type: 'Token::TYPEOF' },
-  ],
-  v: [
-    { value: 'var', type: 'Token::VAR' },
-    { value: 'void', type: 'Token::VOID' },
-  ],
-  w: [
-    { value: 'while', type: 'Token::WHILE' },
-    { value: 'with', type: 'Token::WITH' },
-  ],
-  y: [
-    { value: 'yield', type: 'Token::YIELD'},
-  ],
-};
+  kAsyncArrowFunction,
+  kAsyncGeneratorFunction,
+} from './Const';
 
 /**
  * Ascii - Unicode值映射
@@ -128,9 +40,9 @@ export { UnicodeToAsciiMapping }
  * 判断给定字符(数字)是否在两个字符的范围内
  * C++通过static_cast同时处理了char和int类型 JS就比较坑了
  * 这个方法其实在C++超简单的 然而用JS直接炸裂
- * @param {char} c 目标字符
- * @param {char} lower_limit 低位字符
- * @param {chat} higher_limit 高位字符
+ * @param {Enumerator} c 目标字符
+ * @param {Enumerator} lower_limit 低位字符
+ * @param {Enumerator} higher_limit 高位字符
  */
 export const IsInRange = (c, lower_limit, higher_limit) => {
   if (typeof lower_limit === 'string' && typeof higher_limit === 'string') {
@@ -314,14 +226,24 @@ const GetScanFlags = (c) => {
 export const character_scan_flags = UnicodeToAsciiMapping.map(c => GetScanFlags(c));
 
 /**
+ * 判断token是否在给定范围内
+ * @param {Enumerator} token 目标Token
+ * @param {Enumerator} lower_limit 低位
+ * @param {Enumerator} higher_limit 高位
+ */
+export const TokenIsInRange = (token, lower_limit, higher_limit) => {
+  lower_limit = TokenEnumList.indexOf(lower_limit);
+  higher_limit = TokenEnumList.indexOf(higher_limit);
+  token = TokenEnumList.indexOf(token.slice(7));
+  return IsInRange(token, lower_limit, higher_limit);
+}
+
+/**
  * 枚举已经无法再模拟了 JS真香
  * @param {Enumerator} token "Token::xxx"
  */
-export const IsAnyIdentifier = (token, lower_limit = 'IDENTIFIER', higher_limit = 'ESCAPED_STRICT_RESERVED_WORD') => {
-  lower_limit = TokenEnumList.indexOf('IDENTIFIER');
-  higher_limit = TokenEnumList.indexOf('ESCAPED_STRICT_RESERVED_WORD');
-  token = TokenEnumList.indexOf(token.slice(7));
-  return IsInRange(token, lower_limit, higher_limit);
+export const IsAnyIdentifier = (token) => {
+  return TokenIsInRange(token, 'IDENTIFIER', 'ESCAPED_STRICT_RESERVED_WORD');
 }
 
 /**
@@ -330,3 +252,23 @@ export const IsAnyIdentifier = (token, lower_limit = 'IDENTIFIER', higher_limit 
 export const IsLexicalVariableMode = (mode) =>{
   return mode <= kLastLexicalVariableMode;
 }
+
+/**
+ * 是否需要自动插入分号
+ */
+export const IsAutoSemicolon = (token) => {
+  return TokenIsInRange(token, 'SEMICOLON', 'EOS');
+}
+
+export const IsAsyncFunction = (kind) => {
+  return IsInRange(kind, kAsyncArrowFunction, kAsyncGeneratorFunction);
+};
+
+export const IsArrowOrAssignmentOp = (token) => {
+  return TokenIsInRange(token, 'ARROW', 'ASSIGN_SUB');
+}
+
+export const IsUnaryOrCountOp = op => TokenIsInRange(op, 'ADD', 'DEC');
+export const IsCountOp = op => TokenIsInRange(op, 'INC', 'DEC');
+export const IsPropertyOrCall = op => TokenIsInRange(op, 'TEMPLATE_SPAN', 'LPAREN');
+export const IsLiteral = token => TokenIsInRange(token, 'NULL_LITERAL', 'STRING');

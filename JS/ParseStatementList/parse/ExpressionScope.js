@@ -9,6 +9,10 @@ import {
   kParameterDeclaration,
   kVarDeclaration,
   kLexicalDeclaration,
+
+  kExpressionIndex,
+  kPatternIndex,
+  kNumberOfErrors,
 } from '../base/Const';
 
 import {
@@ -98,10 +102,17 @@ class ExpressionScope {
   }
 }
 
-class ExpressionParsingScope extends ExpressionScope {
+export class ExpressionParsingScope extends ExpressionScope {
   constructor(parser, type = kExpression) {
     super(parser, type);
     this.variable_list_ = [];
+    this.locations_ = [];
+  }
+  ValidateExpression() { this.Validate(kExpressionIndex); }
+  is_valid(index) { return !locations_[index].IsValid(); }
+  Validate(index) {
+    if(!is_valid(index)) RTCStatsReport(index);
+    this.mark_verified();
   }
   TrackVariable(variable) {
     if (!this.CanBeDeclaration()) {

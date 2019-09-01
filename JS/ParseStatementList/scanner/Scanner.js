@@ -73,6 +73,13 @@ export default class Scanner {
   source_pos() {
     return this.source_.pos() - kCharacterLookaheadBufferSize;
   }
+  HasLineTerminatorBeforeNext() {
+    return this.next().after_line_terminator;
+  }
+  // TODO
+  literal_contains_escapes() {
+    return false;
+  }
   /**
    * 源码中这三个方法返回的是指针
    */
@@ -105,6 +112,9 @@ export default class Scanner {
     }
     return this.current().token;
   }
+  /**
+   * 字面量对象方法
+   */
   AddLiteralChar(c) {
     this.next().literal_chars.AddChar(c);
   }
@@ -182,8 +192,8 @@ export default class Scanner {
             return this.Select(token);
           case 'Token::ASSIGN':
             this.Advance();
-            if (UnicodeToAsciiMapping[this.c0_] === '=') return Select('=',' Token::EQ_STRICT', 'Token::EQ');
-            if (UnicodeToAsciiMapping[this.c0_] === '>') return Select('Token::ARROW');
+            if (UnicodeToAsciiMapping[this.c0_] === '=') return this.Select('=',' Token::EQ_STRICT', 'Token::EQ');
+            if (UnicodeToAsciiMapping[this.c0_] === '>') return this.Select('Token::ARROW');
             return 'Token::ASSIGN';
           case 'Token::STRING':
             return this.ScanString();

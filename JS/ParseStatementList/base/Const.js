@@ -6,20 +6,176 @@ export const kMaxAscii = 127;
 export const kCharacterLookaheadBufferSize = 1;
 
 /**
+ * 关键词表 也包括一些保留关键词(还有一些特殊情况下有意义的字符)
+ * 其中key代表首字符 值分别为关键词字符以及枚举类型
+ * 有时候觉得宏就是个灾难 有时候觉得真香
+ */
+export const keywords = {
+  a: [
+    { value: 'async', type: 'Token::ASYNC' },
+    { value: 'await', type: 'Token::AWAIT' },
+  ],
+  b: [
+    { value: 'break', type: 'Token::BREAK' },
+    { value: 'case', type: 'Token::CASE' },
+  ],
+  c: [
+    { value: 'case', type: 'Token::CASE' },
+    { value: 'catch', type: 'Token::CATCH' },
+    { value: 'class', type: 'Token::CLASS' },
+    { value: 'const', type: 'Token::CONST' },
+    { value: 'continue', type: 'Token::CONTINUE' },
+  ],
+  d: [
+    { value: 'debugger', type: 'Token::DEBUGGER' },
+    { value: 'default', type: 'Token::DEFAULT' },
+    { value: 'delete', type: 'Token::DELETE' },
+    { value: 'do', type: 'Token::DO' },
+  ],
+  e: [
+    { value: 'else', type: 'Token::ELSE' },
+    { value: 'enum', type: 'Token::ENUM' },
+    { value: 'export', type: 'Token::EXPORT' },
+    { value: 'extends', type: 'Token::EXTENDS' },
+  ],
+  f: [
+    { value: 'false', type: 'Token::FALSE_LITERAL' },
+    { value: 'finally', type: 'Token::FINALLY' },
+    { value: 'for', type: 'Token::FOR' },
+    { value: 'function', type: 'Token::FUNCTION' },
+  ],
+  g: [
+    { value: 'get', type: 'Token::GET' },
+  ],
+  i: [
+    { value: 'if', type: 'Token::IF' },
+    { value: 'implements', type: 'Token::FUTURE_STRICT_RESERVED_WORD' },
+    { value: 'import', type: 'Token::IMPORT' },
+    { value: 'in', type: 'Token::IN' },
+    { value: 'instanceof', type: 'Token::INSTANCEOF' },
+    { value: 'interface', type: 'Token::FUTURE_STRICT_RESERVED_WORD' },
+  ],
+  l: [
+    { value: 'let', type: 'Token::LET' },
+  ],
+  n: [
+    { value: 'new', type: 'Token::NEW' },
+    { value: 'null', type: 'Token::NULL_LITERAL' },
+  ],
+  p: [
+    { value: 'package', type: 'Token::FUTURE_STRICT_RESERVED_WORD' },
+    { value: 'private', type: 'Token::FUTURE_STRICT_RESERVED_WORD' },
+    { value: 'protected', type: 'Token::FUTURE_STRICT_RESERVED_WORD' },
+    { value: 'public', type: 'Token::FUTURE_STRICT_RESERVED_WORD' },
+  ],
+  r: [
+    { value: 'return', type: 'Token::RETURN' },
+  ],
+  s: [
+    { value: 'set', type: 'Token::SET' },
+    { value: 'static', type: 'Token::STATIC' },
+    { value: 'super', type: 'Token::SUPER' },
+    { value: 'switch', type: 'Token::SWITCH' },
+  ],
+  t: [
+    { value: 'this', type: 'Token::THIS' },
+    { value: 'throw', type: 'Token::THROW' },
+    { value: 'true', type: 'Token::TRUE_LITERAL' },
+    { value: 'try', type: 'Token::TRY' },
+    { value: 'typeof', type: 'Token::TYPEOF' },
+  ],
+  v: [
+    { value: 'var', type: 'Token::VAR' },
+    { value: 'void', type: 'Token::VOID' },
+  ],
+  w: [
+    { value: 'while', type: 'Token::WHILE' },
+    { value: 'with', type: 'Token::WITH' },
+  ],
+  y: [
+    { value: 'yield', type: 'Token::YIELD'},
+  ],
+};
+
+/**
  * Token
  */
-export const TokenEnumList = [
-  'IDENTIFIER',
-  'GET',
-  'SET',
-  'ASYNC',
-  'AWAIT',
-  'YIELD',
-  'LET',
-  'STATIC',
-  'FUTURE_STRICT_RESERVED_WORD',
-  'ESCAPED_STRICT_RESERVED_WORD',
+const TokenMapping = [
+  { token: 'TEMPLATE_SPAN', key: null },
+  { token: 'TEMPLATE_TAIL', key: null },
+
+  { token: 'PERIOD', key: '.' },
+  { token: 'LBRACK', key: '[' },
+
+  { token: 'LPAREN', key: '(' },
+
+  { token: 'SEMICOLON', key: ';' },
+  { token: 'RBRACE', key: '}' },
+  { token: 'EOS', key: null },
+  { token: 'ARROW', key: '=>' },
+
+  { token: 'INIT', key: '=init' },
+  { token: 'ASSIGN', key: '=' },
+
+  { token: 'ASSIGN_BIT_OR', key: '|=' },
+  { token: 'ASSIGN_BIT_XOR', key: '^=' },
+  { token: 'ASSIGN_BIT_AND', key: '&=' },
+  { token: 'ASSIGN_SHL', key: '<<=' },
+  { token: 'ASSIGN_SAR', key: '>>=' },
+  { token: 'ASSIGN_SHR', key: '>>>=' },
+  { token: 'ASSIGN_MUL', key: '*=' },
+  { token: 'ASSIGN_DIV', key: '/=' },
+  { token: 'ASSIGN_MOD', key: '%=' },
+  { token: 'ASSIGN_EXP', key: '**=' },
+  { token: 'ASSIGN_ADD', key: '+=' },
+  { token: 'ASSIGN_SUB', key: '-=' },
+
+  { token: 'COMMA', key: ',' },
+  { token: 'OR', key: '||' },
+  { token: 'AND', key: '&&' },
+
+  { token: 'BIT_OR', key: '|' },
+  { token: 'BIT_XOR', key: '^' },
+  { token: 'BIT_AND', key: '&' },
+  { token: 'SHL', key: '<<' },
+  { token: 'SAR', key: '>>' },
+  { token: 'SHR', key: '>>>' },
+  { token: 'MUL', key: '*' },
+  { token: 'DIV', key: '/' },
+  { token: 'MOD', key: '%' },
+  { token: 'EXP', key: '**' },
+  { token: 'ADD', key: '+' },
+  { token: 'SUB', key: '-' },
+
+  { token: 'NOT', key: '!' },
+  { token: 'BIT_NOT', key: '~' },
+  { token: 'DELETE', key: 'delete' },
+  { token: 'TYPEOF', key: 'typeof' },
+  { token: 'VOID', key: 'void' },
+
+  { token: 'INC', key: '++' },
+  { token: 'DEC', key: '--' },
+  // 字面量
+  { token: 'NULL_LITERAL', key: 'null' },
+  { token: 'TRUE_LITERAL', key: 'true' },
+  { token: 'FALSE_LITERAL', key: 'false' },
+  { token: 'NUMBER', key: null },
+  { token: 'SMI', key: null },
+  { token: 'BIGINT', key: null },
+  { token: 'STRING', key: null },
+
+  { token: 'IDENTIFIER', key: null },
+  { token: 'GET', key: 'get' },
+  { token: 'SET', key: 'set' },
+  { token: 'ASYNC', key: 'async' },
+  { token: 'YIELD', key: 'await' },
+  { token: 'AWAIT', key: 'yield' },
+  { token: 'LET', key: 'let' },
+  { token: 'STATIC', key: 'static' },
+  { token: 'FUTURE_STRICT_RESERVED_WORD', key: null },
+  { token: 'ESCAPED_STRICT_RESERVED_WORD', key: null },
 ];
+export const TokenEnumList = TokenMapping.map(v => v.token);
 
 /**
  * 字符类型相关
@@ -98,6 +254,42 @@ export const kNotAssigned = 0;
 export const kMaybeAssigned = 1;
 
 /**
+ * 变量初始化类型
+ */
+export const kNeedsInitialization = 0;
+export const kCreatedInitialized = 1;
+
+/**
  * 用于初始化与非法判断
  */
 export const kNoSourcePosition = -1;
+
+/**
+ * 
+ */
+export const kExpressionIndex = 0;
+export const kPatternIndex = 1;
+export const kNumberOfErrors = 2;
+
+/**
+ * 函数模块作用域枚举
+ */
+export const kNormalFunction = 0;
+export const kModule = 1;
+export const kBaseConstructor = 2;
+export const kDefaultBaseConstructor = 3;
+export const kDefaultDerivedConstructor = 4;
+export const kDerivedConstructor = 5;
+export const kGetterFunction = 6;
+export const kSetterFunction = 7;
+export const kArrowFunction = 8;
+export const kAsyncArrowFunction = 9;
+export const kAsyncFunction = 10;
+export const kAsyncConciseMethod = 11;
+export const kAsyncConciseGeneratorMethod = 12;
+export const kAsyncGeneratorFunction = 13;
+export const kGeneratorFunction = 14;
+export const kConciseGeneratorMethod = 15;
+export const kConciseMethod = 16;
+export const kClassMembersInitializerFunction = 17;
+export const kLastFunctionKind = kClassMembersInitializerFunction;

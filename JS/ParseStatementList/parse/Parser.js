@@ -6,7 +6,10 @@ import { DeclarationParsingResult, Declaration } from './DeclarationParsingResul
 import AstValueFactory from '../ast/AstValueFactory';
 import Location from '../base/Location';
 
-import { VariableDeclarationParsingScope } from './ExpressionScope';
+import { 
+  VariableDeclarationParsingScope,
+  ExpressionParsingScope,
+} from './ExpressionScope';
 import Scope from './Scope';
 import { FuncNameInferrer, State } from './FuncNameInferrer';
 
@@ -22,11 +25,19 @@ import {
   SLOPPY_FUNCTION_NAME_VARIABLE,
 
   kNoSourcePosition,
+  kArrowFunction,
+  kAsyncArrowFunction,
 } from '../base/Const';
 
 import {
   IsAnyIdentifier,
+  IsAutoSemicolon,
   IsLexicalVariableMode,
+  IsAsyncFunction,
+  IsArrowOrAssignmentOp,
+  IsUnaryOrCountOp,
+  IsCountOp,
+  IsLiteral,
 } from '../base/Util';
 
 import {
@@ -41,9 +52,6 @@ const kForStatement = 2;
 const kYes = 0;
 const kNo = 1;
 
-const kNeedsInitialization = 0;
-const kCreatedInitialized = 1;
-
 const kSloppyModeBlockScopedFunctionRedefinition = 22;
 const kUseCounterFeatureCount = 76;
 
@@ -56,7 +64,13 @@ class ParserBase {
     this.scope_ = new Scope();
     this.fni_ = new FuncNameInferrer();
     this.expression_scope_ = null;
+
+    this.accept_IN_ = true;
   }
+  /**
+   * 大量的工具方法
+   * 已经砍掉了很多
+   */
   IsLet(identifier) { return identifier === 'let'; }
   UNREACHABLE() {
     this.scanner.UNREACHABLE();
@@ -96,11 +110,20 @@ class ParserBase {
     }
     return false;
   }
+
+  /**
+   * 省去了use strict、use asm的解析
+   * 直接进入了正常语法树parse
+   */
   ParseStatementList() {
     while(this.peek() !== 'Token::EOS') {
       this.ParseStatementListItem();
     }
   }
+  /**
+   * 一级解析
+   * 优先处理了function、class、var、let、const、async声明式Token
+   */
   ParseStatementListItem() {
     switch(this.peek()) {
       case 'Token::LET':
@@ -289,7 +312,7 @@ class ParserBase {
            * (4){}对象、[]数组、``模板字符串
            * 等等情况 实在太过繁琐
            * 除了上述情况 被赋值的可能也是一个左值 比如遇到如下的特殊Token
-           * import、async、new、this、function、任意标识符(分为普通变量与箭头函数)等等
+           * import、async、new、this、function、任意标识符等等
            * 由于左值的解析相当于一个完整的新表达式 因此不必列举出来
            */
           value = this.ParseAssignmentExpression();
@@ -344,25 +367,232 @@ class ParserBase {
     const result = this.scanner.CurrentSymbol(this.ast_value_factory_);
     return result;
   }
-  // NewRawVariable(name, pos) {
-  //   return this.ast_node_factory_.NewVariableProxy(name, NORMAL_VARIABLE, pos);
-  // }
+  // NewRawVariable(name, pos) { return this.ast_node_factory_.NewVariableProxy(name, NORMAL_VARIABLE, pos); }
 
-
+  /**
+   * 处理赋值语法
+   * @returns {Expression} 返回赋值右值
+   */
   ParseAssignmentExpression() {
-    return null;
+    // let expression_scope = new ExpressionParsingScope(this);
+    let result = this.ParseAssignmentExpressionCoverGrammar();
+    // expression_scope.ValidateExpression();
+    return result;
   }
+  /**
+   * Precedence = 3
+   * 大体上赋值表达式分为以下几种情况
+   * (1)条件表达式 let a = true ? b : c
+   * (2)箭头函数
+   * (3)yield表达式
+   * (4)左值?表达式 let a = new f()
+   * (5)运算赋值 let a += b
+   * (6)普通赋值表达式 let a = b
+   * @returns {Expression}
+   */
+  ParseAssignmentExpressionCoverGrammar() {
+    let lhs_beg_pos = this.peek_position();
+    if(this.peek() === 'Token:YIELD' && this.is_generator()) return this.ParseYieldExpression();
+    // FuncNameInferrerState fni_state(&fni_);
+    /**
+     * 解析条件表达式
+     */
+    let expression = this.ParseConditionalExpression();
+
+    let op = this.peek();
+    if (!IsArrowOrAssignmentOp(op)) return expression;
+
+    // 箭头函数 V8_UNLIKELY
+    if (op === 'Token::ARROW') {
+      let loc = new Location(lhs_beg_pos, this.end_position());
+      // if(...) return this.FailureExpression();
+      // TODO
+    }
+
+    // TODO
+    if (this.IsAssignableIdentifier(expression)) {
+    } else if (expression.IsProperty()) {
+
+    } else if (expression.IsPattern() && op === 'Token::ASSIGN') {
+
+    } else {}
+
+    this.Consume();
+    let op_position = this.position();
+    let right = this.ParseAssignmentExpression();
+    // TODO
+    if (op === 'Token::ASSIGN') {} 
+    else {}
+
+    return this.ast_node_factory_.NewAssignment(op, expression, right, op_position);
+  }
+  /**
+   * Precedence = 3
+   * 条件表达式 源码示例只有三元表达式
+   */
+  ParseConditionalExpression() {
+    let pos = this.peek_position();
+    let expression = this.ParseBinaryExpression(4);
+    return this.peek() === 'Token::CONDITIONAL' ? this.ParseConditionalContinuation(expression, pos) : expression;
+  }
+  ParseConditionalContinuation() {}
+  /**
+   * Precedence >= 4
+   * 处理二元表达式
+   */
+  ParseBinaryExpression(prec) {
+    if(prec < 4) throw new Error('We start using the binary expression parser for prec >= 4 only!');
+    let x = this.ParseUnaryExpression();
+    let prec1 = Precedence(this.peek(), this.accept_IN_);
+    if(prec1 >= prec) return this.ParseBinaryContinuation(x, prec, prec1);
+    return x;
+  }
+  /**
+   * 处理一元表达式 分为下列情况
+   * (1)PostfixExpression
+   * (2)delete xxx
+   * (3)void xxx
+   * (4)typeof xxx
+   * (5)++
+   * (6)--
+   * (7)+
+   * (8)-
+   * (9)~
+   * (10)!
+   * (11)await xxx
+   */
+  ParseUnaryExpression() {
+    let op = this.peek();
+    // 一元运算
+    if (IsUnaryOrCountOp(op)) return this.ParseUnaryOrPrefixExpression();
+    // await语法
+    if (is_async_function() && op === 'Token::AWAIT') return this.ParseAwaitExpression();
+    // 运算后置语法与左值 ++ --
+    return this.ParsePostfixExpression();
+  }
+  ParsePostfixExpression() {
+    let lhs_beg_pos = this.peek_position();
+    let expression = this.ParseLeftHandSideExpression();
+    // V8_LIKELY
+    if (!IsCountOp(this.peek()) || this.scanner.HasLineTerminatorBeforeNext()) return expression;
+    return this.ParsePostfixContinuation(expression, lhs_beg_pos);
+  }
+  ParseAwaitExpression(){}
+  /**
+   * LeftHandSideExpression
+   * 处理new与成员表达式
+   */
+  ParseLeftHandSideExpression() {
+    let result = this.ParseMemberExpression();
+    if (!IsPropertyOrCall(this.peek())) return result;
+    return this.ParseLeftHandSideContinuation(result);
+  }
+  /**
+   * 处理成员表达式
+   * 即a.b、a[b]、`a${b}`、fn()等等
+   * 由于对象属性的操作符依赖对象本身 所以需要优先解析处理表达式
+   */
+  ParseMemberExpression() {
+    let result = this.ParsePrimaryExpression();
+    return this.ParseMemberExpressionContinuation(result);
+  }
+  /**
+   * 这里处理所有初级表达式
+   * 分为下列情况
+   * (1)this
+   * (2)null
+   * (3)true
+   * (4)false
+   * (5)Identifier
+   * (6)Number
+   * (7)String
+   * (8)ArrayLiteral
+   * (9)ObjectLiteral
+   * (10)RegExpLiteral
+   * (11)ClassLiteral
+   * (12)'(' Expression ')'
+   * (13)模板字符串 TemplateLiteral
+   * (14)do Block
+   * (15)AsyncFunctionLiteral
+   */
+  ParsePrimaryExpression() {
+    let beg_pos = this.peek_position();
+    let token = this.peek();
+
+    if (IsAnyIdentifier(token)) {
+      this.Consume();
+      let kind = kArrowFunction;
+      // V8_UNLIKELY
+      if (token === 'Token::ASYNC' 
+      && !this.scanner.HasLineTerminatorBeforeNext()
+      && !this.scanner.literal_contains_escapes()) {
+        // async普通函数
+        if (this.peek() === 'Token::FUNCTION') return this.ParseAsyncFunctionLiteral();
+        // async箭头函数
+        if (this.peek_any_identifier() && this.PeekAhead() === 'Token::ARROW') {
+          token = this.Next();
+          beg_pos = this.position();
+          kind = kAsyncArrowFunction;
+        }
+      }
+      // V8_UNLIKELY
+      if(this.peek() === 'Token::ARROW') {
+        // TODO
+      }
+
+      let name = this.ParseAndClassifyIdentifier(token);
+      return this.ExpressionFromIdentifier(name, beg_pos);
+    }
+    /**
+     * 普通字面量
+     */
+    if (IsLiteral(token)) return this.ExpressionFromLiteral(this.Next(), beg_pos);
+    /**
+     * 处理各种特殊符号
+     * 比如new this [] {}
+     */
+    switch(token) {
+
+    }
+  }
+  ParseMemberExpressionContinuation() {}
+
+  // TODO
+  is_generator() {
+    return true;
+  }
+
+  /**
+   * 处理自动分号插入
+   */
   ExpectSemicolon() {
-    
+    let tok = this.peek();
+    /**
+     * 正常情况下会有个分号
+     */
+    if(tok === 'Token::SEMICOLON') {
+      this.Next();
+      return;
+    }
+    /**
+     * ;, }, EOS
+     */
+    if(this.scanner.HasLineTerminatorBeforeNext() || IsAutoSemicolon(tok)) {
+      return ;
+    }
+    throw new Error('UnexpectedToken');
+  }
+  BuildInitializationBlock() {
+
   }
 }
 
 
 
-
 /**
- * 源码中的impl 作为模板参数传入ParseBase 同时也继承于该类
+ * 源码中的Parser类作为模板参数impl作为模板参数传入ParseBase 同时也继承于该类
  * class Parser : public ParserBase<Parser>
+ * template <typename Impl> class ParserBase {...}
  * Parser、ParserBase基本上是一个类
  */
 export default class Parser extends ParserBase {
