@@ -133,10 +133,6 @@ class ParserBase {
         break;
     }
   }
-  /**
-   * 处理var、let、const声明语句
-   * 语句的形式应该是 (var | const | let) (Identifier) (=) (AssignmentExpression)
-   */
   IsNextLetKeyword() {
     /**
      * 这里调用了PeekAhead后赋值了next_next_ 会影响Next方法
@@ -166,6 +162,10 @@ class ParserBase {
         return false;
     }
   }
+  /**
+   * 处理var、let、const声明语句
+   * 语句的形式应该是 (var | const | let) (Identifier) (=) (AssignmentExpression)
+   */
   ParseVariableStatement(var_context, names) {
     let parsing_result = new DeclarationParsingResult();
     let result = this.ParseVariableDeclarations(var_context, parsing_result, names);
