@@ -380,7 +380,7 @@ class ParserBase {
     return result;
   }
   /**
-   * Precedence = 3
+   * Precedence = 2
    * 大体上赋值表达式分为以下几种情况
    * (1)条件表达式 let a = true ? b : c
    * (2)箭头函数
