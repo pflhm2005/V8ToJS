@@ -461,7 +461,6 @@ class ParserBase {
     return x;
   }
   /**
-   * 所有的逻辑最终会汇集在这里
    * 处理一元表达式 分为下列情况
    * (1)PostfixExpression
    * (2)delete xxx
@@ -511,7 +510,7 @@ class ParserBase {
     return this.ParseMemberExpressionContinuation(result);
   }
   /**
-   * 这里处理所有初级表达式
+   * 所有的逻辑最终会汇集在这里 处理最基本的单位
    * 分为下列情况
    * (1)this
    * (2)null
