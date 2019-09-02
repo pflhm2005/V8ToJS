@@ -317,11 +317,6 @@ export const kVarDeclaration = 4;
 export const kLexicalDeclaration = 5;
 
 /**
- * 语句类型
- */
-export const kVariableDeclaration = 0;
-
-/**
  * 变量赋值标记
  */
 export const kNotAssigned = 0;
@@ -382,16 +377,61 @@ export const kNull = 7;
 export const kTheHole = 8;
 
 /**
- * AstNode枚举
- * TODO
- */
-export const kLiteral = 0;
-export const kAssignment = 1;
-export const kCompoundAssignment = 2;
-export const kExpressionStatement = 3;
-
-/**
  * AstNode类型枚举
- * TODO
  */
-export const kVariableProxy = 0;
+export const kVariableDeclaration = 0;
+export const kFunctionDeclaration = 1;
+export const kDoWhileStatement = 2;
+export const kWhileStatement = 3;
+export const kForStatement = 4;
+export const kForInStatement = 5;
+export const kForOfStatement = 6;
+export const kBlock = 7;
+export const kSwitchStatement = 8;
+export const kExpressionStatement = 9;
+export const kEmptyStatement = 10;
+export const kSloppyBlockFunctionStatement = 11;
+export const kIfStatement = 12;
+export const kContinueStatement = 13;
+export const kBreakStatement = 14;
+export const kReturnStatement = 15;
+export const kWithStatement = 16;
+export const kTryCatchStatement = 17;
+export const kTryFinallyStatement = 18;
+export const kDebuggerStatement = 19;
+export const kInitializeClassMembersStatement = 20;
+export const kRegExpLiteral = 21;
+export const kObjectLiteral = 22;
+export const kArrayLiteral = 23;
+export const kAssignment = 24;
+export const kAwait = 25;
+export const kBinaryOperation = 26;
+export const kNaryOperation = 27;
+export const kCall = 28;
+export const kCallNew = 29;
+export const kCallRuntime = 30;
+export const kClassLiteral = 31;
+export const kCompareOperation = 32;
+export const kCompoundAssignment = 33;
+export const kConditional = 34;
+export const kCountOperation = 35;
+export const kDoExpression = 36;
+export const kEmptyParentheses = 37;
+export const kFunctionLiteral = 38;
+export const kGetTemplateObject = 39;
+export const kImportCallExpression = 40;
+export const kLiteral = 41;
+export const kNativeFunctionLiteral = 42;
+export const kProperty = 43;
+export const kResolvedProperty = 44;
+export const kSpread = 45;
+export const kStoreInArrayLiteral = 46;
+export const kSuperCallReference = 47;
+export const kSuperPropertyReference = 48;
+export const kTemplateLiteral = 49;
+export const kThisExpression = 50;
+export const kThrow = 51;
+export const kUnaryOperation = 52;
+export const kVariableProxy = 53;
+export const kYield = 54;
+export const kYieldStar = 55;
