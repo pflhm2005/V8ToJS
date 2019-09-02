@@ -293,3 +293,22 @@ export const kConciseGeneratorMethod = 15;
 export const kConciseMethod = 16;
 export const kClassMembersInitializerFunction = 17;
 export const kLastFunctionKind = kClassMembersInitializerFunction;
+
+/**
+ * 字面量枚举
+ */
+export const kSmi = 0;
+export const kHeapNumber = 1;
+export const kBigInt = 2;
+export const kString = 3;
+export const kSymbol = 4;
+export const kBoolean = 5;
+export const kUndefined = 6;
+export const kNull = 7;
+export const kTheHole = 8;
+
+/**
+ * AstNode枚举
+ * TODO
+ */
+export const kLiteral = 0;

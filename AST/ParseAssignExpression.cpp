@@ -431,6 +431,36 @@ Expression* Parser::ExpressionFromLiteral(Token::Value token, int pos) {
   return FailureExpression();
 }
 
+class Literal final : public Expression {}
+
+Expression* Parser::ExpressionFromLiteral(Token::Value token, int pos) {
+  switch (token) {
+    case Token::NULL_LITERAL:
+      return factory()->NewNullLiteral(pos);
+    case Token::TRUE_LITERAL:
+      return factory()->NewBooleanLiteral(true, pos);
+    case Token::FALSE_LITERAL:
+      return factory()->NewBooleanLiteral(false, pos);
+    case Token::SMI: {
+      uint32_t value = scanner()->smi_value();
+      return factory()->NewSmiLiteral(value, pos);
+    }
+    case Token::NUMBER: {
+      double value = scanner()->DoubleValue();
+      return factory()->NewNumberLiteral(value, pos);
+    }
+    case Token::BIGINT:
+      return factory()->NewBigIntLiteral(
+          AstBigInt(scanner()->CurrentLiteralAsCString(zone())), pos);
+    case Token::STRING: {
+      return factory()->NewStringLiteral(GetSymbol(), pos);
+    }
+    default:
+      DCHECK(false);
+  }
+  return FailureExpression();
+}
+
 Literal* NewSmiLiteral(int number, int pos) {
   return new (zone_) Literal(number, pos);
 }

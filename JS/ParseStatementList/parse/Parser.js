@@ -38,6 +38,7 @@ import {
   IsUnaryOrCountOp,
   IsCountOp,
   IsLiteral,
+  IsMember,
 } from '../base/Util';
 
 import {
@@ -213,7 +214,7 @@ class ParserBase {
     this.expression_scope_ = new VariableDeclarationParsingScope(this, parsing_result.descriptor.mode, names);
     // 获取合适的作用域
     let target_scope = IsLexicalVariableMode(parsing_result.descriptor.mode) ? this.scope_ : this.scope_.GetDeclarationScope();
-    // TODO
+
     let declaration_it = target_scope.declarations().end();
 
     let bindings_start = this.peek_position();
@@ -448,6 +449,7 @@ class ParserBase {
     return x;
   }
   /**
+   * 所有的逻辑最终会汇集在这里
    * 处理一元表达式 分为下列情况
    * (1)PostfixExpression
    * (2)delete xxx
@@ -490,7 +492,7 @@ class ParserBase {
   /**
    * 处理成员表达式
    * 即a.b、a[b]、`a${b}`、fn()等等
-   * 由于对象属性的操作符依赖对象本身 所以需要优先解析处理表达式
+   * 由于对象属性的操作符依赖对象本身 所以需要优先解析处理初级表达式
    */
   ParseMemberExpression() {
     let result = this.ParsePrimaryExpression();
@@ -536,7 +538,7 @@ class ParserBase {
         }
       }
       // V8_UNLIKELY
-      if(this.peek() === 'Token::ARROW') {
+      if (this.peek() === 'Token::ARROW') {
         // TODO
       }
 
@@ -554,8 +556,69 @@ class ParserBase {
     switch(token) {
 
     }
+
+    throw new Error('UnexpectedToken');
   }
-  ParseMemberExpressionContinuation() {}
+  /**
+   * 这里的所有方法都通过ast_node_factory工厂来生成literal类
+   */
+  ExpressionFromLiteral(token, pos) {
+    switch(token) {
+      case 'Token::NULL_LITERAL':
+        return this.ast_node_factory_.NewNullLiteral(pos);
+      case 'Token::TRUE_LITERAL':
+        return this.ast_node_factory_.NewBooleanLiteral(true, pos);
+      case 'Token::FALSE_LITERAL':
+        return this.ast_node_factory_.NewBooleanLiteral(false, pos);
+      case 'Token::SMI':
+        let value = this.scanner.smi_value();
+        return this.ast_node_factory_.NewSmiLiteral(value, pos);
+      case 'Token:NUMBER':
+        let value = this.scanner.DoubleValue();
+        return this.ast_node_factory_.NewNumberLiteral(value, pos);
+      case 'Token::BIGINT':
+        return this.ast_node_factory_.NewBigIntLiteral(new AstBigInt(this.scanner.CurrentLiteralAsCString()), pos);
+      case 'Token::STRING':
+        return this.ast_node_factory_.NewStringLiteral(this.GetSymbol(), pos);
+    }
+    return this.FailureExpression();
+  }
+  /**
+   * 成员表达式
+   */
+  ParseMemberExpressionContinuation(expression) {
+    if (!IsMember(this.peek())) return expression;
+    return this.DoParseMemberExpressionContinuation(expression);
+  }
+  DoParseMemberExpressionContinuation(expression) {
+    // 成员符号也是可以多层的 a.b.c、a[b[c]]等等
+    do {
+      switch(this.peek()) {
+        // []
+        case 'Token::LBRACK':
+          this.Consume('Token::LBRACK');
+          let pos = this.position();
+          // TODO
+          break;
+        case 'Token::PERIOD': 
+          this.Consume('Token::PERIOD');
+          let pos = this.position();
+          // TODO
+          break;
+        default:
+          let pos;
+          if (this.scanner.current_token() === 'Token::IDENTIFIER') pos = this.position();
+          else {
+            pos = this.peek_position();
+            // TODO
+          }
+          expression = this.ParseTemplateLiteral(expression, pos, true);
+          break;
+      }
+    } while(IsMember(this.peek()));
+    return expression;
+  }
+  ParseTemplateLiteral() {}
 
   // TODO
   is_generator() {
@@ -585,6 +648,8 @@ class ParserBase {
   BuildInitializationBlock() {
 
   }
+
+  FailureExpression() {}
 }
 
 
@@ -600,10 +665,6 @@ export default class Parser extends ParserBase {
     super(scanner);
     // this.fni_ = new FuncNameInferrer();
     this.use_counts_ = new Array(kUseCounterFeatureCount).fill(0);
-  }
-  // 源码返回一个空指针
-  NullExpression() {
-    return new Expression();
   }
   /**
    * 返回一个变量代理 继承于Expression类

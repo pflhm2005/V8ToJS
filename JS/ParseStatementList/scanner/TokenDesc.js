@@ -21,7 +21,7 @@ export default class TokenDesc {
     /**
      * 处理小整数
      */
-    this.smi_value = 0;
+    this.smi_value_ = 0;
     this.after_line_terminator = false;
   }
 }

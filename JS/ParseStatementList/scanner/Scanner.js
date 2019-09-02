@@ -125,6 +125,7 @@ export default class Scanner {
     this.source_.Back();
     this.c0_ = ch;
   }
+  current_token() { return this.current_.token; }
   peek() { return this.next().token; }
   peek_location() { return this.next().location; }
   location() { return this.current().location; }
@@ -143,7 +144,7 @@ export default class Scanner {
     this.next_ = temp;
     return this.next_next_.token;
   }
-  smi_value() { return this.current().smi_value; }
+  smi_value() { return this.current().smi_value_; }
   /**
    * 返回当前Token
    */
@@ -302,7 +303,7 @@ export default class Scanner {
             && value <= Smi_kMaxValue
             && this.c0_ !== '.'
             && !IsIdentifierStart(this.c0_)) {
-            this.next().smi_value = value;
+            this.next().smi_value_ = value;
 
             if (kind === DECIMAL_WITH_LEADING_ZERO) {
               this.octal_pos_ = new Location(start_pos, this.source_pos());
