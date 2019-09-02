@@ -13,6 +13,7 @@ import {
   DECIMAL,
   DECIMAL_WITH_LEADING_ZERO,
   kCharacterLookaheadBufferSize,
+  kEndOfInput,
 } from '../base/Const';
 
 import {
@@ -181,7 +182,7 @@ export default class Scanner {
     let token = null;
     do {
       this.next().location.beg_pos = this.source_pos();
-      if (this.c0_ < kMaxAscii) {
+      if (this.c0_ < kMaxAscii && this.c0_ > 0) {
         token = UnicodeToToken[this.c0_];
 
         switch(token) {
@@ -210,9 +211,7 @@ export default class Scanner {
             this.UNREACHABLE();
         } 
       }
-      /**
-       * 源码中这里处理一些特殊情况 不展开了
-       */
+      if(this.c0_ === kEndOfInput) return 'Token::EOS';
     } while(token === 'Token::WHITESPACE')
     return token;
   }

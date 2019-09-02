@@ -14,6 +14,9 @@ import {
   kTheHole,
 
   kLiteral,
+  kAssignment,
+  kCompoundAssignment,
+  kExpressionStatement,
 } from "../base/Const";
 
 const update = () => {};
@@ -31,6 +34,7 @@ export class AstNodeFactory {
    * 生成字面量对象
    * 源码这里用的是函数重载 由于有严格的类型形参 所以很舒适
    * JS无法做到完美模拟 这里手动将对应类型的枚举传入构造函数
+   * @returns {Literal} 字面量类
    */
   NewNullLiteral(pos) {
     return new Literal(kNull, null, pos);
@@ -49,6 +53,26 @@ export class AstNodeFactory {
   NewStringLiteral(string, pos) {
     return new Literal(kString, string, pos);
   }
+
+  /**
+   * 声明+赋值语句
+   * @param {Token} op 赋值类型
+   * @param {Expression} target 变量名
+   * @param {Expression} value 变量值
+   * @param {Number} pos 位置
+   * @returns {Assignment}
+   */
+  NewAssignment(op, target, value, pos) {
+    if (op !== 'Token::INIT' && target.IsVariableProxy()) target.AsVariableProxy().set_is_assigned();
+    if (op === 'Token::ASSIGN' || op === 'Token::INIT') return new Assignment(kAssignment, op, target, value, pos);
+    else return new CompoundAssignment(op, target, value, pos, this.NewBinaryOperation(BinaryOpForAssignment(op), target, value, pos + 1));
+  }
+  NewExpressionStatement(expression, pos) {
+    return new ExpressionStatement(expression, pos);
+  }
+  NewBlock(ignore_completion_value, labels) {
+    return labels !== null ? new LabeledBlock(labels, ignore_completion_value) : new Block(labels, ignore_completion_value);
+  }
 }
 
 class AstNode {
@@ -56,12 +80,55 @@ class AstNode {
     this.position_ = position;
     this.bit_field_ = this.encode(type);
   }
+  IsVariableProxy() { return this.node_type() === ''; }
+  node_type() { return this.decode(this.bit_field_); }
   encode() {}
+  decode() {}
+  update() {}
 }
 
-export class Expression extends AstNode {
-  constructor(pos = 0, type = 0) {
-    super(pos, type);
+class Statement extends AstNode {
+  constructor(position, type) {
+    super(position, type);
+    this.kNextBitFieldIndex = 6;
+  }
+}
+
+class ExpressionStatement extends Statement {
+  constructor(expression, pos) {
+    super(pos, kExpressionStatement);
+    this.expression_ = expression;
+  }
+  set_expression(e) {
+    this.expression_ = e;
+  }
+}
+
+/**
+ * break语句除了for、while等关键词的break操作
+ * 还包括了foo: if (b) { f(); break foo; }此类语法
+ */
+class BreakableStatement extends Statement {
+  constructor(breakable_type, position, type) {
+    super(position, type);
+    // this.bit_field_ |= TODO
+  }
+}
+
+class Block extends BreakableStatement {
+  constructor(labels, capacity, ignore_completion_value) {
+    super(TARGET_FOR_NAMED_ONLY, kNoSourcePosition, kBlock);
+    this.statement_ = new Array(capacity).fill(null);
+    this.scope_ = null;
+    // this.bit_field_ |= TODO
+  }
+}
+
+class LabeledBlock extends Block {
+  // 这里构造函数重载了 capacity参数后移了一位 去掉了zone参数
+  constructor(labels, ignore_completion_value, capacity = 0) {
+    super(labels, capacity, ignore_completion_value);
+    this.labels_ = labels;
   }
 }
 
@@ -83,6 +150,29 @@ class VariableDeclaration extends Declaration {
   constructor(pos, is_nested = false) {
     super(pos, kVariableDeclaration);
     this.bit_field_ = update(this.bit_field_, is_nested);
+  }
+}
+
+export class Expression extends AstNode {
+  constructor(pos = 0, type = 0) {
+    super(pos, type);
+  }
+}
+
+class Assignment extends Expression {
+  constructor(node_type, op, target, value, pos) {
+    super(pos, node_type);
+    this.target_ = target;
+    this.value_ = value;
+    this.bit_field_ |= this.encode(op);
+  }
+}
+
+class CompoundAssignment extends Assignment {
+  constructor(op, target, value, pos, binary_operation) {
+    super(kCompoundAssignment, op, target, value, pos);
+    // BinaryOperation* binary_operation_;
+    this.binary_operation_ = binary_operation;
   }
 }
 
@@ -108,6 +198,45 @@ export class VariableProxy extends Expression {
   }
 }
 
+/**
+ * 字面量类
+ */
+class Literal extends Expression{
+  /**
+   * 源码构造函数只用了2个参数 由于重载的存在 所以类型已经确定了
+   * JS手动传进来
+   * @param {Enumerator} type 枚举类型
+   * @param {any} val 字面量的值
+   * @param {Number} pos 位置
+   */
+  constructor(type, val, pos) {
+    super(pos, kLiteral);
+    /**
+     * 每一种字面量只会有唯一的值 不可能同时是字符串与数字
+     * 因此源码在这里用了union来优化内存的使用
+     * 包括了6个字面量变量string_、smi_、number_、symbol_、bigint_、boolean_
+     */
+    this.type = type;
+    /**
+     * JS既没有函数重载(参数不同可以模拟 类型实在无力) 也没有union数据结构
+     * 连枚举也没有(实际上用ES6的Symbol模拟枚举是一个可行性方案 但是成本略高)
+     * 因此用一个数组来保存值 用val()来获取对应的值
+     */
+    this.val = new Array(6).fill(null);
+    this.val[type] = val;
+    
+    this.bit_field_ = this.update(this.bit_field_, type);
+  }
+  // add
+  val() {
+    return this.val[this.type];
+  }
+}
+
+/**
+ * 这个比较特殊
+ * 放最下面了
+ */
 // The AST refers to variables via VariableProxies - placeholders for the actual
 // variables. Variables themselves are never directly referred to from the AST,
 // they are maintained by scopes, and referred to from VariableProxies and Slots
@@ -134,37 +263,3 @@ export class Variable extends ZoneObject {
 
   static DefaultInitializationFlag(mode) { return mode === kVar ? kCreatedInitialized : kNeedsInitialization; }
 };
-
-/**
- * 字面量类
- */
-class Literal extends Expression{
-  /**
-   * 源码构造函数只用了2个参数 由于重载的存在 所以类型已经确定了
-   * JS手动传进来
-   * @param {Enumerator} type 枚举类型
-   * @param {any} val 字面量的值
-   * @param {Number} pos 位置
-   */
-  constructor(type, val, pos) {
-    super(pos, kLiteral);
-    /**
-     * 每一种字面量只会有唯一的值 不可能同时是字符串与数字
-     * 因此源码在这里用了union来优化内存的使用
-     * 包括了6个字面量变量string_、smi_、number_、symbol_、bigint_、boolean_
-     */
-    this.type = type;
-    /**
-     * JS既没有函数重载(参数不同可以模拟 类型实在无力) 也没有union数据结构 连枚举也没有
-     * 因此用一个数组来保存值 用val()来获取对应的值
-     */
-    this.val = new Array(6).fill(null);
-    this.val[type] = val;
-    
-    this.bit_field_ = this.update(this.bit_field_, type);
-  }
-  // add
-  val() {
-    return this.val[this.type];
-  }
-}

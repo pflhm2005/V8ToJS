@@ -24,6 +24,8 @@ import {
 
   kAsyncArrowFunction,
   kAsyncGeneratorFunction,
+
+  precedence_,
 } from './Const';
 
 /**
@@ -273,3 +275,15 @@ export const IsCountOp = op => TokenIsInRange(op, 'INC', 'DEC');
 export const IsPropertyOrCall = op => TokenIsInRange(op, 'TEMPLATE_SPAN', 'LPAREN');
 export const IsLiteral = token => TokenIsInRange(token, 'NULL_LITERAL', 'STRING');
 export const IsMember = token => TokenIsInRange(token, 'TEMPLATE_SPAN', 'LBRACK');
+
+/**
+ * 判断当前表达式的层级
+ * 根据token返回一个precedence值
+ * @param {Enumerator} token 枚举值
+ * @param {Boolean} accept_IN 
+ * @returns {Number} precedence
+ */
+export const Precedence = (token, accept_IN) => {
+  let idx = TokenEnumList.indexOf(token.slice(7));
+  return precedence_[Number(accept_IN)][idx];
+}

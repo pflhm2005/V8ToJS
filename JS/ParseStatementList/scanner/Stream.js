@@ -1,4 +1,5 @@
 import  { UnicodeToAsciiMapping } from '../base/Util';
+import { kEndOfInput } from '../base/Const';
 
 export default class Stream {
   constructor(source_string) {
@@ -30,12 +31,13 @@ export default class Stream {
     return this.ReadBlock();
   }
   ReadBlock() {
+    if(this.buffer_end_ !== 0) return false;
     this.buffer_ = this.source_string.split('').map(v => UnicodeToAsciiMapping.indexOf(v));
     this.buffer_end_ = this.buffer_.length;
     /**
      * 这里的返回与源码不同 涉及gc 不做展开
      */
-    return this.buffer_.length;
+    return true;
   }
   ReadBlockAt(new_pos) {
     this.buffer_pos_ = new_pos;
@@ -92,7 +94,7 @@ export default class Stream {
     } else if (this.ReadBlockChecked()) {
       return this.buffer_[this.buffer_cursor_];
     } else {
-      return null;
+      return kEndOfInput;
     }
   }
 }

@@ -38,7 +38,9 @@ import {
   IsUnaryOrCountOp,
   IsCountOp,
   IsLiteral,
+  IsPropertyOrCall,
   IsMember,
+  Precedence,
 } from '../base/Util';
 
 import {
@@ -65,6 +67,7 @@ class ParserBase {
     this.scope_ = new Scope();
     this.fni_ = new FuncNameInferrer();
     this.expression_scope_ = null;
+    this.pointer_buffer_ = [];
 
     this.accept_IN_ = true;
   }
@@ -177,7 +180,7 @@ class ParserBase {
      * 在若干情况下 源代码需要自动插入分号
      */
     this.ExpectSemicolon();
-    return this.BuildInitializationBlock(result);
+    // return this.BuildInitializationBlock(result);
   }
   ParseVariableDeclarations(var_context, parsing_result, names) {
     parsing_result.descriptor.kind = NORMAL_VARIABLE;
@@ -306,7 +309,15 @@ class ParserBase {
           value_beg_pos = this.peek_position();
           /**
            * 这里处理赋值
-           * 大部分情况下这是一个简单右值 从简到繁(源码使用了一个Precedence变量来进行渐进解析)如下
+           * 大部分情况下这是一个简单右值 从简到繁(源码使用了一个Precedence来进行渐进解析与优先级判定)
+           * Precedence代表该表达式的复杂程度 值越低越复杂 优先级越低
+           * Precedence = 2 基本处理方法
+           * Precedence = 3 处理三元表达式 由于三元的每一块都是独立的表达式 之间没有直接的逻辑
+           * Precedence >= 4 处理二元表达式、一元表达式、纯字面量
+           * 其中 多元表达式由于存在连续运算 所以均有一个对应的xxxContinuation方法 
+           * 例如a ? b : c ? d : e、a.b.c、a[b][c]等等
+           * 
+           * 而二元表达式的分类如下
            * (1)单值字面量 null、true、false、1、1.1、1n、'1'
            * (2)一元运算 +1、++a 形如+function(){}、!function(){}会被特殊处理
            * (3)二元运算 'a' + 'b'、1 + 2
@@ -468,7 +479,7 @@ class ParserBase {
     // 一元运算
     if (IsUnaryOrCountOp(op)) return this.ParseUnaryOrPrefixExpression();
     // await语法
-    if (is_async_function() && op === 'Token::AWAIT') return this.ParseAwaitExpression();
+    if (this.is_async_function() && op === 'Token::AWAIT') return this.ParseAwaitExpression();
     // 运算后置语法与左值 ++ --
     return this.ParsePostfixExpression();
   }
@@ -570,12 +581,14 @@ class ParserBase {
         return this.ast_node_factory_.NewBooleanLiteral(true, pos);
       case 'Token::FALSE_LITERAL':
         return this.ast_node_factory_.NewBooleanLiteral(false, pos);
-      case 'Token::SMI':
+      case 'Token::SMI': {
         let value = this.scanner.smi_value();
         return this.ast_node_factory_.NewSmiLiteral(value, pos);
-      case 'Token:NUMBER':
+      }
+      case 'Token:NUMBER': {
         let value = this.scanner.DoubleValue();
         return this.ast_node_factory_.NewNumberLiteral(value, pos);
+      }
       case 'Token::BIGINT':
         return this.ast_node_factory_.NewBigIntLiteral(new AstBigInt(this.scanner.CurrentLiteralAsCString()), pos);
       case 'Token::STRING':
@@ -595,16 +608,18 @@ class ParserBase {
     do {
       switch(this.peek()) {
         // []
-        case 'Token::LBRACK':
+        case 'Token::LBRACK': {
           this.Consume('Token::LBRACK');
           let pos = this.position();
           // TODO
           break;
-        case 'Token::PERIOD': 
+        }
+        case 'Token::PERIOD': {
           this.Consume('Token::PERIOD');
           let pos = this.position();
           // TODO
           break;
+        }
         default:
           let pos;
           if (this.scanner.current_token() === 'Token::IDENTIFIER') pos = this.position();
@@ -621,9 +636,8 @@ class ParserBase {
   ParseTemplateLiteral() {}
 
   // TODO
-  is_generator() {
-    return true;
-  }
+  is_generator() { return true; }
+  is_async_function() { return true; }
 
   /**
    * 处理自动分号插入
@@ -644,9 +658,6 @@ class ParserBase {
       return ;
     }
     throw new Error('UnexpectedToken');
-  }
-  BuildInitializationBlock() {
-
   }
 
   FailureExpression() {}
@@ -717,5 +728,23 @@ export default class Parser extends ParserBase {
     else if (sloppy_mode_block_scope_function_redefinition) {
       ++this.use_counts_[kSloppyModeBlockScopedFunctionRedefinition];
     }
+  }
+
+  BuildInitializationBlock(parsing_result) {
+    // ScopedPtrList就是一个高级数组 先不实现了
+    // todo ScopedPtrList<Statement> statements(pointer_buffer());
+    let vector = parsing_result.declarations;
+    for (const declaration of vector) {
+      // 这里的initializer是声明的初始值
+      if(!declaration.initializer) continue;
+      this.InitializeVariables(this.pointer_buffer_, declaration);
+    }
+    return this.ast_node_factory_.NewBlock(true, this.pointer_buffer_);
+  }
+  InitializeVariables(vector, declaration) {
+    let pos = declaration.value_beg_pos;
+    if(pos === kNoSourcePosition) pos = declaration.initializer.position();
+    let assignment = this.ast_node_factory_.NewAssignment('Token::INIT', declaration.pattern, declaration.initializer, pos);
+    vector.push(this.ast_node_factory_.NewExpressionStatement(assignment, pos));
   }
 }

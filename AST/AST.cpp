@@ -210,3 +210,110 @@ class VariableProxy final : public Expression {
       Variable* var_;                 // if is_resolved_
     };
 };
+
+#define DECLARATION_NODE_LIST(V) \
+  V(VariableDeclaration)         \
+  V(FunctionDeclaration)
+
+#define ITERATION_NODE_LIST(V) \
+  V(DoWhileStatement)          \
+  V(WhileStatement)            \
+  V(ForStatement)              \
+  V(ForInStatement)            \
+  V(ForOfStatement)
+
+#define BREAKABLE_NODE_LIST(V) \
+  V(Block)                     \
+  V(SwitchStatement)
+
+#define STATEMENT_NODE_LIST(V)    \
+  ITERATION_NODE_LIST(V)          \
+  BREAKABLE_NODE_LIST(V)          \
+  V(ExpressionStatement)          \
+  V(EmptyStatement)               \
+  V(SloppyBlockFunctionStatement) \
+  V(IfStatement)                  \
+  V(ContinueStatement)            \
+  V(BreakStatement)               \
+  V(ReturnStatement)              \
+  V(WithStatement)                \
+  V(TryCatchStatement)            \
+  V(TryFinallyStatement)          \
+  V(DebuggerStatement)            \
+  V(InitializeClassMembersStatement)
+
+#define LITERAL_NODE_LIST(V) \
+  V(RegExpLiteral)           \
+  V(ObjectLiteral)           \
+  V(ArrayLiteral)
+
+#define EXPRESSION_NODE_LIST(V) \
+  LITERAL_NODE_LIST(V)          \
+  V(Assignment)                 \
+  V(Await)                      \
+  V(BinaryOperation)            \
+  V(NaryOperation)              \
+  V(Call)                       \
+  V(CallNew)                    \
+  V(CallRuntime)                \
+  V(ClassLiteral)               \
+  V(CompareOperation)           \
+  V(CompoundAssignment)         \
+  V(Conditional)                \
+  V(CountOperation)             \
+  V(DoExpression)               \
+  V(EmptyParentheses)           \
+  V(FunctionLiteral)            \
+  V(GetTemplateObject)          \
+  V(ImportCallExpression)       \
+  V(Literal)                    \
+  V(NativeFunctionLiteral)      \
+  V(Property)                   \
+  V(ResolvedProperty)           \
+  V(Spread)                     \
+  V(StoreInArrayLiteral)        \
+  V(SuperCallReference)         \
+  V(SuperPropertyReference)     \
+  V(TemplateLiteral)            \
+  V(ThisExpression)             \
+  V(Throw)                      \
+  V(UnaryOperation)             \
+  V(VariableProxy)              \
+  V(Yield)                      \
+  V(YieldStar)
+
+#define FAILURE_NODE_LIST(V) V(FailureExpression)
+
+#define AST_NODE_LIST(V)                        \
+  DECLARATION_NODE_LIST(V)                      \
+  STATEMENT_NODE_LIST(V)                        \
+  EXPRESSION_NODE_LIST(V)
+
+// Type testing & conversion functions overridden by concrete subclasses.
+// Inline functions for AstNode.
+
+#define DECLARE_NODE_FUNCTIONS(type)                                         \
+  bool AstNode::Is##type() const { return node_type() == AstNode::k##type; } \
+  type* AstNode::As##type() {                                                \
+    return node_type() == AstNode::k##type ? reinterpret_cast<type*>(this)   \
+                                           : nullptr;                        \
+  }                                                                          \
+  const type* AstNode::As##type() const {                                    \
+    return node_type() == AstNode::k##type                                   \
+               ? reinterpret_cast<const type*>(this)                         \
+               : nullptr;                                                    \
+  }
+AST_NODE_LIST(DECLARE_NODE_FUNCTIONS)
+FAILURE_NODE_LIST(DECLARE_NODE_FUNCTIONS)
+#undef DECLARE_NODE_FUNCTIONS
+
+bool AstNode::Is##type() const { return node_type() == AstNode::k##type; } 
+  type* AstNode::As##type() {                                                
+    return node_type() == AstNode::k##type ? reinterpret_cast<type*>(this)   
+                                           : nullptr;                        
+  }                                                                          
+  const type* AstNode::As##type() const {                                    
+    return node_type() == AstNode::k##type                                   
+               ? reinterpret_cast<const type*>(this)                         
+               : nullptr;                                                    
+  }
