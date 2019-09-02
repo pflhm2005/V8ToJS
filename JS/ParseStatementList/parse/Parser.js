@@ -244,8 +244,8 @@ class ParserBase {
          * (1)单字符 计算后 将值缓存到一个名为one_character_strings_的容器 下次直接返回
          * (2)纯数字字符串且小于2^32(int类型可保存范围内) 会转换为数字后进行Hash计算
          * (3)出现ascii码大于127会特殊处理 暂时不管
-         * (4)其余情况会以一个种子为基准 遍历每一个字符的ascii码进行位运算 最后算出一个Hash值
-         * 最后会返回一个AstRawString实例与一个Hash值 并缓存到一个全局的Map中
+         * (4)其余情况会以一个种子数字为基准 遍历每一个字符的ascii码进行位运算 算出一个Hash值
+         * 解析结果返回一个AstRawString实例与一个Hash值 并缓存到一个全局的Map中
          * 
          * 游标变动
          * [LET, IDENTIFIER, null] => [IDENTIFIER, ASSIGN, null]
@@ -290,7 +290,7 @@ class ParserBase {
       }
       /**
        * let后面不一定必须跟标识符
-       * let [] a, b ] = [1, 2]也是合法的
+       * let [ a, b ] = [1, 2]也是合法的
        */ 
       else {
         name = this.NullIdentifier();
