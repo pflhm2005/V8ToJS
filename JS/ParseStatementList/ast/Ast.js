@@ -17,10 +17,13 @@ import {
   kAssignment,
   kCompoundAssignment,
   kExpressionStatement,
+
+  kVariableProxy,
 } from "../base/Const";
 
-const update = () => {};
-const decode = () => {};
+import {
+  NodeTypeField,
+} from '../base/Util';
 
 export class AstNodeFactory {
   NewVariableProxy(name, variable_kind, start_position = kNoSourcePosition) {
@@ -78,13 +81,10 @@ export class AstNodeFactory {
 class AstNode {
   constructor(position, type) {
     this.position_ = position;
-    this.bit_field_ = this.encode(type);
+    this.bit_field_ = NodeTypeField.encode(type);
   }
   IsVariableProxy() { return this.node_type() === ''; }
-  node_type() { return this.decode(this.bit_field_); }
-  encode() {}
-  decode() {}
-  update() {}
+  node_type() { return NodeTypeField.decode(this.bit_field_); }
 }
 
 class Statement extends AstNode {
@@ -149,12 +149,12 @@ class Declaration extends AstNode {
 class VariableDeclaration extends Declaration {
   constructor(pos, is_nested = false) {
     super(pos, kVariableDeclaration);
-    this.bit_field_ = update(this.bit_field_, is_nested);
+    this.bit_field_ = NodeTypeField.update(this.bit_field_, is_nested);
   }
 }
 
 export class Expression extends AstNode {
-  constructor(pos = 0, type = 0) {
+  constructor(pos, type) {
     super(pos, type);
   }
 }
@@ -178,7 +178,7 @@ class CompoundAssignment extends Assignment {
 
 export class VariableProxy extends Expression {
   constructor(name, variable_kind, start_position) {
-    super(start_position, variable_kind);
+    super(start_position, kVariableProxy);
     this.raw_name_ = name;
     this.next_unresolved_ = null;
 
@@ -187,8 +187,8 @@ export class VariableProxy extends Expression {
     this.bit_field_ |= 0;
   }
   set_var(v) { this.var_ = v; }
-  set_is_resolved() { this.bit_field_ = update(this.bit_field_, true); }
-  is_assigned() { return decode(this.bit_field_); }
+  set_is_resolved() { this.bit_field_ = NodeTypeField.update(this.bit_field_, true); }
+  is_assigned() { return NodeTypeField.decode(this.bit_field_); }
 
   BindTo(variable) {
     this.set_var(variable);
@@ -225,7 +225,7 @@ class Literal extends Expression{
     this.val = new Array(6).fill(null);
     this.val[type] = val;
     
-    this.bit_field_ = this.update(this.bit_field_, type);
+    this.bit_field_ = NodeTypeField.update(this.bit_field_, type);
   }
   // add
   val() {
@@ -258,8 +258,8 @@ export class Variable extends ZoneObject {
     this.initializer_position_ = kNoSourcePosition;
     this.bit_field_ = 0; // TODO
   }
-  set_is_used() { this.bit_field_ = update(this.bit_field_, true); }
-  set_maybe_assigned() { this.bit_field_ = update(this.bit_field_, kMaybeAssigned); }
+  set_is_used() { this.bit_field_ = NodeTypeField.update(this.bit_field_, true); }
+  set_maybe_assigned() { this.bit_field_ = NodeTypeField.update(this.bit_field_, kMaybeAssigned); }
 
   static DefaultInitializationFlag(mode) { return mode === kVar ? kCreatedInitialized : kNeedsInitialization; }
 };

@@ -287,3 +287,33 @@ export const Precedence = (token, accept_IN) => {
   let idx = TokenEnumList.indexOf(token.slice(7));
   return precedence_[Number(accept_IN)][idx];
 }
+
+/**
+ * 这个类是一个模板类
+ * template <class T, int shift, int size, class U = int>
+ * class BitField {}
+ */
+class BitField {
+  constructor(shift, size) {
+    this.kShift = shift;
+    this.kSize = size;
+    this.kMask = ((1 << this.kShift) << this.kSize) - (1 << this.kShift);
+    this.kNumValues = 1 << this.kSize;
+    this.kMax = this.kNumValues - 1;
+  }
+  static encode(value) {
+    return value << this.kShift;
+  }
+  static update(previous, value) {
+    return (previous & ~this.kMask) | this.encode(value);
+  }
+  static decode(value) {
+    return (value & this.kMask) >> this.kShift;
+  }
+}
+
+export class NodeTypeField extends BitField {
+  constructor() {
+    super(0, 6);
+  }
+}

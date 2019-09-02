@@ -394,4 +394,4 @@ export const kExpressionStatement = 3;
  * AstNode类型枚举
  * TODO
  */
-export const kVariableProxytype = 0;
+export const kVariableProxy = 0;

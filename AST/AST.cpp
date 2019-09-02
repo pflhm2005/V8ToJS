@@ -38,6 +38,13 @@ class ZoneObject {};
 class Variable final : public ZoneObject {};
 
 class AstNode: public ZoneObject {
+  public:
+  #define DECLARE_TYPE_ENUM(type) k##type,
+    enum NodeType : uint8_t {
+      AST_NODE_LIST(DECLARE_TYPE_ENUM) /* , */
+      FAILURE_NODE_LIST(DECLARE_TYPE_ENUM)
+    };
+  #undef DECLARE_TYPE_ENUM
   protected:
     uint32_t bit_field_;
     static const uint8_t kNextBitFieldIndex = NodeTypeField::kNext;
