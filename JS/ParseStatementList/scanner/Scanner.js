@@ -187,26 +187,161 @@ export default class Scanner {
 
         switch(token) {
           case 'Token::LPAREN':
-          /**
-           * 有很多其他的case
-           * 逐渐壮大了
-           */
+          case 'Token::RPAREN':
+          case 'Token::LBRACE':
+          case 'Token::RBRACE':
+          case 'Token::LBRACK':
+          case 'Token::RBRACK':
+          case 'Token::CONDITIONAL':
+          case 'Token::COLON':
+          case 'Token::SEMICOLON':
+          case 'Token::COMMA':
+          case 'Token::BIT_NOT':
+          case 'Token::ILLEGAL':
             return this.Select(token);
+
+          case 'Token::STRING':
+            return this.ScanString();
+
+          case 'Token::LT':
+            // < <= << <<= <!--
+            this.Advance();
+            if (this.c0_ === '=') return this.Select('Token::LTE');
+            if (this.c0_ === '<') return this.Select('=', 'Token::ASSIGN_SHL', 'Token::SHL');
+            if (this.c0_ === '!') {
+              token = this.ScanHtmlComment();
+              continue;
+            }
+            return 'Token::LT';
+          
+          case 'Token::GT':
+            // > >= >> >>= >>> >>>=
+            this.Advance();
+            if (this.c0_ === '=') return this.Select('Token::GTE');
+            if (this.c0_ === '>') {
+              // >> >>= >>> >>>=
+              this.Advance();
+              if (this.c0_ === '=') return this.Select('Token::ASSIGN_SAR');
+              if (this.c0_ === '>') return this.Select('=', 'Token::ASSIGN_SHR', 'Token::SHR');
+              return 'Token::SAR';
+            }
+            return 'Token::GT';
+
           case 'Token::ASSIGN':
             this.Advance();
             if (UnicodeToAsciiMapping[this.c0_] === '=') return this.Select('=',' Token::EQ_STRICT', 'Token::EQ');
             if (UnicodeToAsciiMapping[this.c0_] === '>') return this.Select('Token::ARROW');
             return 'Token::ASSIGN';
-          case 'Token::STRING':
-            return this.ScanString();
+          
+          case 'Token::NOT':
+            // ! != !==
+            this.Advance();
+            if (this.c0_ === '=') return this.Select('=', 'Token::NE_STRICT', 'Token::NE');
+            return 'Token::NOT';
+
+          case 'Token::ADD':
+            // + ++ +=
+            this.Advance();
+            if (this.c0_ === '+') return this.Select('Token::INC');
+            if (this.c0_ === '=') return this.Select('Token::ASSIGN_ADD');
+            return 'Token::ADD';
+          
+          case 'Token::SUB':
+            // - -- --> -=
+            this.Advance();
+            if (this.c0_ === '-') {
+              this.Advance();
+              if (this.c0_ === '>' && this.next().after_line_terminator) {
+                // For compatibility with SpiderMonkey, we skip lines that
+                // start with an HTML comment end '-->'.
+                token = this.SkipSingleHTMLComment();
+                continue;
+              }
+              return 'Token::DEC';
+            }
+            if (this.c0_ === '=') return this.Select('Token::ASSIGN_SUB');
+            return 'Token::SUB';
+          
+          case 'Token::MUL':
+            // * *=
+            this.Advance();
+            if (this.c0_ === '*') return this.Select('=', 'Token::ASSIGN_EXP', 'Token::EXP');
+            if (this.c0_ === '=') return this.Select('Token::ASSIGN_MUL');
+            return 'Token::MUL';
+
+          case 'Token::MOD':
+            // % %=
+            return this.Select('=', 'Token::ASSIGN_MOD', 'Token::MOD');
+
+          case 'Token::DIV':
+            // /  // /* /=
+            this.Advance();
+            if (this.c0_ === '/') {
+              let c = this.Peek();
+              if (c === '#' || c === '@') {
+                this.Advance();
+                this.Advance();
+                token = this.SkipSourceURLComment();
+                continue;
+              }
+              token = this.SkipSingleLineComment();
+              continue;
+            }
+            if (this.c0_ === '*') {
+              token = this.SkipMultiLineComment();
+              continue;
+            }
+            if (this.c0_ === '=') return this.Select('Token::ASSIGN_DIV');
+            return 'Token::DIV';
+          
+          case 'Token::BIT_AND':
+            // & && &=
+            this.Advance();
+            if (this.c0_ === '&') return this.Select('Token::AND');
+            if (this.c0_ === '=') return this.Select('Token::ASSIGN_BIT_AND');
+            return 'Token::BIT_AND';
+          
+          case 'Token::BIT_OR':
+            // | || |=
+            this.Advance();
+            if (this.c0_ === '|') return this.Select('Token::OR');
+            if (this.c0_ === '=') return this.Select('Token::ASSIGN_BIT_OR');
+            return 'Token::BIT_OR';
+
+          case 'Token::BIT_XOR':
+            // ^ ^=
+            return this.Select('=', 'Token::ASSIGN_BIT_XOR', 'Token::BIT_XOR');
+
+          case 'Token::PERIOD':
+            // . Number
+            this.Advance();
+            if (IsDecimalDigit(this.c0_)) return this.ScanNumber(true);
+            if (this.c0_ === '.') {
+              if (this.Peek() === '.') {
+                this.Advance();
+                this.Advance();
+                return 'Token::ELLIPSIS';
+              }
+            }
+            return 'Token::PERIOD';
+          
+          case 'Token::TEMPLATE_SPAN':
+            this.Advance();
+            return this.ScanTemplateSpan();
+
+          case 'Token::PRIVATE_NAME':
+            return this.ScanPrivateName();
+
           case 'Token::WHITESPACE':
             token = this.SkipWhiteSpace();
             continue;
+
           case 'Token::NUMBER':
             return this.ScanNumber(false);
+
           case 'Token::IDENTIFIER':
             return this.ScanIdentifierOrKeyword();
-          // ...
+
           default:
             this.UNREACHABLE();
         } 
@@ -241,6 +376,11 @@ export default class Scanner {
 
     return 'Token::WHITESPACE';
   }
+  /**
+   * 处理注释
+   */
+  ScanHtmlComment() {}
+  SkipSingleHTMLComment() {}
   /**
    * 解析数字相关
    * literal作为字面量类无所不能!
@@ -355,7 +495,7 @@ export default class Scanner {
     if (is_check_first_digit && !predicate(this.c0_)) return false;
 
     let separator_seen = false;
-    while(predicate(this.c0_)|| UnicodeToAsciiMapping[this.c0_] === '_') {
+    while(predicate(this.c0_) || UnicodeToAsciiMapping[this.c0_] === '_') {
       if (UnicodeToAsciiMapping[this.c0_] === '_') {
         this.Advance();
         // 连续两个下划线是不合法的
@@ -566,7 +706,17 @@ export default class Scanner {
   }
 
   /**
-   * 非Token解析相关
+   * 解析模板字符串
+   */
+  ScanTemplateSpan() {}
+  
+  /**
+   * 解析保留关键词
+   */
+  ScanPrivateName() {}
+
+  /**
+   * 非Token解析方法
    * 处理标识符
    */
   CurrentSymbol(ast_value_factory) {

@@ -80,6 +80,7 @@ class ParserBase {
     this.scanner.UNREACHABLE();
   }
   NullExpression() { return null; }
+  NullIdentifier() { return null; }
   peek() {
     return this.scanner.peek();
   }

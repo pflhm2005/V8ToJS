@@ -277,7 +277,7 @@ export const IsLiteral = token => TokenIsInRange(token, 'NULL_LITERAL', 'STRING'
 export const IsMember = token => TokenIsInRange(token, 'TEMPLATE_SPAN', 'LBRACK');
 
 /**
- * 判断当前表达式的层级
+ * 判断当前表达式的层级或符号优先级
  * 根据token返回一个precedence值
  * @param {Enumerator} token 枚举值
  * @param {Boolean} accept_IN 
@@ -304,6 +304,10 @@ class BitField {
   static encode(value) {
     return value << this.kShift;
   }
+  /**
+   * 当kMask是111111时 ~kMask => 1000000 由于直接是最大值 所以左侧相当于9
+   * 当kMask是11111100时 ~kMask => 11111101 做与运算
+   */
   static update(previous, value) {
     return (previous & ~this.kMask) | this.encode(value);
   }
@@ -312,6 +316,14 @@ class BitField {
   }
 }
 
+/**
+ * shift =>0 size => 6
+ * kMax => (1 << 6) - 1 => 1000000 - 1 => 111111
+ * 当shift为0时 kMask === KMax
+ * 当shift为2时 
+ * kMask => ((1 << 6) << 2) - (1 << 2) => 100000000 - 100 => 11111100
+ * 相当于kMax左移两位
+ */
 export class NodeTypeField extends BitField {
   constructor() {
     super(0, 6);
