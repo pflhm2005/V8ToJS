@@ -80,6 +80,7 @@ class ParserBase {
     this.scanner.UNREACHABLE();
   }
   NullExpression() { return null; }
+  NullIdentifier() { return null; }
   peek() {
     return this.scanner.peek();
   }
@@ -243,8 +244,8 @@ class ParserBase {
          * (1)单字符 计算后 将值缓存到一个名为one_character_strings_的容器 下次直接返回
          * (2)纯数字字符串且小于2^32(int类型可保存范围内) 会转换为数字后进行Hash计算
          * (3)出现ascii码大于127会特殊处理 暂时不管
-         * (4)其余情况会以一个种子为基准 遍历每一个字符的ascii码进行位运算 最后算出一个Hash值
-         * 最后会返回一个AstRawString实例与一个Hash值 并缓存到一个全局的Map中
+         * (4)其余情况会以一个种子数字为基准 遍历每一个字符的ascii码进行位运算 算出一个Hash值
+         * 解析结果返回一个AstRawString实例与一个Hash值 并缓存到一个全局的Map中
          * 
          * 游标变动
          * [LET, IDENTIFIER, null] => [IDENTIFIER, ASSIGN, null]
@@ -289,7 +290,7 @@ class ParserBase {
       }
       /**
        * let后面不一定必须跟标识符
-       * let [] a, b ] = [1, 2]也是合法的
+       * let [ a, b ] = [1, 2]也是合法的
        */ 
       else {
         name = this.NullIdentifier();
@@ -309,15 +310,15 @@ class ParserBase {
           value_beg_pos = this.peek_position();
           /**
            * 这里处理赋值
-           * 大部分情况下这是一个简单右值 从简到繁(源码使用了一个Precedence来进行渐进解析与优先级判定)
-           * Precedence代表该表达式的复杂程度 值越低越复杂 优先级越低
+           * 大部分情况下这是一个简单右值 源码使用了一个Precedence来进行渐进解析与优先级判定
+           * Precedence代表该表达式的复杂程度 值越低表示越复杂(或运算符优先级越低)
            * Precedence = 2 基本处理方法
-           * Precedence = 3 处理三元表达式 由于三元的每一块都是独立的表达式 之间没有直接的逻辑
+           * Precedence = 3 处理三元表达式 每一块都是独立的表达式 之间没有直接的逻辑
            * Precedence >= 4 处理二元表达式、一元表达式、纯字面量
-           * 其中 多元表达式由于存在连续运算 所以均有一个对应的xxxContinuation方法 
+           * 其中 由于运算存在多元的情况 所以均有一个对应的xxxContinuation方法来递归解析
            * 例如a ? b : c ? d : e、a.b.c、a[b][c]等等
            * 
-           * 而二元表达式的分类如下
+           * Precedence >= 4的分类如下
            * (1)单值字面量 null、true、false、1、1.1、1n、'1'
            * (2)一元运算 +1、++a 形如+function(){}、!function(){}会被特殊处理
            * (3)二元运算 'a' + 'b'、1 + 2
@@ -325,7 +326,7 @@ class ParserBase {
            * 等等情况 实在太过繁琐
            * 除了上述情况 被赋值的可能也是一个左值 比如遇到如下的特殊Token
            * import、async、new、this、function、任意标识符等等
-           * 由于左值的解析相当于一个完整的新表达式 因此不必列举出来
+           * 左值的解析相当于一个完整的新表达式
            */
           value = this.ParseAssignmentExpression();
         }
@@ -460,7 +461,6 @@ class ParserBase {
     return x;
   }
   /**
-   * 所有的逻辑最终会汇集在这里
    * 处理一元表达式 分为下列情况
    * (1)PostfixExpression
    * (2)delete xxx
@@ -510,7 +510,7 @@ class ParserBase {
     return this.ParseMemberExpressionContinuation(result);
   }
   /**
-   * 这里处理所有初级表达式
+   * 所有的逻辑最终会汇集在这里 处理最基本的单位
    * 分为下列情况
    * (1)this
    * (2)null

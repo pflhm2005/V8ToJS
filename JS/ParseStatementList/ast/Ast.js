@@ -83,7 +83,7 @@ class AstNode {
     this.position_ = position;
     this.bit_field_ = NodeTypeField.encode(type);
   }
-  IsVariableProxy() { return this.node_type() === ''; }
+  IsVariableProxy() { return this.node_type() === kVariableProxy; }
   node_type() { return NodeTypeField.decode(this.bit_field_); }
 }
 
