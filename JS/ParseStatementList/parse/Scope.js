@@ -5,7 +5,7 @@ import {
   kNotAssigned,
 } from "../base/Const";
 import { Variable } from "../ast/AST";
-import ThreadedList from '../base/ThreadedList';
+// import ThreadedList from '../base/ThreadedList';
 
 class ZoneObject {};
 
@@ -76,7 +76,8 @@ export default class Scope extends ZoneObject {
      * 主属性有tail_、head_两个属性 其中tail_是二维指针、head_是一维指针
      * 这是因为传入该list里的都是指向Declaration实例的指针
      */
-    this.decls_ = new ThreadedList();
+    // this.decls_ = new ThreadedList();
+    this.decls_ = [];
     // In case of non-scopeinfo-backed scopes, this contains the variables of the
     // map above in order of addition.
     // base::ThreadedList<Variable> locals_;
@@ -159,7 +160,7 @@ export default class Scope extends ZoneObject {
       // if () {}
     }
 
-    this.decls_.Add(declaration);
+    this.decls_.push(declaration);
     declaration.set_var(variable);
     return { was_added, sloppy_mode_block_scope_function_redefinition };
   }

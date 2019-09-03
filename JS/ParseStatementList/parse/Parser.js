@@ -181,7 +181,7 @@ class ParserBase {
      * 在若干情况下 源代码需要自动插入分号
      */
     this.ExpectSemicolon();
-    // return this.BuildInitializationBlock(result);
+    return this.BuildInitializationBlock(result);
   }
   ParseVariableDeclarations(var_context, parsing_result, names) {
     parsing_result.descriptor.kind = NORMAL_VARIABLE;
@@ -218,8 +218,8 @@ class ParserBase {
     this.expression_scope_ = new VariableDeclarationParsingScope(this, parsing_result.descriptor.mode, names);
     // 获取合适的作用域
     let target_scope = IsLexicalVariableMode(parsing_result.descriptor.mode) ? this.scope_ : this.scope_.GetDeclarationScope();
-
-    let declaration_it = target_scope.declarations().end();
+    let decls = target_scope.declarations();
+    let declaration_it = decls.length ? decls[decls.length - 1] : null;
 
     let bindings_start = this.peek_position();
     /**
@@ -345,7 +345,7 @@ class ParserBase {
        * 当成简单的遍历
        * 这里的逻辑JS极难模拟 做简化处理
        */
-      let declaration_end = target_scope.declarations().end();
+      let declaration_end = decls[decls.length - 1];
       if(declaration_it === null) declaration_end.var().initializer_position_ = initializer_position;
       // else {
       //   for(;declaration_it !== declaration_end;declaration_it = declaration_it.next_) {
@@ -737,6 +737,7 @@ export default class Parser extends ParserBase {
     for (const declaration of vector) {
       // 这里的initializer是声明的初始值
       if(!declaration.initializer) continue;
+      // 这里第二个参数是parsing_result.descriptor.kind 但是没有使用
       this.InitializeVariables(this.pointer_buffer_, declaration);
     }
     return this.ast_node_factory_.NewBlock(true, this.pointer_buffer_);

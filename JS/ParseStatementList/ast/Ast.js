@@ -23,6 +23,9 @@ import {
 
 import {
   NodeTypeField,
+  BreakableTypeField,
+  IgnoreCompletionField,
+  IsLabeledField,
 } from '../base/Util';
 
 export class AstNodeFactory {
@@ -73,8 +76,14 @@ export class AstNodeFactory {
   NewExpressionStatement(expression, pos) {
     return new ExpressionStatement(expression, pos);
   }
-  NewBlock(ignore_completion_value, labels) {
-    return labels !== null ? new LabeledBlock(labels, ignore_completion_value) : new Block(labels, ignore_completion_value);
+  /**
+   * 该方法有重载
+   */
+  NewBlock(ignore_completion_value, statements) {
+    // 构造参数在这里基本上毫无意义
+    let result = new Block();
+    result.InitializeStatements(statements, null);
+    return result;
   }
 }
 
@@ -111,16 +120,20 @@ class ExpressionStatement extends Statement {
 class BreakableStatement extends Statement {
   constructor(breakable_type, position, type) {
     super(position, type);
-    // this.bit_field_ |= TODO
+    this.bit_field_ |= BreakableTypeField.encode(breakable_type);
   }
 }
 
 class Block extends BreakableStatement {
-  constructor(labels, capacity, ignore_completion_value) {
+  constructor(zone = null, labels = null, capacity = 0, ignore_completion_value = true) {
     super(TARGET_FOR_NAMED_ONLY, kNoSourcePosition, kBlock);
-    this.statement_ = new Array(capacity).fill(null);
+    this.statement_ = null;
     this.scope_ = null;
-    // this.bit_field_ |= TODO
+    this.bit_field_ |= IgnoreCompletionField.encode(1) | IsLabeledField.encode(0);
+  }
+  // 这里用的内存拷贝
+  InitializeStatements(statements, zone = null) {
+    this.statement_ = statements;
   }
 }
 

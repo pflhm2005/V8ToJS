@@ -298,6 +298,7 @@ class BitField {
     this.kShift = shift;
     this.kSize = size;
     this.kMask = ((1 << this.kShift) << this.kSize) - (1 << this.kShift);
+    this.kNext = this.kShift + this.kSize;
     this.kNumValues = 1 << this.kSize;
     this.kMax = this.kNumValues - 1;
   }
@@ -327,5 +328,29 @@ class BitField {
 export class NodeTypeField extends BitField {
   constructor() {
     super(0, 6);
+  }
+}
+
+/**
+ * Statement::kNextBitFieldIndex = NodeTypeField::kNext = 6;
+ * BreakableStatement::kNextBitFieldIndex = BreakableTypeField::kNext = Statement::kNextBitFieldIndex + 1 = 7
+ * IsLabeledField::kNext = 7 + 1 = 8
+ */
+
+export class BreakableTypeField extends BitField {
+  constructor() {
+    super(6, 1);
+  }
+}
+
+export class IgnoreCompletionField extends BitField {
+  constructor() {
+    super(7, 1);
+  }
+}
+
+export class IsLabeledField extends BitField {
+  constructor() {
+    super(8, 1);
   }
 }
