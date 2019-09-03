@@ -19,6 +19,12 @@ import {
   kExpressionStatement,
 
   kVariableProxy,
+
+  TARGET_FOR_ANONYMOUS,
+  TARGET_FOR_NAMED_ONLY,
+
+  kExpression,
+  kBlock,
 } from "../base/Const";
 
 import {
@@ -26,6 +32,7 @@ import {
   BreakableTypeField,
   IgnoreCompletionField,
   IsLabeledField,
+  TokenField,
 } from '../base/Util';
 
 export class AstNodeFactory {
@@ -177,7 +184,7 @@ class Assignment extends Expression {
     super(pos, node_type);
     this.target_ = target;
     this.value_ = value;
-    this.bit_field_ |= this.encode(op);
+    this.bit_field_ |= TokenField.encode(op);
   }
 }
 

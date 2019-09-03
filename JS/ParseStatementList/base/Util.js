@@ -354,3 +354,9 @@ export class IsLabeledField extends BitField {
     super(8, 1);
   }
 }
+
+export class TokenField extends BitField {
+  constructor() {
+    super(6, 8);
+  }
+}

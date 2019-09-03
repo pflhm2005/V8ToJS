@@ -301,12 +301,6 @@ export const THIS_VARIABLE = 2;
 export const SLOPPY_BLOCK_FUNCTION_VARIABLE = 3;
 export const SLOPPY_FUNCTION_NAME_VARIABLE = 4;
 
-/**
- * 表达式类型
- */
-// 表达式
-export const kExpression = 0;
-
 // 右值是表达式
 export const kMaybeArrowParameterDeclaration = 1;
 export const kMaybeAsyncArrowParameterDeclaration = 2;
@@ -435,3 +429,9 @@ export const kUnaryOperation = 52;
 export const kVariableProxy = 53;
 export const kYield = 54;
 export const kYieldStar = 55;
+
+/**
+ * break语句枚举
+ */
+export const TARGET_FOR_ANONYMOUS = 0;
+export const TARGET_FOR_NAMED_ONLY = 1;
