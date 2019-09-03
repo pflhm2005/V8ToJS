@@ -3,29 +3,29 @@ import { Variable, VariableProxy } from '../ast/Ast';
 import {
   NORMAL_VARIABLE,
 
-  kExpression,
-  kMaybeArrowParameterDeclaration,
-  kMaybeAsyncArrowParameterDeclaration,
-  kParameterDeclaration,
-  kVarDeclaration,
-  kLexicalDeclaration,
-
-  kExpressionIndex,
-  kPatternIndex,
-  kNumberOfErrors,
-} from '../base/Const';
+  kNoSourcePosition
+} from '../enum';
 
 import {
   IsLexicalVariableMode,
   IsInRange,
-} from '../base/Util';
+} from '../util';
 
 import {
   kTooManyVariables,
   kLetInLexicalBinding,
-} from '../base/MessageTemplate';
+} from '../MessageTemplate';
 
-const kNoSourcePosition = -1;
+const kExpressionIndex = 0;
+const kPatternIndex = 1;
+const kNumberOfErrors = 2;
+
+const kExpression = 0;
+const kMaybeArrowParameterDeclaration = 1;
+const kMaybeAsyncArrowParameterDeclaration = 2;
+const kParameterDeclaration = 3;
+const kVarDeclaration = 4;
+const kLexicalDeclaration = 5;
 
 const kMaxNumFunctionLocals = (1 << 23) - 1;
 
@@ -50,9 +50,9 @@ class ExpressionScope {
    * 下面三个方法 源码将类向下强转类型
    * JS做不到 不搞了
    */
-  // AsExpressionParsingScope() { return new ExpressionParsingScope(this.parser_, this.type_).TrackVariable(); }
-  // AsParameterDeclarationParsingScope(parser) { return new ParameterDeclarationParsingScope(parser); }
-  // AsVariableDeclarationParsingScope(parser, mode, names) { return new VariableDeclarationParsingScope(parser, mode, names); }
+  AsExpressionParsingScope() { return new ExpressionParsingScope(this.parser_, this.type_).TrackVariable(); }
+  AsParameterDeclarationParsingScope(parser) { return new ParameterDeclarationParsingScope(parser); }
+  AsVariableDeclarationParsingScope(parser, mode, names) { return new VariableDeclarationParsingScope(parser, mode, names); }
 
   /**
    * 生成一个VariableProxy与一个Variable并进行绑定
@@ -106,7 +106,8 @@ export class ExpressionParsingScope extends ExpressionScope {
   constructor(parser, type = kExpression) {
     super(parser, type);
     this.variable_list_ = [];
-    this.locations_ = [];
+    this.messages_ = [null, null];
+    this.locations_ = [null, null];
   }
   ValidateExpression() { this.Validate(kExpressionIndex); }
   is_valid(index) { return !locations_[index].IsValid(); }
@@ -157,3 +158,24 @@ export class VariableDeclarationParsingScope extends ExpressionScope {
 }
 
 class ParameterDeclarationParsingScope extends ExpressionScope {}
+
+export class AccumulationScope {
+  constructor(scope) {
+    this.messages_ = [null, null];
+    this.locations_ = [null, null];
+    this.scope_ = null;
+    if (!scope.CanBeExpression()) return;
+    this.scope_ = scope.AsExpressionParsingScope();
+    // for (let i = 0; i < kNumberOfErrors; i++) {
+    //   if (!this.scope_.is_valid(i)) {
+    //     this.scope_ = null;
+    //     break;
+    //   }
+    //   this.copy(i);
+    // }
+  }
+  copy(entry) {
+    this.messages_[entry] = this.scope_.messages_[entry];
+    this.locations_[entry] = this.scope_.locations_[entry];
+  }
+}

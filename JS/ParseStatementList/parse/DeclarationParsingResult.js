@@ -1,7 +1,7 @@
-import Location from '../base/Location';
+import Location from '../scanner/Location';
 import {
   kNoSourcePosition
-} from '../base/Const';
+} from '../enum';
 
 /**
  * mode、kind分别是声明类型

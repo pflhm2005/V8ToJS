@@ -3,7 +3,7 @@ import {
   kDynamic,
   kConst,
   kNotAssigned,
-} from "../base/Const";
+} from "../enum";
 import { Variable } from "../ast/AST";
 // import ThreadedList from '../base/ThreadedList';
 

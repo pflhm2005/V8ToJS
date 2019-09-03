@@ -1,20 +1,13 @@
 import Stream from './Stream';
 import PerfectKeywordHash from './PerfectKeywordHash';
 import TokenDesc from './TokenDesc';
-import Location from '../base/Location';
+import Location from './Location';
 
 import { 
   kMaxAscii, 
   kIdentifierNeedsSlowPath,
-  IMPLICIT_OCTAL,
-  BINARY,
-  OCTAL,
-  HEX,
-  DECIMAL,
-  DECIMAL_WITH_LEADING_ZERO,
-  kCharacterLookaheadBufferSize,
   kEndOfInput,
-} from '../base/Const';
+} from '../enum';
 
 import {
   TerminatesLiteral,
@@ -34,14 +27,21 @@ import {
   IsDecimalNumberKind,
   IsValidBigIntKind,
   IsWhiteSpaceOrLineTerminator,
-} from '../base/Util';
+} from '../util';
 
 import {
   kStrictDecimalWithLeadingZero,
   kZeroDigitNumericSeparator,
   kContinuousNumericSeparator,
   kTrailingNumericSeparator,
-} from '../base/MessageTemplate';
+} from '../MessageTemplate';
+
+const IMPLICIT_OCTAL = 0;
+const BINARY = 1;
+const OCTAL = 2;
+const HEX = 3;
+const DECIMAL = 4;
+const DECIMAL_WITH_LEADING_ZERO = 5;
 
 /**
  * v8新特性
@@ -50,6 +50,8 @@ import {
 const allow_harmony_numeric_separator = () => true;
 
 const Smi_kMaxValue = 2**31 - 1;
+
+const kCharacterLookaheadBufferSize = 1;
 
 export default class Scanner {
   constructor(source_string) {
@@ -607,6 +609,7 @@ export default class Scanner {
     if (!IsDecimalDigit(this.c0_)) return false;
     return this.ScanDecimalDigits();
   }
+
   /**
    * 解析标识符相关
    * 标识符的解析也用到了literal类

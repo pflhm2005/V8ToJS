@@ -1,7 +1,7 @@
 import { 
   IsInRange,
   IsDecimalDigit,
-} from '../base/Util';
+} from '../util';
 
 // Mask constant for checking if a name has a computed hash code
 // and if it is a string that is an array index.  The least significant bit

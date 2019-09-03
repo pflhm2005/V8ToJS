@@ -241,3 +241,90 @@ class ParameterDeclarationParsingScope : public ExpressionScope<Types> {
       return var;
     }
 };
+
+
+// This class is used to parse multiple ambiguous expressions and declarations
+// in the same scope. E.g., in async(X,Y,Z) or [X,Y,Z], X and Y and Z will all
+// be parsed in the respective outer ArrowHeadParsingScope and
+// ExpressionParsingScope. It provides a clean error state in the underlying
+// scope to parse the individual expressions, while keeping track of the
+// expression and pattern errors since the start. The AccumulationScope is only
+// used to keep track of the errors so far, and the underlying ExpressionScope
+// keeps being used as the expression_scope(). If the expression_scope() isn't
+// ambiguous, this class does not do anything.
+template <typename Types>
+class AccumulationScope {
+ public:
+  using ParserT = typename Types::Impl;
+
+  static const int kNumberOfErrors =
+      ExpressionParsingScope<Types>::kNumberOfErrors;
+  explicit AccumulationScope(ExpressionScope<Types>* scope) : scope_(nullptr) {
+    if (!scope->CanBeExpression()) return;
+    scope_ = scope->AsExpressionParsingScope();
+    for (int i = 0; i < kNumberOfErrors; i++) {
+      // If the underlying scope is already invalid at the start, stop
+      // accumulating. That means an error was found outside of an
+      // accumulating path.
+      if (!scope_->is_valid(i)) {
+        scope_ = nullptr;
+        break;
+      }
+      copy(i);
+    }
+  }
+
+  // Merge errors from the underlying ExpressionParsingScope into this scope.
+  // Only keeps the first error across all accumulate calls, and removes the
+  // error from the underlying scope.
+  void Accumulate() {
+    if (scope_ == nullptr) return;
+    DCHECK(!scope_->is_verified());
+    for (int i = 0; i < kNumberOfErrors; i++) {
+      if (!locations_[i].IsValid()) copy(i);
+      scope_->clear(i);
+    }
+  }
+
+  // This is called instead of Accumulate in case the parsed member is already
+  // known to be an expression. In that case we don't need to accumulate the
+  // expression but rather validate it immediately. We also ignore the pattern
+  // error since the parsed member is known to not be a pattern. This is
+  // necessary for "{x:1}.y" parsed as part of an assignment pattern. {x:1} will
+  // record a pattern error, but "{x:1}.y" is actually a valid as part of an
+  // assignment pattern since it's a property access.
+  void ValidateExpression() {
+    if (scope_ == nullptr) return;
+    DCHECK(!scope_->is_verified());
+    scope_->ValidateExpression();
+    DCHECK(scope_->is_verified());
+    scope_->clear(ExpressionParsingScope<Types>::kPatternIndex);
+#ifdef DEBUG
+    scope_->clear_verified();
+#endif
+  }
+
+  ~AccumulationScope() {
+    if (scope_ == nullptr) return;
+    Accumulate();
+    for (int i = 0; i < kNumberOfErrors; i++) copy_back(i);
+  }
+
+ private:
+  void copy(int entry) {
+    messages_[entry] = scope_->messages_[entry];
+    locations_[entry] = scope_->locations_[entry];
+  }
+
+  void copy_back(int entry) {
+    if (!locations_[entry].IsValid()) return;
+    scope_->messages_[entry] = messages_[entry];
+    scope_->locations_[entry] = locations_[entry];
+  }
+
+  ExpressionParsingScope<Types>* scope_;
+  MessageTemplate messages_[2];
+  Scanner::Location locations_[2];
+
+  DISALLOW_COPY_AND_ASSIGN(AccumulationScope);
+};

@@ -1,5 +1,5 @@
 import LiteralBuffer from './LiteralBuffer';
-import Location from '../base/Location';
+import Location from './Location';
 
 export default class TokenDesc {
   constructor() {

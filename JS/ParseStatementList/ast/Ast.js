@@ -23,9 +23,8 @@ import {
   TARGET_FOR_ANONYMOUS,
   TARGET_FOR_NAMED_ONLY,
 
-  kExpression,
-  kBlock,
-} from "../base/Const";
+  _kBlock,
+} from "../enum";
 
 import {
   NodeTypeField,
@@ -33,7 +32,7 @@ import {
   IgnoreCompletionField,
   IsLabeledField,
   TokenField,
-} from '../base/Util';
+} from '../util';
 
 export class AstNodeFactory {
   NewVariableProxy(name, variable_kind, start_position = kNoSourcePosition) {
@@ -133,7 +132,7 @@ class BreakableStatement extends Statement {
 
 class Block extends BreakableStatement {
   constructor(zone = null, labels = null, capacity = 0, ignore_completion_value = true) {
-    super(TARGET_FOR_NAMED_ONLY, kNoSourcePosition, kBlock);
+    super(TARGET_FOR_NAMED_ONLY, kNoSourcePosition, _kBlock);
     this.statement_ = null;
     this.scope_ = null;
     this.bit_field_ |= IgnoreCompletionField.encode(1) | IsLabeledField.encode(0);

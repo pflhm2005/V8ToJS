@@ -1,5 +1,5 @@
-import  { UnicodeToAsciiMapping } from '../base/Util';
-import { kEndOfInput } from '../base/Const';
+import  { UnicodeToAsciiMapping } from '../util';
+import { kEndOfInput } from '../enum';
 
 export default class Stream {
   constructor(source_string) {

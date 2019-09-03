@@ -4,30 +4,45 @@ import {
 } from '../ast/Ast';
 import { DeclarationParsingResult, Declaration } from './DeclarationParsingResult';
 import AstValueFactory from '../ast/AstValueFactory';
-import Location from '../base/Location';
-
+import Location from '../scanner/Location';
 import { 
   VariableDeclarationParsingScope,
   ExpressionParsingScope,
+  AccumulationScope,
 } from './ExpressionScope';
 import Scope from './Scope';
 import { FuncNameInferrer, State } from './FuncNameInferrer';
+
+import ParsePropertyInfo from './ParsePropertyInfo';
 
 import {
   kVar,
   kLet,
   kConst,
 
+  kObjectLiteral,
+
   NORMAL_VARIABLE,
   PARAMETER_VARIABLE,
-  THIS_VARIABLE,
-  SLOPPY_BLOCK_FUNCTION_VARIABLE,
-  SLOPPY_FUNCTION_NAME_VARIABLE,
 
   kNoSourcePosition,
   kArrowFunction,
   kAsyncArrowFunction,
-} from '../base/Const';
+
+  kMaxArguments,
+
+  kSpread,
+  SPREAD,
+  kValue,
+  kAssign,
+  kShorthandOrClassField,
+  kShorthand,
+  kIsAsync,
+  kMethod,
+  kIsGenerator,
+  kAccessorGetter,
+  kAccessorSetter,
+} from '../enum';
 
 import {
   IsAnyIdentifier,
@@ -41,12 +56,14 @@ import {
   IsPropertyOrCall,
   IsMember,
   Precedence,
-} from '../base/Util';
+  TokenIsInRange,
+} from '../util';
 
 import {
   kParamDupe,
   kVarRedeclaration,
-} from '../base/MessageTemplate';
+  kTooManyArguments,
+} from '../MessageTemplate';
 
 const kStatementListItem = 0;
 const kStatement = 1;
@@ -566,9 +583,9 @@ class ParserBase {
      * 比如new this [] {}
      */
     switch(token) {
-
+      case 'Token::LBRACE':
+        return this.ParseObjectLiteral();
     }
-
     throw new Error('UnexpectedToken');
   }
   /**
@@ -635,6 +652,114 @@ class ParserBase {
     return expression;
   }
   ParseTemplateLiteral() {}
+
+  /**
+   * 解析对象字面量
+   * '{' (PropertyDefinition (',' PropertyDefinition)* ','? )? '}'
+   */
+  ParseObjectLiteral() {
+    let pos = this.peek_position();
+    /**
+     * 此处生成了一个ScopedPtrList 容器是pointer_buffer_
+     * ObjectPropertyList = ScopedPtrList<v8::internal::ObjectLiteralProperty>
+     * ObjectPropertyList properties(pointer_buffer());
+     */
+    let properties = this.pointer_buffer_;
+    // 引用属性计数
+    let number_of_boilerplate_properties = 0;
+
+    let has_computed_names = false;
+    let has_rest_property = false;
+    let has_seen_proto = false;
+
+    this.Consume('Token::LBRACE');
+    /**
+     * 当前作用域类型如果是非表达式类型这里不做任何事
+     * AccumulationScope accumulation_scope(expression_scope());
+     */
+    let accumulation_scope = new AccumulationScope(this.expression_scope_);
+    while(!this.Check('Token::RBRACE')) {
+      // FuncNameInferrerState fni_state(&fni_);
+      let prop_info = new ParsePropertyInfo(this, accumulation_scope);
+      prop_info.position = kObjectLiteral;
+      let property = this.ParseObjectPropertyDefinition(prop_info, has_seen_proto);
+      if (prop_info.is_computed_name) has_computed_names = true;
+      if (prop_info.is_rest) has_rest_property = true;
+      
+      if (this.IsBoilerplateProperty(property) && !has_computed_names) number_of_boilerplate_properties++;
+      properties.push(property);
+
+      if (this.peek() !== 'Token::RBRACE') this.Expect('Token::COMMA');
+
+      // this.fni_.Infer();
+    }
+    if (has_rest_property && properties.length > kMaxArguments) {
+      this.expression_scope_.RecordPatternError(new Location(pos, this.position(), kTooManyArguments));
+    }
+    return this.InitializeObjectLiteral(this.ast_node_factory_.NewObjectLiteral(properties, number_of_boilerplate_properties, pos, has_rest_property));
+  }
+  ParseObjectPropertyDefinition(prop_info, has_seen_proto) {
+    let name_token = this.peek();
+    let next_loc = this.scanner.peek_location();
+
+    let name_expression = this.ParseProperty(prop_info);
+
+    let { name, function_flags, kind } = prop_info;
+    switch(kind) {
+      case kSpread:
+        prop_info.is_computed_name = true;
+        prop_info.is_rest = true;
+        return this.ast_node_factory_.NewObjectLiteralProperty(this.ast_node_factory_.NewTheHoleLiteral(), name_expression, SPREAD, true);
+      case kValue:
+      
+      case kAssign:
+      case kShorthandOrClassField:
+      case kShorthand:
+
+      case kMethod:
+
+      case kAccessorGetter:
+      case kAccessorSetter:
+
+      case kClassField:
+      case kNotSet:
+        return this.NullExpression();
+    }
+    this.UNREACHABLE();
+  }
+  ParseProperty(prop_info) {
+    if (this.Check('Token::ASYNC')) {
+      let token = this.peek();
+      if ((token !== 'Token::MUL' && prop_info.ParsePropertyKindFromToken(token))
+      || this.scanner.HasLineTerminatorBeforeNext()) {
+        prop_info.name = this.GetIdentifier();
+        this.PushLiteralName(prop_info.name);
+        return this.NewStringLiteral(prop_info.name, this.position());
+      }
+      // V8_UNLIKELY
+      if(this.scanner.literal_contains_escapes()) throw new Error('UnexpectedToken Token::ESCAPED_KEYWORD');
+      prop_info.function_flags = kIsAsync;
+      prop_info.kind = kMethod;
+    }
+
+    if (this.Check('Token::MUL')) {
+      prop_info.function_flags |= kIsGenerator;
+      prop_info.kind = kMethod;
+    }
+
+    if (prop_info.kind === kNotSet && TokenIsInRange(this.peek(), 'GET', 'SET')) {
+      let token = this.Next();
+      if (prop_info.ParsePropertyKindFromToken(this.peek())) {
+        prop_info.name = this.GetIdentifier();
+        this.PushLiteralName(prop_info.name);
+        return this.NewStringLiteral(prop_info.name, this.position());
+      }
+      // V8_UNLIKELY
+      if(this.scanner.literal_contains_escapes()) throw new Error('UnexpectedToken Token::ESCAPED_KEYWORD');
+      if(token === 'Token::GET') prop_info.kind = kAccessorGetter;
+      if(token === 'Token::SET') prop_info.kind = kAccessorSetter;
+    }
+  }
 
   // TODO
   is_generator() { return true; }
@@ -732,16 +857,19 @@ export default class Parser extends ParserBase {
   }
 
   BuildInitializationBlock(parsing_result) {
-    // ScopedPtrList就是一个高级数组 先不实现了
-    // todo ScopedPtrList<Statement> statements(pointer_buffer());
+    /**
+     * ScopedPtrList就是一个高级数组 先不实现了
+     * ScopedPtrList<Statement> statements(pointer_buffer());
+     */
+    let statements = this.pointer_buffer_;
     let vector = parsing_result.declarations;
     for (const declaration of vector) {
       // 这里的initializer是声明的初始值
       if(!declaration.initializer) continue;
       // 这里第二个参数是parsing_result.descriptor.kind 但是没有使用
-      this.InitializeVariables(this.pointer_buffer_, declaration);
+      this.InitializeVariables(statements, declaration);
     }
-    return this.ast_node_factory_.NewBlock(true, this.pointer_buffer_);
+    return this.ast_node_factory_.NewBlock(true, statements);
   }
   InitializeVariables(vector, declaration) {
     let pos = declaration.value_beg_pos;

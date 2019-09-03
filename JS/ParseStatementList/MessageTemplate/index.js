@@ -8,3 +8,5 @@ export const kVarRedeclaration = "Identifier '%' has already been declared";
 export const kTooManyVariables = "Too many variables declared (only 4194303 allowed)";
 // let let是不合法的
 export const kLetInLexicalBinding = "let is disallowed as a lexically bound name";
+
+export const kTooManyArguments = 'Too many arguments in function call (only 65535 allowed)';
