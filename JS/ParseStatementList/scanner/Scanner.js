@@ -361,6 +361,7 @@ export default class Scanner {
     }
     return args[2];
   }
+
   /**
    * 处理空格
    */
@@ -381,6 +382,7 @@ export default class Scanner {
    */
   ScanHtmlComment() {}
   SkipSingleHTMLComment() {}
+  
   /**
    * 解析数字相关
    * literal作为字面量类无所不能!

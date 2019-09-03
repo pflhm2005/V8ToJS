@@ -362,6 +362,10 @@ class ParserBase {
     parsing_result.bindings_loc = new Location(bindings_start, this.end_position());
     return parsing_result;
   }
+  /**
+   * 跳到scanner实现
+   * @returns {AstRawString*}
+   */
   ParseAndClassifyIdentifier(next) {
     if (IsAnyIdentifier(next, 'IDENTIFIER', 'ASYNC')) {
       let name = this.GetIdentifier();
@@ -373,9 +377,6 @@ class ParserBase {
   GetIdentifier() {
     return this.GetSymbol();
   }
-  /**
-   * 返回AstRawString*
-   */
   GetSymbol() {
     const result = this.scanner.CurrentSymbol(this.ast_value_factory_);
     return result;
