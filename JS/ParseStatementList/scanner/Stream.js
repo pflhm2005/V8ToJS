@@ -55,6 +55,19 @@ export default class Stream {
     }
   }
   /**
+   * 返回当前字符
+   * 同时会做初始化
+   */
+  Peek() {
+    if (this.buffer_cursor_ < this.buffer_end_) {
+      return this.buffer_[this.buffer_cursor_];
+    } else if (this.ReadBlockChecked()) {
+      return this.buffer_[this.buffer_cursor_];
+    } else {
+      return kEndOfInput;
+    }
+  }
+  /**
    * 返回当前字符 并前进一格
    */
   Advance() {
@@ -82,19 +95,6 @@ export default class Stream {
     } else {
       this.buffer_cursor_ = next_cursor_pos + 1;
       return this.buffer_[this.buffer_cursor_];
-    }
-  }
-  /**
-   * 返回当前字符
-   * 同时会做初始化
-   */
-  Peek() {
-    if (this.buffer_cursor_ < this.buffer_end_) {
-      return this.buffer_[this.buffer_cursor_];
-    } else if (this.ReadBlockChecked()) {
-      return this.buffer_[this.buffer_cursor_];
-    } else {
-      return kEndOfInput;
     }
   }
 }

@@ -354,6 +354,8 @@ export default class Scanner {
         } 
       }
       if(this.c0_ === kEndOfInput) return 'Token::EOS';
+
+      token = this.SkipWhiteSpace();
     } while(token === 'Token::WHITESPACE')
     return token;
   }

@@ -43,6 +43,7 @@ import {
   kAccessorGetter,
   kAccessorSetter,
   COMPUTED,
+  kNotSet,
 } from '../enum';
 
 import {
@@ -58,6 +59,7 @@ import {
   IsMember,
   Precedence,
   TokenIsInRange,
+  IsPropertyName,
 } from '../util';
 
 import {
@@ -844,7 +846,7 @@ class ParserBase {
        * #号开头会被识别为PRIVATE_NAME
        * 对象属性不支持
        */
-      case 'Token::PRIVATE_NAME':
+      case 'Token::PRIVATE_NAME': {
         prop_info.is_private = true;
         is_array_index = false;
         this.Consume('Token::PRIVATE_NAME');
@@ -854,11 +856,12 @@ class ParserBase {
         if(prop_info.position === kObjectLiteral) throw new Error('UnexpectedToken Token::PRIVATE_NAME');
         // if(allow_harmony_private_methods() && )
         break;
+      }
       /**
        * { 'aaa': xxx }
        * 显式的字符串属性
        */
-      case 'Token::STRING':
+      case 'Token::STRING': {
         this.Consume('Token::STRING');
         // 这两个方法一点卵区别都没有
         prop_info.name = this.peek() === 'Token::COLON' ? this.GetSymbol() : this.GetIdentifier();
@@ -866,6 +869,7 @@ class ParserBase {
         is_array_index = result.is_array_index;
         index = result.index;
         break;
+      } 
       
       case 'Token::SMI':
         this.Consume('Token::SMI');
@@ -874,18 +878,19 @@ class ParserBase {
         prop_info.name = this.GetSymbol();
         break;
 
-      case 'Token::NUMBER':
+      case 'Token::NUMBER': {
         this.Consume('Token::NUMBER');
         prop_info.name = this.GetNumberAsSymbol();
         let result = this.IsArrayIndex(prop_info.name, index);
         is_array_index = result.is_array_index;
         index = result.index;
         break;
+      }
       /**
        * '[' 符号 即{ [1]: 2 }
        * 这种键是需要计算的 因此给了一个is_computed_name标记
        */
-      case 'Token::LBRACK':
+      case 'Token::LBRACK': {
         prop_info.name = this.NullIdentifier();
         prop_info.is_computed_name = true;
         this.Consume('Token::LBRACK');
@@ -897,6 +902,7 @@ class ParserBase {
         this.Expect('Token::RBRACK');
         if(prop_info.kind === kNotSet) prop_info.ParsePropertyKindFromToken(this.peek());
         return expression;
+      }
       /**
        * '...' 扩展运算符
        */
@@ -928,6 +934,9 @@ class ParserBase {
     if (prop_info.kind === kNotSet) prop_info.ParsePropertyKindFromToken(this.peek());
     this.PushLiteralName(prop_info.name);
     return is_array_index ? this.ast_node_factory_.NewNumberLiteral(index, pos) : this.ast_node_factory_.NewStringLiteral(prop_info.name, pos);
+  }
+  ParsePossibleDestructuringSubPattern() {
+
   }
   ParsePropertyName() {
     let next = this.Next();

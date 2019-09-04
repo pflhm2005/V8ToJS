@@ -30,23 +30,23 @@ export default class ParsePropertyInfo {
   ParsePropertyKindFromToken(token) {
     switch(token) {
       case 'Token::COLON':
-        kind = kValue;
+        this.kind = kValue;
         return true;
       case 'Token::COMMA':
-        kind = kShorthand;
+        this.kind = kShorthand;
         return true;
       case 'Token::RBRACE':
-        kind = kShorthandOrClassField;
+        this.kind = kShorthandOrClassField;
         return true;
       case 'Token::ASSIGN':
-        kind = kAssign;
+        this.kind = kAssign;
         return true;
       case 'Token::LPAREN':
-        kind = kMethod;
+        this.kind = kMethod;
         return true;
       case 'Token::MUL':
       case 'Token::SEMICOLON':
-        kind = kClassField;
+        this.kind = kClassField;
         return true;
       default:
         break;
