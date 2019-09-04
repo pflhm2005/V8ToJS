@@ -70,3 +70,21 @@ export class TokenField extends BitField {
     super(6, 8);
   }
 }
+
+export class ArrayIndexValueBits extends BitField {
+  constructor() {
+    super(2, 24);
+  }
+}
+
+export class IsKeywordBits extends BitField {
+  constructor() {
+    super(0, 1);
+  }
+}
+
+export class IsPropertyNameBits extends BitField {
+  constructor() {
+    super(1, 1);
+  }
+}

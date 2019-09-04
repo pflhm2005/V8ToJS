@@ -14,7 +14,9 @@ import {
   kStringTerminator,
   kIdentifierNeedsSlowPath,
   kMultilineCommentCharacterNeedsSlowPath,
+  TokenMapping,
 } from "../enum";
+import { IsKeywordBits, IsPropertyNameBits } from "./BitField";
 
 /**
  * 判断给定字符(数字)是否在两个字符的范围内
@@ -256,4 +258,20 @@ export const IdentifierNeedsSlowPath = (scan_flags) => {
 }
 export const CanBeKeyword = (scan_flags) => {
   return scan_flags & kCannotBeKeyword;
+}
+
+/**
+ * 枚举key分为两种
+ * 一种是关键词 一种是符号
+ */
+const token_flags = TokenMapping.map(o => {
+  let key = o.key;
+  if(key && IsInRange(key[0], 'a', 'z')) return (IsKeywordBits.encode(1) | IsPropertyNameBits.encode(1));
+  return IsPropertyNameBits.encode(Number(IsAnyIdentifier(`Token::${o.token}`)));
+});
+
+export const IsPropertyName = (token) => {
+  let idx = TokenEnumList.findIndex(v => v === token.slice(7));
+  return token_flags[idx];
+  // return IsPropertyNameBits.decode(token_flags[idx]);
 }

@@ -63,6 +63,7 @@ import {
   kParamDupe,
   kVarRedeclaration,
   kTooManyArguments,
+  kElementAfterRest,
 } from '../MessageTemplate';
 
 const kStatementListItem = 0;
@@ -581,6 +582,7 @@ class ParserBase {
     /**
      * 处理各种特殊符号
      * 比如new this [] {}
+     * [Token::ASSIGN, Token::LBRACE, null]
      */
     switch(token) {
       case 'Token::LBRACE':
@@ -671,7 +673,7 @@ class ParserBase {
     let has_computed_names = false;
     let has_rest_property = false;
     let has_seen_proto = false;
-
+    // [Token::ASSIGN, Token::LBRACE, null] => [Token::LBRACE, xxx, null]
     this.Consume('Token::LBRACE');
     /**
      * 当前作用域类型如果是非表达式类型这里不做任何事
@@ -727,10 +729,24 @@ class ParserBase {
     }
     this.UNREACHABLE();
   }
+  /**
+   * [Token::LBRACE, xxx, null]
+   */
   ParseProperty(prop_info) {
+    /**
+     * 仅当Check参数与next_的token一致时才会调用Next
+     * 这里Check对应xxx 进这个分支意味着
+     * [Token::LBRACE, Token::ASYNC, null] => [Token::ASYNC, xxx, null]
+     * 即{ async ... };
+     */
     if (this.Check('Token::ASYNC')) {
       let token = this.peek();
-      if ((token !== 'Token::MUL' && prop_info.ParsePropertyKindFromToken(token))
+      /**
+       * 进入这个分支代表async被当成普通的变量名
+       * { async: 1 }
+       */
+      if ((token !== 'Token::MUL'
+      && prop_info.ParsePropertyKindFromToken(token))
       || this.scanner.HasLineTerminatorBeforeNext()) {
         prop_info.name = this.GetIdentifier();
         this.PushLiteralName(prop_info.name);
@@ -738,27 +754,152 @@ class ParserBase {
       }
       // V8_UNLIKELY
       if(this.scanner.literal_contains_escapes()) throw new Error('UnexpectedToken Token::ESCAPED_KEYWORD');
+      // 给属性上标记
       prop_info.function_flags = kIsAsync;
       prop_info.kind = kMethod;
     }
-
+    /**
+     * { *fn(){} };
+     * GeneratorFunction
+     */
     if (this.Check('Token::MUL')) {
       prop_info.function_flags |= kIsGenerator;
       prop_info.kind = kMethod;
     }
-
+    /**
+     * { get xxx(){}, set xxx(){} }; 其中xxx是标识符
+     * 特殊的get、set属性
+     * [Token::LBRACE, Token::GET, null]、[Token::LBRACE, Token::SET, null]
+     */
     if (prop_info.kind === kNotSet && TokenIsInRange(this.peek(), 'GET', 'SET')) {
       let token = this.Next();
+      /**
+       * 进入下面的分支代表{ get: 1, set(){} }
+       * 这种情况get、set会当成普通属性解析
+       */
       if (prop_info.ParsePropertyKindFromToken(this.peek())) {
         prop_info.name = this.GetIdentifier();
         this.PushLiteralName(prop_info.name);
         return this.NewStringLiteral(prop_info.name, this.position());
       }
       // V8_UNLIKELY
-      if(this.scanner.literal_contains_escapes()) throw new Error('UnexpectedToken Token::ESCAPED_KEYWORD');
-      if(token === 'Token::GET') prop_info.kind = kAccessorGetter;
-      if(token === 'Token::SET') prop_info.kind = kAccessorSetter;
+      if (this.scanner.literal_contains_escapes()) throw new Error('UnexpectedToken Token::ESCAPED_KEYWORD');
+      if (token === 'Token::GET') prop_info.kind = kAccessorGetter;
+      if (token === 'Token::SET') prop_info.kind = kAccessorSetter;
     }
+
+    let pos = this.position();
+    let is_array_index = false;
+    let index = 0;
+    /**
+     * 前面处理的是三种特殊情况
+     * 下面是正常键的解析
+     */
+    switch (this.peek()) {
+      /**
+       * #号开头会被识别为PRIVATE_NAME
+       * 对象属性不支持
+       */
+      case 'Token::PRIVATE_NAME':
+        prop_info.is_private = true;
+        is_array_index = false;
+        this.Consume('Token::PRIVATE_NAME');
+        if(prop_info.kind === kNotSet) prop_info.ParsePropertyKindFromToken(this.peek());
+        prop_info.name = this.GetIdentifier();
+        // V8_UNLIKELY
+        if(prop_info.position === kObjectLiteral) throw new Error('UnexpectedToken Token::PRIVATE_NAME');
+        // if(allow_harmony_private_methods() && )
+        break;
+      /**
+       * { 'aaa': xxx }
+       * 显式的字符串属性
+       */
+      case 'Token::STRING':
+        this.Consume('Token::STRING');
+        prop_info.name = this.peek() === 'Token::COLON' ? this.GetSymbol() : this.GetIdentifier();
+        let result = this.IsArrayIndex(prop_info.name, index);
+        is_array_index = result.is_array_index;
+        index = result.index;
+        break;
+      
+      case 'Token::SMI':
+        this.Consume('Token::SMI');
+        index = this.scanner.smi_value();
+        is_array_index = true;
+        prop_info.name = this.GetSymbol();
+        break;
+
+      case 'Token::NUMBER':
+        this.Consume('Token::NUMBER');
+        prop_info.name = this.GetNumberAsSymbol();
+        let result = this.IsArrayIndex(prop_info.name, index);
+        is_array_index = result.is_array_index;
+        index = result.index;
+        break;
+      /**
+       * '[' 符号 即{ [1]: 2 }
+       * 这种键是需要计算的 因此给了一个is_computed_name标记
+       */
+      case 'Token::LBRACK':
+        prop_info.name = this.NullIdentifier();
+        prop_info.is_computed_name = true;
+        this.Consume('Token::LBRACK');
+        // AcceptINScope scope(this, true);
+        /**
+         * 直接走了赋值解析 我靠
+         */
+        let expression = this.ParseAssignmentExpression();
+        this.Expect('Token::RBRACK');
+        if(prop_info.kind === kNotSet) prop_info.ParsePropertyKindFromToken(this.peek());
+        return expression;
+      /**
+       * '...' 扩展运算符
+       */
+      case 'Token::ELLIPSIS':
+        if (prop_info.kind === kNotSet) {
+          prop_info.name = this.NullIdentifier();
+          this.Consume('Token::ELLIPSIS');
+          // AcceptINScope scope(this, true);
+          let start_pos = this.peek_position();
+          /**
+           * TODO 不晓得这个解析什么
+           */
+          let expression = this.ParsePossibleDestructuringSubPattern(prop_info.accumulation_scope);
+          prop_info.kind = kSpread;
+
+          if (this.peek() !== 'Token::RBRACE') throw new Error(kElementAfterRest);
+          return expression;
+        }
+        this.UNREACHABLE();
+      /**
+       * 其余大部分情况在这里处理
+       * 例如隐式的字符串属性 { a: 1 }
+       */
+      default:
+        prop_info.name = this.ParsePropertyName();
+        is_array_index = false;
+        break;
+    }
+    if (prop_info.kind === kNotSet) prop_info.ParsePropertyKindFromToken(this.peek());
+    this.PushLiteralName(prop_info.name);
+    return is_array_index ? this.ast_node_factory_.NewNumberLiteral(index, pos) : this.ast_node_factory_.NewStringLiteral(prop_info.name, pos);
+  }
+  ParsePropertyName() {
+    let next = this.Next();
+    // V8_LIKELY
+    if (IsPropertyName(next)) {
+      if (this.peek() === 'Token::COLON') return this.GetSymbol();
+      return this.GetIdentifier();
+    }
+    throw new Error('UnexpectedToken ParsePropertyName');
+  }
+  /**
+   * 判定该字符串是否是int32的纯数字 多位数不可以0开头
+   * @param {AstRawString} string 
+   * @param {Number} index 
+   */
+  IsArrayIndex(string, index) {
+    return string.AsArrayIndex(index);
   }
 
   // TODO

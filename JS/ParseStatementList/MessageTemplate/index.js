@@ -10,3 +10,5 @@ export const kTooManyVariables = "Too many variables declared (only 4194303 allo
 export const kLetInLexicalBinding = "let is disallowed as a lexically bound name";
 
 export const kTooManyArguments = 'Too many arguments in function call (only 65535 allowed)';
+
+export const kElementAfterRest = 'Rest element must be last element';

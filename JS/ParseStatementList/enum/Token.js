@@ -1,7 +1,7 @@
 /**
  * Token
  */
-const TokenMapping = [
+export const TokenMapping = [
   { token: 'TEMPLATE_SPAN', key: null, precedence: 0 },
   { token: 'TEMPLATE_TAIL', key: null, precedence: 0 },
 

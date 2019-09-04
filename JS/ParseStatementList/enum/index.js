@@ -6,3 +6,4 @@ export * from './LiteralType';
 export * from './NodeType';
 export * from './Token';
 export * from './Object';
+export * from './name';

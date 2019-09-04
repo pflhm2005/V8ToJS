@@ -7,7 +7,8 @@ export default class AstValueFactory {
   constructor() {
     this.one_character_strings_ = new Array(kMaxOneCharStringValue).fill(0);
     this.string_table_ = new Map();
-    this.hash_seed_ = 1;
+    // this.hash_seed_ = BigInt(15853730874361889590); 
+    this.hash_seed_ = 1704808181;
     this.string_end_ = [];
   }
   GetOneByteString(literal) {
@@ -27,6 +28,7 @@ export default class AstValueFactory {
       return one_character_strings_[key];
     }
     let hash_field = StringHasher.HashSequentialString(literal, literal.length, this.hash_seed_);
+    hash_field >>>= 0;
     return this.GetString(hash_field, true, literal);
   }
   GetString(hash_field, is_one_byte, literal_bytes) {

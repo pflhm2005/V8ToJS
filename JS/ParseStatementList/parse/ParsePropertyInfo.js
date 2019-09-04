@@ -23,6 +23,10 @@ export default class ParsePropertyInfo {
     this.is_static = false;
     this.is_rest = false;
   }
+  /**
+   * 检测以下符号
+   * ':'、','、'}'、'='、'('、'*'、';'
+   */
   ParsePropertyKindFromToken(token) {
     switch(token) {
       case 'Token::COLON':
