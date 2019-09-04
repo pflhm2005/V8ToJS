@@ -54,6 +54,6 @@ export default class AstRawString {
     return result;
   }
   Hash() {
-    return Number(this.hash_field_) >> kHashShift;
+    return this.hash_field_ >> kHashShift;
   }
 }
