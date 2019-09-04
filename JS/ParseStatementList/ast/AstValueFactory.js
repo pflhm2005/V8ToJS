@@ -11,6 +11,8 @@ export default class AstValueFactory {
     this.hash_seed_ = 1704808181;
     this.string_end_ = [];
   }
+  dot_result_string() { return '.result'; }
+  prototype_string() { return 'prototype'; }
   GetOneByteString(literal) {
     return this.GetOneByteStringInternal(literal);
   }

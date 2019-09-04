@@ -12,3 +12,7 @@ export const kLetInLexicalBinding = "let is disallowed as a lexically bound name
 export const kTooManyArguments = 'Too many arguments in function call (only 65535 allowed)';
 
 export const kElementAfterRest = 'Rest element must be last element';
+
+export const kDuplicateProto = 'Duplicate __proto__ fields are not allowed in object literals';
+
+export const kInvalidCoverInitializedName = 'Invalid shorthand property initializer';

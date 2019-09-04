@@ -42,6 +42,7 @@ import {
   kIsGenerator,
   kAccessorGetter,
   kAccessorSetter,
+  COMPUTED,
 } from '../enum';
 
 import {
@@ -64,6 +65,8 @@ import {
   kVarRedeclaration,
   kTooManyArguments,
   kElementAfterRest,
+  kDuplicateProto,
+  kInvalidCoverInitializedName,
 } from '../MessageTemplate';
 
 const kStatementListItem = 0;
@@ -94,6 +97,8 @@ class ParserBase {
    * 已经砍掉了很多
    */
   IsLet(identifier) { return identifier === 'let'; }
+  // TODO
+  IsAssignableIdentifier() {}
   UNREACHABLE() {
     this.scanner.UNREACHABLE();
   }
@@ -708,15 +713,52 @@ class ParserBase {
 
     let { name, function_flags, kind } = prop_info;
     switch(kind) {
+      /**
+       * 扩展运算符 { ...obj }
+       */
       case kSpread:
         prop_info.is_computed_name = true;
         prop_info.is_rest = true;
         return this.ast_node_factory_.NewObjectLiteralProperty(this.ast_node_factory_.NewTheHoleLiteral(), name_expression, SPREAD, true);
-      case kValue:
-      
+      /**
+       * 最常见的键值对形式 { a: 1 }
+       */
+      case kValue: {
+        if (!prop_info.is_computed_name && this.scanner.CurrentLiteralEquals('__proto__')) {
+          if (has_seen_proto) throw new Error(kDuplicateProto);
+          has_seen_proto = true;
+        }
+        this.Consume('Token::COLON');
+        // AcceptINScope scope(this, true);
+        let value = this.ParsePossibleDestructuringSubPattern(prop_info.accumulation_scope);
+        let result = this.ast_node_factory_.NewObjectLiteralProperty(name_expression, value, prop_info.is_computed_name);
+        this.SetFunctionNameFromPropertyName(result, name);
+        return result;
+      }
+      /**
+       * 赋值运算符 =
+       * 简写或类 } ,
+       */
       case kAssign:
       case kShorthandOrClassField:
-      case kShorthand:
+      case kShorthand: {
+        // TODO
+        // if(IsValidIdentifier(...))
+        // if(name_token === 'Token::AWAIT') {}
+        let lhs = this.ExpressionFromIdentifier(name, next_loc.beg_pos);
+        // if (!this.IsAssignableIdentifier()) {}
+
+        let value;
+        if (this.peek() === 'Token::ASSIGN') {
+          // TODO
+          throw new Error(kInvalidCoverInitializedName);
+        } else {
+          value = lhs;
+        }
+        let result = this.ast_node_factory_.NewObjectLiteralProperty(name_expression, value, COMPUTED, false);
+        this.SetFunctionNameFromPropertyName(result, name);
+        return result;
+      }
 
       case kMethod:
 
@@ -730,7 +772,9 @@ class ParserBase {
     this.UNREACHABLE();
   }
   /**
+   * 这个方法负责解析对象键值对的key
    * [Token::LBRACE, xxx, null]
+   * @returns {Expression}
    */
   ParseProperty(prop_info) {
     /**
@@ -816,6 +860,7 @@ class ParserBase {
        */
       case 'Token::STRING':
         this.Consume('Token::STRING');
+        // 这两个方法一点卵区别都没有
         prop_info.name = this.peek() === 'Token::COLON' ? this.GetSymbol() : this.GetIdentifier();
         let result = this.IsArrayIndex(prop_info.name, index);
         is_array_index = result.is_array_index;
@@ -900,6 +945,9 @@ class ParserBase {
    */
   IsArrayIndex(string, index) {
     return string.AsArrayIndex(index);
+  }
+  PushLiteralName(id) {
+    this.fni_.PushLiteralName(id);
   }
 
   // TODO

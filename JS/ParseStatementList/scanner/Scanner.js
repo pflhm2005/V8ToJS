@@ -121,6 +121,11 @@ export default class Scanner {
   AddLiteralChar(c) {
     this.next().literal_chars.AddChar(c);
   }
+  CurrentLiteralEquals(target) {
+    if(!this.is_literal_one_byte()) return false;
+    let current = this.literal_one_byte_string();
+    return current === target;
+  }
   AdvanceUntil(callback) {
     this.c0_ = this.source_.AdvanceUntil(callback);
   }

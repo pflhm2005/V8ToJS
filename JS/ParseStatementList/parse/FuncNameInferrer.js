@@ -24,10 +24,16 @@ export class FuncNameInferrer {
     this.names_stack_ = []; //  vector<Name>
   }
   IsOpen() { return this.scope_depth_ > 0; }
+  // TODO
   PushVariableName(name) {
     // dot_result_string是形如obj.key的声明 不属于新的变量声明
     if (this.IsOpen() && name !== this.ast_value_factory_.dot_result_string()) {
       this.names_stack_.push(new Name(name, kVariableName));
+    }
+  }
+  PushLiteralName(name) {
+    if(this.IsOpen() && name !== this.ast_value_factory_.prototype_string()) {
+      this.names_stack_.push(new Name(name, kLiteralName));
     }
   }
 }
