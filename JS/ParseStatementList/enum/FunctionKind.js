@@ -30,3 +30,10 @@ export const kNamedExpression = 1;
 export const kDeclaration = 2;
 export const kAccessorOrMethod = 3;
 export const kWrapped = 4;
+
+export const kFunctionNameIsStrictReserved = 0;
+export const kSkipFunctionNameCheck = 1;
+export const kFunctionNameValidityUnknown = 2;
+
+export const kShouldEagerCompile = 0;
+export const kShouldLazyCompile = 1;

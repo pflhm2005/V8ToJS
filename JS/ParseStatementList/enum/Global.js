@@ -51,3 +51,6 @@ export const kIsIdentifierStart = 1 << 0;
 export const kIsIdentifierPart = 1 << 1;
 export const kIsWhiteSpace = 1 << 2;
 export const kIsWhiteSpaceOrLineTerminator = 1 << 3;
+
+export const kSloppy = 0;
+export const kStrict = 1;

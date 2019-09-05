@@ -16,3 +16,4 @@ export const kElementAfterRest = 'Rest element must be last element';
 export const kDuplicateProto = 'Duplicate __proto__ fields are not allowed in object literals';
 
 export const kInvalidCoverInitializedName = 'Invalid shorthand property initializer';
+export const kMissingFunctionName = 'Function statements require a function name';

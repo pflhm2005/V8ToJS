@@ -11,7 +11,9 @@ import {
   AccumulationScope,
 } from './ExpressionScope';
 import Scope from './Scope';
+
 import { FuncNameInferrer, State } from './FuncNameInferrer';
+import FunctionState from './State';
 
 import ParsePropertyInfo from './ParsePropertyInfo';
 
@@ -44,6 +46,25 @@ import {
   kAccessorSetter,
   COMPUTED,
   kNotSet,
+  kIsNormal,
+  kSkipFunctionNameCheck,
+  kFunctionNameIsStrictReserved,
+  kFunctionNameValidityUnknown,
+  kNormalFunction,
+  kAsyncFunction,
+  kGeneratorFunction,
+  kAsyncGeneratorFunction,
+  kConciseMethod,
+  kAsyncConciseMethod,
+  kConciseGeneratorMethod,
+  kAsyncConciseGeneratorMethod,
+  kDeclaration,
+  kSloppy,
+  kStrict,
+  SLOPPY_BLOCK_FUNCTION_VARIABLE,
+  kWrapped,
+  kShouldEagerCompile,
+  kShouldLazyCompile,
 } from '../enum';
 
 import {
@@ -60,6 +81,7 @@ import {
   Precedence,
   TokenIsInRange,
   IsPropertyName,
+  IsStrictReservedWord,
 } from '../util';
 
 import {
@@ -69,6 +91,7 @@ import {
   kElementAfterRest,
   kDuplicateProto,
   kInvalidCoverInitializedName,
+  kMissingFunctionName,
 } from '../MessageTemplate';
 
 const kStatementListItem = 0;
@@ -89,6 +112,8 @@ class ParserBase {
     this.ast_node_factory_ = new AstNodeFactory(this.ast_value_factory_);
     this.scope_ = new Scope();
     this.fni_ = new FuncNameInferrer();
+    this.function_state_ = new FunctionState();
+    this.default_eager_compile_hint_ = kShouldLazyCompile;
     this.expression_scope_ = null;
     this.pointer_buffer_ = [];
 
@@ -106,6 +131,9 @@ class ParserBase {
   }
   NullExpression() { return null; }
   NullIdentifier() { return null; }
+  language_mode() { return this.scope_.language_mode(); }
+  is_sloppy(language_mode) { return language_mode === kSloppy; }
+  is_strict(language_mode) { return language_mode === kStrict; }
   peek() {
     return this.scanner.peek();
   }
@@ -146,8 +174,12 @@ class ParserBase {
    * 直接进入了正常语法树parse
    */
   ParseStatementList() {
+    let body = [];
     while(this.peek() !== 'Token::EOS') {
-      this.ParseStatementListItem();
+      let stat = this.ParseStatementListItem();
+      if(stat === null) return;
+      if(stat.IsEmptyStatement()) continue;
+      body.push(stat);
     }
   }
   /**
@@ -156,6 +188,11 @@ class ParserBase {
    */
   ParseStatementListItem() {
     switch(this.peek()) {
+      case 'Token::FUNCTION':
+        return this._ParseHoistableDeclaration(null, false);
+      case 'Token::VAR':
+      case 'Token::CONST':
+        return this.ParseVariableStatement(kStatementListItem, null);
       case 'Token::LET':
         if (this.IsNextLetKeyword()) {
           return this.ParseVariableStatement(kStatementListItem, null);
@@ -171,8 +208,8 @@ class ParserBase {
      */
     let next_next = this.PeekAhead();
     /**
-     * let后面跟{、}、a、static、let、yield、await、get、set、async是合法的(至少目前是合法的)
-     * 其他保留关键词合法性根据严格模式决定
+     * let后面跟{、[、标识符、static、let、yield、await、get、set、async是合法的(实际上let let不合法)
+     * 保留关键词合法性根据严格模式决定
      */
     switch(next_next) {
       case 'Token::LBRACE':
@@ -187,7 +224,7 @@ class ParserBase {
       case 'Token::ASYNC':
         return true;
       case 'Token::FUTURE_STRICT_RESERVED_WORD':
-        // return is_sloppy(language_mode());
+        return is_sloppy(language_mode());
       default:
         return false;
     }
@@ -352,6 +389,7 @@ class ParserBase {
            * 除了上述情况 被赋值的可能也是一个左值 比如遇到如下的特殊Token
            * import、async、new、this、function、任意标识符等等
            * 左值的解析相当于一个完整的新表达式
+           * @returns {Assignment}
            */
           value = this.ParseAssignmentExpression();
         }
@@ -410,7 +448,7 @@ class ParserBase {
 
   /**
    * 处理赋值语法
-   * @returns {Expression} 返回赋值右值
+   * @returns {Assignment} 返回赋值右值
    */
   ParseAssignmentExpression() {
     // let expression_scope = new ExpressionParsingScope(this);
@@ -427,7 +465,7 @@ class ParserBase {
    * (4)左值?表达式 let a = new f()
    * (5)运算赋值 let a += b
    * (6)普通赋值表达式 let a = b
-   * @returns {Expression}
+   * @returns {Assignment}
    */
   ParseAssignmentExpressionCoverGrammar() {
     let lhs_beg_pos = this.peek_position();
@@ -691,6 +729,9 @@ class ParserBase {
       // FuncNameInferrerState fni_state(&fni_);
       let prop_info = new ParsePropertyInfo(this, accumulation_scope);
       prop_info.position = kObjectLiteral;
+      /**
+       * @returns {ObjectLiteralProperty}
+       */
       let property = this.ParseObjectPropertyDefinition(prop_info, has_seen_proto);
       if (prop_info.is_computed_name) has_computed_names = true;
       if (prop_info.is_rest) has_rest_property = true;
@@ -984,9 +1025,20 @@ class ParserBase {
   SetFunctionName(value, name, prefix) {
     // TODO
   }
-  InitializeObjectLiteral() {}
-  IsBoilerplateProperty() {}
-  Expect() {}
+  IsBoilerplateProperty(property) {
+    return !property.IsPrototype();
+  }
+  InitializeObjectLiteral(object_literal) {
+    object_literal.CalculateEmitStore();
+    return object_literal;
+  }
+  Expect(token) {
+    let next = this.Next();
+    // V8_UNLIKELY
+    if(next !== token) {
+      throw new Error('UnexpectedToken');
+    }
+  }
   /**
    * 判定该字符串是否是int32的纯数字 多位数不可以0开头
    * @param {AstRawString} string 
@@ -1024,10 +1076,99 @@ class ParserBase {
     throw new Error('UnexpectedToken');
   }
 
-  FailureExpression() {}
+  FailureExpression() { throw new Error('UnexpectedExpression'); }
+
+  /**
+   * 解析函数声明 存在变量提升
+   * 此处有函数重载 由于重载函数多处调用 这个2参调用少 改个名
+   * @param {AstRawString*} names
+   * @param {Boolean} default_export
+   */
+  _ParseHoistableDeclaration(names = null, default_export = null) {
+    this.Consume('Token::FUNCTION');
+    let pos = this.position();
+    let flags = kIsNormal;
+    if(this.Check('Token::MUL')) flag |= kIsGenerator;
+    this.ParseHoistableDeclaration(pos, flags, names, default_export);
+  }
+  /**
+   * 普通函数声明的格式如下:
+   * 1、'function' Identifier '(' FormalParameters ')' '{' FunctionBody '}'
+   * 2、'function' '(' FormalParameters ')' '{' FunctionBody '}'
+   * Generator函数声明格式如下:
+   * 1、'function' '*' Identifier '(' FormalParameters ')' '{' FunctionBody '}'
+   * 2、'function' '*' '(' FormalParameters ')' '{' FunctionBody '}'
+   * 均分为正常与匿名 default_export负责标记这个区别
+   * @param {int} pos 
+   * @param {ParseFunctionFlags} flags 
+   * @param {AstRawString*} names 
+   * @param {Boolean} default_export 
+   */
+  ParseHoistableDeclaration(pos, flags, names, default_export) {
+    // this.CheckStackOverflow(); TODO
+    if((flags & kIsAsync) !== 0 && this.Check('Token::MUL')) flag |= kIsGenerator;
+    /**
+     * 匿名函数或者函数表达式
+     */
+    let name = null;
+    let name_validity = null;
+    if(this.peek() === 'Token::LPAREN') {
+      if(default_export) {
+        this.GetDefaultStrings(name, variable_name);
+        name_validity = kSkipFunctionNameCheck;
+      } else {
+        throw new Error(kMissingFunctionName);
+      }
+    } else {
+      let is_strict_reserved = IsStrictReservedWord(this.peek());
+      let name = this.ParseIdentifier();
+      name_validity = is_strict_reserved ? kFunctionNameIsStrictReserved : kFunctionNameValidityUnknown;
+      variable_name = name;
+    }
+
+    // FuncNameInferrerState fni_state(this.fni_);
+    this.PushEnclosingName(name);
+    let function_kind = this.FunctionKindFor(flags);
+    /**
+     * 解析函数参数与函数体
+     * @returns {FunctionLiteral}
+     */
+    let functionLiteral = this.ParseFunctionLiteral(name, this.scanner.location(), name_validity, function_kind, pos, kDeclaration, this.language_mode(), null);
+
+    let mode = (!this.scope_.is_declaration_scope() || this.scope_.is_module_scope()) ? kLet : kVar;
+    let kind = this.is_sloppy(this.language_mode()) && 
+    !this.scope_.is_declaration_scope() &&
+    flags === kIsNormal ? SLOPPY_BLOCK_FUNCTION_VARIABLE : NORMAL_VARIABLE;
+    return this.DeclareFunction(variable_name, functionLiteral, mode, kind, pos, this.end_position(), names);
+  }
+  ParseIdentifier() {
+    let function_kind = function_state_.kind();
+    let next = this.Next();
+    // if(!IsVa) TODO
+    return this.GetIdentifier();
+  }
+  PushEnclosingName(name) {
+    this.fni_.PushEnclosingName(name);
+  }
+  FunctionKindFor(flags) {
+    return this.FunctionKindForImpl(0, flags);
+  }
+  FunctionKindForImpl(is_method, flags) {
+    let kFunctionKinds = [
+      [
+        [kNormalFunction, kAsyncFunction],
+        [kGeneratorFunction, kAsyncGeneratorFunction]
+      ],
+      [
+        [kConciseMethod, kAsyncConciseMethod],
+        [kConciseGeneratorMethod, kAsyncConciseGeneratorMethod]
+      ]
+    ];
+    let i = Number((flags & kIsGenerator) !== 0);
+    let j = Number((flags & kIsAsync) !== 0);
+    return kFunctionKinds[is_method][i][j];
+  }
 }
-
-
 
 /**
  * 源码中的Parser类作为模板参数impl作为模板参数传入ParseBase 同时也继承于该类
@@ -1114,5 +1255,33 @@ export default class Parser extends ParserBase {
     if(pos === kNoSourcePosition) pos = declaration.initializer.position();
     let assignment = this.ast_node_factory_.NewAssignment('Token::INIT', declaration.pattern, declaration.initializer, pos);
     vector.push(this.ast_node_factory_.NewExpressionStatement(assignment, pos));
+  }
+
+  /**
+   * 解析函数参数与函数体 分为三种情况
+   * 1、普通函数 '(' FormalParameterList? ')' '{' FunctionBody '}'
+   * 2、Getter函数 '(' ')' '{' FunctionBody '}'
+   * 3、Setter函数 '(' PropertySetParameterList ')' '{' FunctionBody '}'
+   * @param {AstRawString*} function_name 
+   * @param {Location} function_name_location 
+   * @param {FunctionNameValidity} function_name_validity 
+   * @param {FunctionKind} kind 
+   * @param {int} function_token_pos 
+   * @param {FunctionType} function_type 
+   * @param {LanguageMode} language_mode 
+   * @param {ZonePtrList} arguments_for_wrapped_function 
+   */
+  ParseFunctionLiteral(function_name, function_name_location, function_name_validity, kind, function_token_pos, function_type, language_mode, arguments_for_wrapped_function) {
+    let is_wrapped = function_type === kWrapped;
+    let pos = function_token_pos === kNoSourcePosition ? this.peek_position() : function_token_pos;
+    // 匿名函数
+    let should_infer_name = function_name === null;
+    if(should_infer_name) function_name = this.ast_value_factory_.empty_string();
+
+    let eager_compile_hint = this.function_state_.next_function_is_likely_called() || is_wrapped ? kShouldEagerCompile : this.default_eager_compile_hint_;
+    
+  }
+  DeclareFunction() {
+
   }
 }

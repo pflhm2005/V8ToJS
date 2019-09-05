@@ -14,6 +14,7 @@ export default class AstValueFactory {
   dot_result_string() { return '.result'; }
   prototype_string() { return 'prototype'; }
   proto_string() { return '__proto__'; }
+  empty_string() { return ''; }
   GetOneByteString(literal) {
     return this.GetOneByteStringInternal(literal);
   }

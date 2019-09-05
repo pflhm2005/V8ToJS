@@ -28,3 +28,5 @@ export const IsCountOp = op => TokenIsInRange(op, 'INC', 'DEC');
 export const IsPropertyOrCall = op => TokenIsInRange(op, 'TEMPLATE_SPAN', 'LPAREN');
 export const IsLiteral = token => TokenIsInRange(token, 'NULL_LITERAL', 'STRING');
 export const IsMember = token => TokenIsInRange(token, 'TEMPLATE_SPAN', 'LBRACK');
+
+export const IsStrictReservedWord = token => TokenIsInRange(token, 'YIELD', 'ESCAPED_STRICT_RESERVED_WORD');

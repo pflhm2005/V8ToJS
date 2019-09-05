@@ -3,6 +3,8 @@ import {
   kDynamic,
   kConst,
   kNotAssigned,
+  kSloppy,
+  kStrict,
 } from "../enum";
 import { Variable } from "../ast/AST";
 // import ThreadedList from '../base/ThreadedList';
@@ -17,9 +19,6 @@ const SCRIPT_SCOPE = 4; // 最外层作用域 默认作用域
 const CATCH_SCOPE = 5;  // catch作用域  try{}catch(){}
 const BLOCK_SCOPE = 6;  // 块作用域 {}
 const WITH_SCOPE = 7; // with作用域 with() {}
-
-const kSloppy = 0;
-const kStrict = 1;
 
 class VariableMap {
   constructor() {
@@ -93,21 +92,19 @@ export default class Scope extends ZoneObject {
   is_eval_scope() { return this.scope_type_ == EVAL_SCOPE; }
   is_function_scope() { return this.scope_type_ == FUNCTION_SCOPE; }
   is_module_scope() { return this.scope_type_ == MODULE_SCOPE; }
+  is_declaration_scope() { return this.is_declaration_scope_; }
   is_script_scope() { return this.scope_type_ == SCRIPT_SCOPE; }
   is_catch_scope() { return this.scope_type_ == CATCH_SCOPE; }
   is_block_scope() {
     return this.scope_type_ == BLOCK_SCOPE || this.scope_type_ == CLASS_SCOPE;
   }
   is_with_scope() { return this.scope_type_ == WITH_SCOPE; }
-  is_declaration_scope() { return this.is_declaration_scope_; }
   is_class_scope() { return this.scope_type_ == CLASS_SCOPE; }
 
   language_mode() { return this.is_strict_ ? kStrict : kSloppy; }
   is_sloppy(language_mode) { return language_mode === kSloppy; }
   is_strict(language_mode) { return language_mode !== kSloppy; }
 
-  // 当前作用域标记
-  is_declaration_scope() { return this.is_declaration_scope_; }
   declarations() { return this.decls_; }
   outer_scope() { return this.outer_scope_; }
   // 这里形成一个作用域链

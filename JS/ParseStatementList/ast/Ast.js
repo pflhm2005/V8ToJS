@@ -32,6 +32,9 @@ import {
   _kObjectLiteral,
   _kArrayLiteral,
   _kLiteral,
+  GETTER,
+  SETTER,
+  _kEmptyStatement,
 } from "../enum";
 
 import {
@@ -40,6 +43,7 @@ import {
   IgnoreCompletionField,
   IsLabeledField,
   TokenField,
+  HashMap,
 } from '../util';
 
 export class AstNodeFactory {
@@ -69,8 +73,8 @@ export class AstNodeFactory {
   NewSmiLiteral(number, pos) {
     return new Literal(kSmi, number, pos);
   }
-  NewObjectLiteral() {
-
+  NewObjectLiteral(properties, boilerplate_properties, pos, has_rest_property) {
+    return new ObjectLiteral(properties, boilerplate_properties, pos, has_rest_property);
   }
   // TODO
   // NewNumberLiteral() {}
@@ -117,6 +121,7 @@ class AstNode {
     this.bit_field_ = NodeTypeField.encode(type);
   }
   IsVariableProxy() { return this.node_type() === _kVariableProxy; }
+  IsEmptyStatement() { return this.node_type() === _kEmptyStatement; }
   IsLiteral() { return this.node_type() === _kLiteral; }
   node_type() { return NodeTypeField.decode(this.bit_field_); }
   AsMaterializedLiteral() {
@@ -285,7 +290,79 @@ class Literal extends Expression{
     return this.type = kString;
   }
   AsRawString() {
-    return this.val().literal_bytes_;
+    return this.val();
+  }
+  Hash() {
+    return this.IsString() ? 
+    this.AsRawString().Hash() : 
+    this.ComputeLongHash(this.double_to_uint64(this.AsNumber()));
+  }
+  ComputeLongHash() {}
+  double_to_uint64() {}
+  AsNumber() {}
+}
+
+class MaterializedLiteral extends Expression {
+  constructor(pos, type) {
+    super(pos, type);
+  }
+}
+
+class AggregateLiteral extends MaterializedLiteral {
+  constructor(pos, type) {
+    super(pos, type);
+    this.depth_ = 0;
+    // this.bit_field_ |= TODO
+  }
+}
+
+class ObjectLiteral extends AggregateLiteral {
+ constructor(properties, boilerplate_properties, pos, has_rest_property) {
+    super(pos, _kObjectLiteral);
+    this.boilerplate_properties_ = boilerplate_properties;
+    this.properties = properties;
+    // this.bit_field_ |= TODO
+  }
+  CalculateEmitStore(zone = null) {
+    // ZoneAllocationPolicy allocator(zone);
+
+    /**
+     * 这里生成指定内存地址的一个HashMap
+     */
+    // let table = new HashMap();
+    let table = [];
+    for (const property of this.properties) {
+      if (property.is_computed_name_) continue;
+      if (property.IsPrototype()) continue;
+      let literal = property.key_;
+      let hash = literal.Hash();
+      /**
+       * JS的HashMap只能支持简单类型的存储
+       * 干脆用数组算了 其中hash作为标记 TODO后续考虑hashmap
+       */
+      // let entry = table.LookupOrInsert(literal, hash);
+      let entry = table.find(v => v.hash === hash);
+      /**
+       * 这里是为了统计对象内部实际上有多少个有效键值对
+       * 1、{ a: 1, a: 2 }  重复定义
+       * 2、{ a: 1, get a() {} }  覆盖定义
+       */
+      if(!entry) {
+        table.push({ value: literal, hash });
+      }
+      /**
+       * 如果有重复的key并不代表一定是重复定义
+       */
+      else {
+        let later_kind = entry.value.kind_;
+        let complementary_accessors = (property.kind_ === GETTER && later_kind === SETTER) ||
+        (property.kind_ === SETTER && later_kind === GETTER);
+        if (!complementary_accessors) {
+          property.emit_store_ = false;
+          if(later_kind === GETTER || later_kind === SETTER) entry.value = property;
+        }
+      }
+    }
   }
 }
 
@@ -342,7 +419,7 @@ class ObjectLiteralProperty extends LiteralProperty {
     super(key, value, is_computed_name);
     this.emit_store_ = true;
     if(!is_computed_name && key.IsString() &&
-    key.AsRawString() === ast_value_factory.proto_string()) {
+    key.AsRawString().literal_bytes_ === ast_value_factory.proto_string()) {
       this.kind_ = PROTOTYPE;
     } else if (this.value_.AsMaterializedLiteral() !== null) {
       this.kind_ = MATERIALIZED_LITERAL;
