@@ -378,7 +378,7 @@ const kMaybeAssigned = 1;
 
 const kNeedsInitialization = 0;
 const kCreatedInitialized = 1;
-class ZoneObject {}
+export class ZoneObject {}
 export class Variable extends ZoneObject {
   constructor(scope, name, mode, kind, initialization_flag, maybe_assigned_flag = kNotAssigned) {
     super();

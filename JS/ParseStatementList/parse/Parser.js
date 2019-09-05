@@ -10,10 +10,10 @@ import {
   ExpressionParsingScope,
   AccumulationScope,
 } from './ExpressionScope';
-import Scope from './Scope';
+import Scope, { DeclarationScope } from './Scope';
 
 import { FuncNameInferrer, State } from './FuncNameInferrer';
-import FunctionState from './State';
+import FunctionState from './FunctionState';
 
 import ParsePropertyInfo from './ParsePropertyInfo';
 
@@ -65,6 +65,13 @@ import {
   kWrapped,
   kShouldEagerCompile,
   kShouldLazyCompile,
+  kHasDuplicateParameters,
+  kNoDuplicateParameters,
+  PARSE_EAGERLY,
+  PARSE_LAZILY,
+  kSloppyMode,
+  kStrictMode,
+  _kBlock,
 } from '../enum';
 
 import {
@@ -82,6 +89,7 @@ import {
   TokenIsInRange,
   IsPropertyName,
   IsStrictReservedWord,
+  IsArrowFunction,
 } from '../util';
 
 import {
@@ -107,9 +115,14 @@ const kUseCounterFeatureCount = 76;
 class ParserBase {
   constructor(scanner) {
     // scanner.Initialize();
+    this.function_literal_id_ = 0;
     this.scanner = scanner;
     this.ast_value_factory_ = new AstValueFactory();
     this.ast_node_factory_ = new AstNodeFactory(this.ast_value_factory_);
+    /**
+     * 顶层作用域
+     */
+    this.original_scope_ = null;
     this.scope_ = new Scope();
     this.fni_ = new FuncNameInferrer();
     this.function_state_ = new FunctionState();
@@ -128,6 +141,12 @@ class ParserBase {
   IsAssignableIdentifier() {}
   UNREACHABLE() {
     this.scanner.UNREACHABLE();
+  }
+  NewFunctionScope(kind) {
+    let result = new DeclarationScope(this.scope_, FUNCTION_SCOPE, kind);
+    this.function_state_.RecordFunctionOrEvalCall();
+    if(!IsArrowFunction(kind)) result.DeclareDefaultFunctionVariables(this.ast_value_factory_);
+    return result;
   }
   NullExpression() { return null; }
   NullIdentifier() { return null; }
@@ -1126,7 +1145,13 @@ class ParserBase {
       variable_name = name;
     }
 
-    // FuncNameInferrerState fni_state(this.fni_);
+    /**
+     * 这里的C++源码代码如下
+     * FuncNameInferrerState fni_state(&fni_);
+     * 很多地方都有这个声明 但是fni_state实际上并没有调用
+     * 目的是为了触发构造函数的++this.fni_.scope_depth_
+     */
+    this.fni_.scope_depth_++;
     this.PushEnclosingName(name);
     let function_kind = this.FunctionKindFor(flags);
     /**
@@ -1179,7 +1204,10 @@ class ParserBase {
 export default class Parser extends ParserBase {
   constructor(scanner) {
     super(scanner);
-    // this.fni_ = new FuncNameInferrer();
+    this.mode_ = PARSE_EAGERLY;
+    this.target_stack_ = null;
+    this.parameters_end_pos_ = kNoSourcePosition;
+    this.allow_lazy_ = false;
     this.use_counts_ = new Array(kUseCounterFeatureCount).fill(0);
   }
   /**
@@ -1262,26 +1290,177 @@ export default class Parser extends ParserBase {
    * 1、普通函数 '(' FormalParameterList? ')' '{' FunctionBody '}'
    * 2、Getter函数 '(' ')' '{' FunctionBody '}'
    * 3、Setter函数 '(' PropertySetParameterList ')' '{' FunctionBody '}'
-   * @param {AstRawString*} function_name 
-   * @param {Location} function_name_location 
-   * @param {FunctionNameValidity} function_name_validity 
-   * @param {FunctionKind} kind 
-   * @param {int} function_token_pos 
-   * @param {FunctionType} function_type 
-   * @param {LanguageMode} language_mode 
-   * @param {ZonePtrList} arguments_for_wrapped_function 
+   * @param {AstRawString*} function_name 函数名
+   * @param {Location} function_name_location 函数位置 这是一个对象
+   * @param {FunctionNameValidity} function_name_validity 函数名是否是保留字
+   * @param {FunctionKind} kind 函数类型 通过一个映射表得到
+   * @param {int} function_token_pos 当前位置点
+   * @param {FunctionType} function_syntax_kind 声明类型(kDeclaration)
+   * @param {LanguageMode} language_mode 当前作用域是否是严格模式
+   * @param {ZonePtrList} arguments_for_wrapped_function null
+   * @returns {FunctionLiteral} 返回一个函数字面量
    */
-  ParseFunctionLiteral(function_name, function_name_location, function_name_validity, kind, function_token_pos, function_type, language_mode, arguments_for_wrapped_function) {
-    let is_wrapped = function_type === kWrapped;
+  ParseFunctionLiteral(function_name, function_name_location, function_name_validity, kind, function_token_pos, function_syntax_kind, language_mode, arguments_for_wrapped_function) {
+    /**
+     * 难道是(function(){}) ???
+     */
+    let is_wrapped = function_syntax_kind === kWrapped;
     let pos = function_token_pos === kNoSourcePosition ? this.peek_position() : function_token_pos;
-    // 匿名函数
+    // 匿名函数传进来是null 给设置一个空字符串
     let should_infer_name = function_name === null;
-    if(should_infer_name) function_name = this.ast_value_factory_.empty_string();
-
+    if (should_infer_name) function_name = this.ast_value_factory_.empty_string();
+    /**
+     * 标记该函数是否应该被立即执行
+     * !function(){}、+function(){}、IIFE等等
+     */
     let eager_compile_hint = this.function_state_.next_function_is_likely_called() || is_wrapped ? kShouldEagerCompile : this.default_eager_compile_hint_;
     
+    /**
+     * 有些函数在解析(抽象语法树生成阶段)阶段就需要被提前编译 比如说IIFE
+     * 其余的函数则是懒编译 只做抽象语法树的解析
+     * 判断是否懒编译有以下几个条件
+     * 1、开发者没有禁用这个功能
+     * 2、外部作用域必须允许内部函数的懒编译
+     * 3、函数表达式之前不能有左括号 这可能是一个IIFE的暗示
+     * 
+     * 顶层作用域的函数与内部作用域的函数在懒编译的处理上不一样
+     * 因为存在着变量提升的可能 比如下面的案例
+     * (function foo() { bar = function() { return 1; } })()
+     * 此时foo会被立即解析编译 bar则稍微才会被解析
+     */
+    let is_lazy = eager_compile_hint === kShouldLazyCompile;
+    // 判断是否是顶级作用域
+    let is_top_level = this.AllowsLazyParsingWithoutUnresolvedVariables();
+    let is_eager_top_level_function = !is_lazy && is_top_level;
+    let is_lazy_top_level_function = is_lazy && is_top_level;
+    let is_lazy_inner_function = is_lazy && !is_top_level;
+
+    /**
+     * 判定是否可以懒解析内部函数
+     * 前提条件如下
+     * 1、Lazy compilation功能开启
+     * 2、禁止声明native函数
+     * 3、...
+     */
+    let should_preparse_inner = this.parse_lazily() && is_lazy_inner_function;
+    // 默认是false
+    let should_post_parallel_task = false;
+
+    let should_preparse = (this.parse_lazily() && is_lazy_top_level_function) || should_preparse_inner || should_post_parallel_task;
+    let body = this.pointer_buffer_;
+    let function_literal_id = this.GetNextFunctionLiteralId();
+    let produced_preparse_data = null;
+
+    let scope = this.NewFunctionScope(kind);
+    this.SetLanguageMode(scope, language_mode);
+    // V8_UNLIKELY
+    if (!is_wrapped && (!this.Check('Token::LPAREN'))) throw new Error('UnexpectedToken');
+    scope.set_start_position(this.position);
+
+    /**
+     * 终于开始解析了
+     * 由于Lazy mode默认不开启 所以这里是false
+     * 目前的结构 => '(' 函数参数 ')' '{' 函数体 '}'
+     */
+    let did_preparse_successfully = should_preparse && this.SkipFunction(function_name, kind, function_syntax_kind, scope, -1, -1, null);
+    if (!did_preparse_successfully) {
+      if (should_preparse) this.Consume('Token::LPAREN');
+      should_post_parallel_task = false;
+      this.ParseFunction(body, function_name, pos, kind, function_syntax_kind, scope,
+        num_parameters, function_length, has_duplicate_parameters,
+        0, -1, arguments_for_wrapped_function);
+    }
+
+    // 解析完函数后再检测函数名合法性
+    language_mode = scope.language_mode();
+    this.CheckFunctionName(language_mode, function_name, function_name_validity, function_name_location);
+    if(this.is_strict(language_mode)) this.CheckStrictOctalLiteral(scope.start_position(), scope.end_position());
+    let duplicate_parameters = has_duplicate_parameters ? kHasDuplicateParameters : kNoDuplicateParameters;
+
+    let function_literal = this.ast_node_factory_.NewFunctionLiteral(
+      function_name, scope, body, expected_property_count, num_parameters,
+      function_length, duplicate_parameters, function_syntax_kind,
+      eager_compile_hint, pos, true, function_literal_id, produced_preparse_data);
+    function_literal.set_function_token_position(function_token_pos);
+    function_literal.set_suspend_count(suspend_count);
+
+    this.RecordFunctionLiteralSourceRange(function_literal);
+
+    // if (should_post_parallel_task) {}
+    if(should_infer_name) this.fni_.AddFunction(function_literal);
+
+    return function_literal;
   }
+  AllowsLazyParsingWithoutUnresolvedVariables() {
+    return this.scope_.AllowsLazyParsingWithoutUnresolvedVariables(original_scope_);
+  }
+  parse_lazily() {
+    return this.mode_ === PARSE_LAZILY;
+  }
+  GetNextFunctionLiteralId() {
+    return ++this.function_literal_id_;
+  }
+  SetLanguageMode(scope, mode) {
+    let feature;
+    if(this.is_sloppy(mode)) feature = kSloppyMode;
+    else if(this.is_strict(mode)) feature = kStrictMode;
+    else this.UNREACHABLE();
+    ++this.use_counts_[feature];
+    scope.SetLanguageMode(mode);
+  }
+
+  /**
+   * 这个函数的参数是他妈真的多
+   * 处理函数参数
+   * @param {ScopedPtrList<Statement>*} body 保存了当前作用域内所有变量
+   * @param {AstRawString*} function_name 函数名 匿名函数是空字符串
+   * @param {int} pos 当前位置
+   * @param {FunctionKind} kind 函数类型 见FunctionKindForImpl
+   * @param {FunctionSyntaxKind} function_syntax_kind 普通函数orIIFE
+   * @param {DeclarationScope} function_scope 函数的作用域
+   * @param {int*} num_parameters 参数数量
+   * @param {int*} function_length 函数长度
+   * @param {bool*} has_duplicate_parameters 是否有重复参数
+   * @param {int*} expected_property_count 
+   * @param {int*} suspend_count 
+   * @param {ZonePtrList<const AstRawString>*} arguments_for_wrapped_function 
+   */
+  ParseFunction(body, function_name, pos, kind, function_syntax_kind, function_scope,
+    num_parameters = -1, function_length = -1, has_duplicate_parameters = false,
+    expected_property_count = 0, suspend_count = -1, arguments_for_wrapped_function = null) {
+    let mode = new ParsingModeScope(this, this.allow_lazy_ ? PARSE_LAZILY : PARSE_EAGERLY);
+    let function_state = new FunctionState(this.function_state_, this.scope_, function_scope);
+
+    let is_wrapped = function_syntax_kind === kWrapped;
+
+    let expected_parameters_end_pos = this.parameters_end_pos_;
+    if(expected_parameters_end_pos !== kNoSourcePosition) {
+      this.parameters_end_pos_ = kNoSourcePosition;
+    }
+
+    let formals = new ParserFormalParameters(function_scope);
+    {
+
+    }
+    num_parameters = formals.num_parameters();
+    function_length = formals.function_length;
+
+    // AcceptINScope scope(this, true);
+    this.ParseFunctionBody(body, function_name, pos, formals, kind, function_syntax_kind, _kBlock);
+    has_duplicate_parameters = formals.has_duplicate();
+    expected_property_count = this.function_state_.expected_property_count();
+    suspend_count = this.function_state_.suspend_count();
+  }
+
   DeclareFunction() {
 
+  }
+}
+
+class ParsingModeScope {
+  constructor(parser, mode) {
+    this.parser_ = parser;
+    this.old_mode_ = parser.mode_;
+    this.parser_.mode_ = mode;
   }
 }

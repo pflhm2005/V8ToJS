@@ -1,5 +1,6 @@
 import StringHasher from './StringHasher';
 import AstRawString from "./AstRawString";
+import { ZoneObject } from './Ast';
 
 const kMaxOneCharStringValue = 128;
 
@@ -10,11 +11,34 @@ export default class AstValueFactory {
     // this.hash_seed_ = BigInt(15853730874361889590); 
     this.hash_seed_ = 1704808181;
     this.string_end_ = [];
+
+    this.empty_cons_string_ = this.NewConsString();
+    this.cons_string_ar = [];
   }
+
+  dot_string() { return '.'; }
   dot_result_string() { return '.result'; }
   prototype_string() { return 'prototype'; }
   proto_string() { return '__proto__'; }
   empty_string() { return ''; }
+  new_target_string() { return '.new.target'; }
+  this_string() { return 'this'; }
+  this_function_string() { return '.this_function'; }
+
+
+  empty_cons_string() { return this.empty_cons_string_; }
+  NewConsString() {
+    let new_string = new AstConsString();
+    this.AddConsString(new_string);
+    return new_string;
+  }
+  AddConsString(string) {
+    /**
+     * 这里用二维指针实现的一个链表
+     * JS直接用数组代替了
+     */
+    this.cons_string_ar.push(string);
+  }
   GetOneByteString(literal) {
     return this.GetOneByteStringInternal(literal);
   }
@@ -77,5 +101,18 @@ export default class AstValueFactory {
      */
     this.string_end_.push(string);
     return string;
+  }
+}
+
+class AstConsString extends ZoneObject {
+  constructor() {
+    this.next_ = null;
+    this.segment_ = [];
+  }
+  IsEmpty() {
+    return !this.segment_.length;
+  }
+  AddString(s) {
+    this.segment_.push(s);   
   }
 }

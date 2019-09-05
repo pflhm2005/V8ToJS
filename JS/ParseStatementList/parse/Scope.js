@@ -5,8 +5,13 @@ import {
   kNotAssigned,
   kSloppy,
   kStrict,
+  NORMAL_VARIABLE,
+  kCreatedInitialized,
+  THIS_VARIABLE,
+  kNeedsInitialization,
 } from "../enum";
 import { Variable } from "../ast/AST";
+import { IsConciseMethod, IsClassConstructor, IsAccessorFunction } from "../util";
 // import ThreadedList from '../base/ThreadedList';
 
 class ZoneObject {};
@@ -20,26 +25,34 @@ const CATCH_SCOPE = 5;  // catch作用域  try{}catch(){}
 const BLOCK_SCOPE = 6;  // 块作用域 {}
 const WITH_SCOPE = 7; // with作用域 with() {}
 
+/**
+ * JS不存在HashMap的数据结构
+ * 由于不存在指针 所以对象之间的比较十分困难
+ * 这里用hash值来做对比
+ */
 class VariableMap {
   constructor() {
-    this.variables_ = new Map();
+    /**
+     * 源码中是一个HashMap
+     * 这里暂时用数组代替
+     */
+    this.variables_ = [];
   }
   Lookup(name) {
-    if (this.variables_.has(name)) {
-      return this.variables_.get(name);
-    }
-    return null;
+    let tar = this.variables_.find(v => v.hash === name.Hash());
+    return tar ? tar : null;
   }
   LookupOrInsert(name, hash) {
-    if (!this.variables_.has(name)){
+    let tar = this.variables_.find(v => v.hash === hash);
+    if (!tar){
       let p = { hash, value: null };
-      this.variables_.set(name, p);
+      this.variables_.push(p);
       return p;
     }
-    return this.variables_.get(name);
+    return tar;
   }
   Declare(zone, scope, name, mode, kind, initialization_flag, maybe_assigned_flag, was_added) {
-    let p = this.LookupOrInsert(name, name.Hash(), zone);
+    let p = this.LookupOrInsert(name, name.Hash());
     was_added = p.value === null;
     if (was_added) {
       let variable = new Variable(scope, name, mode, kind, initialization_flag, maybe_assigned_flag);
@@ -58,6 +71,7 @@ export default class Scope extends ZoneObject {
     this.outer_scope_ = outer_scope;
     this.inner_scope_ = null;
     this.is_declaration_scope_ = 1;
+    this.start_position_ = 0;
 
     this.scope_type_ = scope_type;
 
@@ -88,6 +102,7 @@ export default class Scope extends ZoneObject {
     this.zone_ = null;
   }
   zone() { return this.zone_; }
+  set_start_position(statement_pos) { this.start_position_ = statement_pos; }
 
   is_eval_scope() { return this.scope_type_ == EVAL_SCOPE; }
   is_function_scope() { return this.scope_type_ == FUNCTION_SCOPE; }
@@ -101,12 +116,26 @@ export default class Scope extends ZoneObject {
   is_with_scope() { return this.scope_type_ == WITH_SCOPE; }
   is_class_scope() { return this.scope_type_ == CLASS_SCOPE; }
 
+  SetLanguageMode(language_mode) { this.is_strict_ = this.is_strict(language_mode); }
   language_mode() { return this.is_strict_ ? kStrict : kSloppy; }
   is_sloppy(language_mode) { return language_mode === kSloppy; }
   is_strict(language_mode) { return language_mode !== kSloppy; }
 
   declarations() { return this.decls_; }
   outer_scope() { return this.outer_scope_; }
+  /**
+   * 遍历作用域链 判定是否有未处理的变量
+   * @param {Scope} outer 指定的外层作用域
+   */
+  AllowsLazyParsingWithoutUnresolvedVariables(outer) {
+    for(const s = this; s !== outer; s = s.outer_scope_) {
+      if(s.is_eval_scope()) return this.is_sloppy(s.language_mode());
+      if(s.is_catch_scope()) continue;
+      if(s.is_with_scope()) continue;
+      return false;
+    }
+    return true;
+  }
   // 这里形成一个作用域链
   GetDeclarationScope() {
     let scope = this;
@@ -173,6 +202,21 @@ export default class Scope extends ZoneObject {
     return variable;
   }
   /**
+   * 声明一个特殊变量
+   * @param {Zone*} zone 内存地址
+   * @param {AstRawString*} name 变量名
+   * @param {VariableMode*} mode 声明类型
+   * @param {VariableKind*} kind 变量类型
+   * @param {InitializationFlag*} initialization_flag 
+   * @param {MaybeAssignedFlag*} maybe_assigned_flag 
+   * @param {bool*} was_added 
+   */
+  Declare(zone = null, name, mode, kind, initialization_flag, maybe_assigned_flag, was_added) {
+    let { was_added, variable } = this.variables_.Declare(zone, this, name, mode, kind, initialization_flag, maybe_assigned_flag, was_added);
+    if(was_added) this.locals_.push(variable);
+    return variable;
+  }
+  /**
    * JS新出的Map类 has仅仅返回true、false
    * 所以需要对返回值做一些处理
    */
@@ -181,9 +225,59 @@ export default class Scope extends ZoneObject {
   }
 }
 
-// class DeclarationScope extends Scope {
-//   constructor() {
-//     super();
-//   }
-// }
+export class DeclarationScope extends Scope {
+  constructor(zone = null, outer_scope, scope_type, function_kind) {
+    super(zone, outer_scope, scope_type);
+    this.function_kind_ = function_kind;
+    this.params_ = [];
+    this.SetDefaults();
+  }
+  SetDefaults() {
+    this.is_declaration_scope_ = true;
+    this.has_simple_parameters_ = true;
+    this.is_asm_module_ = false;
+    this.force_eager_compilation_ = false;
+    this.has_arguments_parameter_ = false;
+    this.scope_uses_super_property_ = false;
+    this.has_checked_syntax_ = false;
+    this.has_this_reference_ = false;
+    this.has_this_declaration_ = (this.is_function_scope() && !this.is_arrow_scope()) || this.is_module_scope();
+    this.has_rest_ = false;
+    this.receiver_ = null;
+    this.new_target_ = null;
+    this.function_ = null;
+    this.arguments_ = null;
+    this.rare_data_ = null;
+    this.should_eager_compile_ = false;
+    this.was_lazily_parsed_ = false;
+    this.is_skipped_function_ = false;
+    this.preparse_data_builder_ = null;
+  }
+  DeclareDefaultFunctionVariables(ast_value_factory) {
+    // 生成this变量
+    this.DeclareThis(ast_value_factory);
+    // 生成.new.target变量
+    this.new_target_ = this.Declare(null, ast_value_factory.new_target_string(), kConst, NORMAL_VARIABLE, kCreatedInitialized, kNotAssigned, false);
+    if(IsConciseMethod(this.function_kind_) || IsClassConstructor(this.function_kind_) || IsAccessorFunction(this.function_kind_)) {
+      this.EnsureRareData().this._function = this.Declare(null, ast_value_factory.this_function_string(), kConst, NORMAL_VARIABLE, kCreatedInitialized, kNotAssigned, false);
+    }
+  }
+  DeclareThis(ast_value_factory) {
+    let derived_constructor = IsDerivedConstructor(function_kind_);
+    let p1 = derived_constructor ? kConst : kVar;
+    let p2 = derived_constructor ? kNeedsInitialization : kCreatedInitialized;
+    this.receiver_ = new Variable(this, ast_value_factory.this_string(), p1, THIS_VARIABLE, p2, kNotAssigned);
+  }
+  EnsureRareData() {
+    if(this.rare_data_ === null) this.rare_data_ = new RareData();
+    return this.rare_data_;
+  }
+}
+
+class RareData extends ZoneObject {
+  constructor() {
+    this.this_function = null;
+    this.generator_object = null;
+  }
+}
 
