@@ -22,6 +22,7 @@ export default class LiteralBuffer {
   Start() {
     this.position_ = 0;
     this.is_one_byte_ = true;
+    this.backing_store_ = [];
   }
   /**
    * 只关心单字节字符 所以那两个方法不给出实现了

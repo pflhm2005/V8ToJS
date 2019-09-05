@@ -159,6 +159,9 @@ export class VariableDeclarationParsingScope extends ExpressionScope {
 
 class ParameterDeclarationParsingScope extends ExpressionScope {}
 
+/**
+ * 这个类纯粹就是用来管理错误的
+ */
 export class AccumulationScope {
   constructor(scope) {
     this.messages_ = [null, null];
@@ -173,6 +176,9 @@ export class AccumulationScope {
     //   }
     //   this.copy(i);
     // }
+  }
+  Accumulate() {
+    if(this.scope_ === null) return;
   }
   copy(entry) {
     this.messages_[entry] = this.scope_.messages_[entry];

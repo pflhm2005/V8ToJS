@@ -86,7 +86,7 @@ class ParserBase {
     // scanner.Initialize();
     this.scanner = scanner;
     this.ast_value_factory_ = new AstValueFactory();
-    this.ast_node_factory_ = new AstNodeFactory();
+    this.ast_node_factory_ = new AstNodeFactory(this.ast_value_factory_);
     this.scope_ = new Scope();
     this.fni_ = new FuncNameInferrer();
     this.expression_scope_ = null;
@@ -733,6 +733,10 @@ class ParserBase {
         this.Consume('Token::COLON');
         // AcceptINScope scope(this, true);
         let value = this.ParsePossibleDestructuringSubPattern(prop_info.accumulation_scope);
+        /**
+         * 返回一个管理键值对的对象 标记了值的类型
+         * @returns {ObjectLiteralProperty}
+         */
         let result = this.ast_node_factory_.NewObjectLiteralProperty(name_expression, value, prop_info.is_computed_name);
         this.SetFunctionNameFromPropertyName(result, name);
         return result;
@@ -758,6 +762,7 @@ class ParserBase {
           value = lhs;
         }
         let result = this.ast_node_factory_.NewObjectLiteralProperty(name_expression, value, COMPUTED, false);
+        // 只有匿名函数等等才会进入这里
         this.SetFunctionNameFromPropertyName(result, name);
         return result;
       }
@@ -935,8 +940,16 @@ class ParserBase {
     this.PushLiteralName(prop_info.name);
     return is_array_index ? this.ast_node_factory_.NewNumberLiteral(index, pos) : this.ast_node_factory_.NewStringLiteral(prop_info.name, pos);
   }
-  ParsePossibleDestructuringSubPattern() {
-
+  /**
+   * 解析value
+   * @param {ExpressionScope} scope
+   * @returns {Expression} 
+   */
+  ParsePossibleDestructuringSubPattern(scope) {
+    if (scope) scope.Accumulate();
+    // let begin = this.peek_position();
+    let result = this.ParseAssignmentExpressionCoverGrammar();
+    return result;
   }
   ParsePropertyName() {
     let next = this.Next();
@@ -947,6 +960,33 @@ class ParserBase {
     }
     throw new Error('UnexpectedToken ParsePropertyName');
   }
+  /**
+   * 这里重载了 JS不管
+   * @param {ObjectLiteralProperty} property 键值对对象
+   * @param {AstRawString*} name 键值
+   * @param {AstRawString*} prefix 
+   */
+  SetFunctionNameFromPropertyName(property, name, prefix = null) {
+    // 设置prototype不做处理
+    if (property.IsPrototype()) return;
+    /**
+     * 匿名函数
+     */
+    if (property.NeedsSetFunctionName()) {
+      name = null;
+      prefix = null;
+    } else {
+      // TODO
+    }
+    let value = property.value_;
+    this.SetFunctionName(value, name, prefix);
+  }
+  SetFunctionName(value, name, prefix) {
+    // TODO
+  }
+  InitializeObjectLiteral() {}
+  IsBoilerplateProperty() {}
+  Expect() {}
   /**
    * 判定该字符串是否是int32的纯数字 多位数不可以0开头
    * @param {AstRawString} string 

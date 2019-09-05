@@ -24,3 +24,9 @@ export const kLastFunctionKind = kClassMembersInitializerFunction;
 export const kIsNormal = 0;
 export const kIsGenerator = 1 << 0;
 export const kIsAsync = 1 << 1;
+
+export const kAnonymousExpression = 0;
+export const kNamedExpression = 1;
+export const kDeclaration = 2;
+export const kAccessorOrMethod = 3;
+export const kWrapped = 4;

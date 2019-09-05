@@ -1,5 +1,4 @@
 import { 
-  _kTemplateLiteral, 
   keywords, 
   TokenEnumList,
   kMaxAscii, 
@@ -251,7 +250,7 @@ export const IsAnyIdentifier = (token) => {
  * bitmap判断flag系列
  */
 export const TerminatesLiteral = (scan_flags) => {
-  return scan_flags & _kTemplateLiteral;
+  return scan_flags & kTerminatesLiteral;
 }
 export const IdentifierNeedsSlowPath = (scan_flags) => {
   return scan_flags & kIdentifierNeedsSlowPath;

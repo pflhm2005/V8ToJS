@@ -18,12 +18,20 @@ import {
   kCompoundAssignment,
   kExpressionStatement,
 
-  kVariableProxy,
+  _kVariableProxy,
 
   TARGET_FOR_ANONYMOUS,
   TARGET_FOR_NAMED_ONLY,
 
   _kBlock,
+  CONSTANT,
+  COMPUTED,
+  MATERIALIZED_LITERAL,
+  PROTOTYPE,
+  _kRegExpLiteral,
+  _kObjectLiteral,
+  _kArrayLiteral,
+  _kLiteral,
 } from "../enum";
 
 import {
@@ -35,6 +43,9 @@ import {
 } from '../util';
 
 export class AstNodeFactory {
+  constructor(ast_value_factory) {
+    this.ast_value_factory_ = ast_value_factory;
+  }
   NewVariableProxy(name, variable_kind, start_position = kNoSourcePosition) {
     return new VariableProxy(name, variable_kind, start_position);
   }
@@ -51,11 +62,15 @@ export class AstNodeFactory {
   NewNullLiteral(pos) {
     return new Literal(kNull, null, pos);
   }
+  NewNumberLiteral() {}
   NewBooleanLiteral(b, pos) {
     return new Literal(kBoolean, b, pos);
   }
   NewSmiLiteral(number, pos) {
     return new Literal(kSmi, number, pos);
+  }
+  NewObjectLiteral() {
+
   }
   // TODO
   // NewNumberLiteral() {}
@@ -64,6 +79,9 @@ export class AstNodeFactory {
   }
   NewStringLiteral(string, pos) {
     return new Literal(kString, string, pos);
+  }
+  NewObjectLiteralProperty(key, value, is_computed_name) {
+    return new ObjectLiteralProperty(this.ast_value_factory_, key, value, is_computed_name);
   }
 
   /**
@@ -98,8 +116,19 @@ class AstNode {
     this.position_ = position;
     this.bit_field_ = NodeTypeField.encode(type);
   }
-  IsVariableProxy() { return this.node_type() === kVariableProxy; }
+  IsVariableProxy() { return this.node_type() === _kVariableProxy; }
+  IsLiteral() { return this.node_type() === _kLiteral; }
   node_type() { return NodeTypeField.decode(this.bit_field_); }
+  AsMaterializedLiteral() {
+    switch(this.node_type()) {
+      case _kRegExpLiteral:
+      case _kObjectLiteral:
+      case _kArrayLiteral:
+        return true;
+      default:
+        return null;
+    }
+  }
 }
 
 class Statement extends AstNode {
@@ -197,7 +226,7 @@ class CompoundAssignment extends Assignment {
 
 export class VariableProxy extends Expression {
   constructor(name, variable_kind, start_position) {
-    super(start_position, kVariableProxy);
+    super(start_position, _kVariableProxy);
     this.raw_name_ = name;
     this.next_unresolved_ = null;
 
@@ -219,6 +248,7 @@ export class VariableProxy extends Expression {
 
 /**
  * 字面量类
+ * 实际上有很多种类 同时提供Asxxx方法进行转换 这里统一用一个
  */
 class Literal extends Expression{
   /**
@@ -241,20 +271,26 @@ class Literal extends Expression{
      * 连枚举也没有(实际上用ES6的Symbol模拟枚举是一个可行性方案 但是成本略高)
      * 因此用一个数组来保存值 用val()来获取对应的值
      */
-    this.val = new Array(6).fill(null);
-    this.val[type] = val;
+    this.val_ = new Array(6).fill(null);
+    this.val_[type] = val;
     
     this.bit_field_ = NodeTypeField.update(this.bit_field_, type);
   }
   // add
   val() {
-    return this.val[this.type];
+    return this.val_[this.type];
+  }
+  AsLiteral() {}
+  IsString() {
+    return this.type = kString;
+  }
+  AsRawString() {
+    return this.val().literal_bytes_;
   }
 }
 
 /**
- * 这个比较特殊
- * 放最下面了
+ * 下面放的是继承于ZoneObject类
  */
 // The AST refers to variables via VariableProxies - placeholders for the actual
 // variables. Variables themselves are never directly referred to from the AST,
@@ -282,3 +318,41 @@ export class Variable extends ZoneObject {
 
   static DefaultInitializationFlag(mode) { return mode === kVar ? kCreatedInitialized : kNeedsInitialization; }
 };
+
+/**
+ * 
+ */
+class LiteralProperty extends ZoneObject {
+  constructor(key, value, is_computed_name) {
+    super();
+    this.pointer_ = 0;
+    this.key_ = key;
+    this.value_ = value;
+    this.is_computed_name_ = is_computed_name;
+  }
+  NeedsSetFunctionName() {
+    // TODO
+    // return this.is_computed_name_ && (this.value_.type === '')
+    return false;
+  }
+}
+
+class ObjectLiteralProperty extends LiteralProperty {
+  constructor(ast_value_factory, key, value, is_computed_name) {
+    super(key, value, is_computed_name);
+    this.emit_store_ = true;
+    if(!is_computed_name && key.IsString() &&
+    key.AsRawString() === ast_value_factory.proto_string()) {
+      this.kind_ = PROTOTYPE;
+    } else if (this.value_.AsMaterializedLiteral() !== null) {
+      this.kind_ = MATERIALIZED_LITERAL;
+    } else if (value.IsLiteral()) {
+      this.kind_ = CONSTANT;
+    } else {
+      this.kind_ = COMPUTED;
+    }
+  }
+  IsPrototype() {
+    return this.kind_ === PROTOTYPE;
+  }
+}

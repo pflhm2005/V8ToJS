@@ -84,17 +84,20 @@ export default class Stream {
       let tarArr = arr.slice(start, end);
 
       let tarIdx = tarArr.findIndex(v => callback(v));
-      return tarIdx === -1 ? end : (tarIdx + start - 1);
+      return tarIdx === -1 ? end : (tarIdx + start);
     }
 
     let next_cursor_pos = find_if(this.buffer_, this.buffer_cursor_, this.buffer_end_, callback);
 
     if (next_cursor_pos === this.buffer_end_) {
       this.buffer_cursor_ = this.buffer_end_;
-      return null;
+      if(!this.ReadBlockChecked()) {
+        this.buffer_cursor_++;
+        return kEndOfInput;
+      }
     } else {
       this.buffer_cursor_ = next_cursor_pos + 1;
-      return this.buffer_[this.buffer_cursor_];
+      return this.buffer_[next_cursor_pos];
     }
   }
 }

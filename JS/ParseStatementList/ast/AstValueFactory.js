@@ -5,7 +5,7 @@ const kMaxOneCharStringValue = 128;
 
 export default class AstValueFactory {
   constructor() {
-    this.one_character_strings_ = new Array(kMaxOneCharStringValue).fill(0);
+    this.one_character_strings_ = new Array(kMaxOneCharStringValue).fill(null);
     this.string_table_ = new Map();
     // this.hash_seed_ = BigInt(15853730874361889590); 
     this.hash_seed_ = 1704808181;
@@ -13,21 +13,22 @@ export default class AstValueFactory {
   }
   dot_result_string() { return '.result'; }
   prototype_string() { return 'prototype'; }
+  proto_string() { return '__proto__'; }
   GetOneByteString(literal) {
     return this.GetOneByteStringInternal(literal);
   }
   GetOneByteStringInternal(literal) {
-    if (literal.length === 1 && literal[0] < kMaxOneCharStringValue) {
-      let key = literal[0];
+    if (literal.length === 1 && literal[0].charCodeAt() < kMaxOneCharStringValue) {
+      let key = literal[0].charCodeAt();
       /**
        * 单字符变量第一次出现会进这里
        * one_character_strings_是一个长度为128的Vector 保存每一个字符生成的hash值
        */
-      if (one_character_strings_[key] === null) {
+      if (this.one_character_strings_[key] === null) {
         let hash_field = StringHasher.HashSequentialString(literal, 1, this.hash_seed_);
-        one_character_strings_[key] = this.GetString(hash_field, true, literal);
+        this.one_character_strings_[key] = this.GetString(hash_field, true, literal);
       }
-      return one_character_strings_[key];
+      return this.one_character_strings_[key];
     }
     let hash_field = StringHasher.HashSequentialString(literal, literal.length, this.hash_seed_);
     hash_field >>>= 0;

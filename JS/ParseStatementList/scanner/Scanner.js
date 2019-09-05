@@ -101,6 +101,7 @@ export default class Scanner {
      * (cur_, next_, Token::UNINITIALIZED) => (next_, 新Scan的Token, Token::UNINITIALIZED)
      * 2、next_next_若有值 不会进行Scan 仅进行移位
      * (cur_, next_, next_next_) => (next_, next_next_, Token::UNINITIALIZED)
+     * @returns {Token} 返回next_.token
      */
     let previous = this.current_;
     this.current_ = this.next_;
@@ -113,6 +114,7 @@ export default class Scanner {
       this.next_next_ = previous;
       previous.token = 'Token::UNINITIALIZED';
     }
+    // console.log(this.current().token, this.current().literal_chars.one_byte_literal());
     return this.current().token;
   }
   /**
