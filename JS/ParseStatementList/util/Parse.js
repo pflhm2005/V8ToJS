@@ -29,3 +29,5 @@ export const IsMember = token => TokenIsInRange(token, 'TEMPLATE_SPAN', 'LBRACK'
 
 export const IsStrictReservedWord = token => TokenIsInRange(token, 'YIELD', 'ESCAPED_STRICT_RESERVED_WORD');
 
+export const IsGetterFunction = kind => kind === kGetterFunction;
+export const IsSetterFunction = kind => kind === kSetterFunction;

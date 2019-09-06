@@ -9,6 +9,7 @@ import {
   kCreatedInitialized,
   THIS_VARIABLE,
   kNeedsInitialization,
+  kTemporary,
 } from "../enum";
 import { Variable } from "../ast/AST";
 import { IsConciseMethod, IsClassConstructor, IsAccessorFunction } from "../util";
@@ -40,7 +41,7 @@ class VariableMap {
   }
   Lookup(name) {
     let tar = this.variables_.find(v => v.hash === name.Hash());
-    return tar ? tar : null;
+    return tar ? tar.value : null;
   }
   LookupOrInsert(name, hash) {
     let tar = this.variables_.find(v => v.hash === hash);
@@ -229,6 +230,7 @@ export class DeclarationScope extends Scope {
   constructor(zone = null, outer_scope, scope_type, function_kind) {
     super(zone, outer_scope, scope_type);
     this.function_kind_ = function_kind;
+    this.num_parameters_ = 0;
     this.params_ = [];
     this.SetDefaults();
   }
@@ -271,6 +273,37 @@ export class DeclarationScope extends Scope {
   EnsureRareData() {
     if(this.rare_data_ === null) this.rare_data_ = new RareData();
     return this.rare_data_;
+  }
+  MakeParametersNonSimple() {
+    this.SetHasNonSimpleParameters();
+    for(let p of this.variables_) {
+      let variable = p.value;
+      if(variable.is_parameter()) Variable.MakeParameterNonSimple();
+    }
+  }
+  SetHasNonSimpleParameters() {
+    this.has_simple_parameters_ = false;
+  }
+  /**
+   * ...
+   * @param {AstRawString*} name 参数名
+   * @param {VariableMode} mode 声明模式
+   * @param {bool} is_optional 是否有默认值
+   * @param {bool} is_rest rest参数
+   * @param {AstValueFactory*} ast_value_factory 
+   * @param {int} position 
+   */
+  DeclareParameter(name, mode, is_optional, is_rest, ast_value_factory, position) {
+    let variable = null;
+    if(mode === kTemporary) variable = NewTemporary(name);
+    else variable = this.LookupLocal(name);
+    this.has_rest_ = is_rest;
+    variable.set_initializer_position(position);
+    this.params_.push(variable);
+    if(!is_rest) ++this.num_parameters_;
+    if(name === ast_value_factory.arguments_string()) this.has_arguments_parameter_ = true;
+    variable.set_is_used();
+    return variable;
   }
 }
 

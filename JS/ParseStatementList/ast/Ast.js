@@ -36,6 +36,8 @@ import {
   SETTER,
   _kEmptyStatement,
   _kClassLiteral,
+  PARAMETER_VARIABLE,
+  kLet,
 } from "../enum";
 
 import {
@@ -46,6 +48,12 @@ import {
   TokenField,
   HashMap,
   IsResolvedField,
+  HasElementsField,
+  HasRestPropertyField,
+  FastElementsField,
+  HasNullPrototypeField,
+  NeedsInitialAllocationSiteField,
+  IsSimpleField,
 } from '../util';
 
 export class AstNodeFactory {
@@ -318,7 +326,7 @@ class AggregateLiteral extends MaterializedLiteral {
   constructor(pos, type) {
     super(pos, type);
     this.depth_ = 0;
-    // this.bit_field_ |= TODO
+    this.bit_field_ |= NeedsInitialAllocationSiteField.encode(false) | IsSimpleField.encode(false);
   }
 }
 
@@ -327,7 +335,10 @@ class ObjectLiteral extends AggregateLiteral {
     super(pos, _kObjectLiteral);
     this.boilerplate_properties_ = boilerplate_properties;
     this.properties = properties;
-    // this.bit_field_ |= TODO
+    this.bit_field_ |= HasElementsField.encode(false) | 
+                      HasRestPropertyField.encode(has_rest_property) | 
+                      FastElementsField.encode(false) | 
+                      HasNullPrototypeField.encode(false);
   }
   CalculateEmitStore(zone = null) {
     // ZoneAllocationPolicy allocator(zone);
@@ -416,7 +427,12 @@ export class Variable extends ZoneObject {
   }
   set_is_used() { this.bit_field_ = NodeTypeField.update(this.bit_field_, true); }
   set_maybe_assigned() { this.bit_field_ = NodeTypeField.update(this.bit_field_, kMaybeAssigned); }
+  is_parameter() { return VariableKindField.decode(this.bit_field_) === PARAMETER_VARIABLE; }
 
+  MakeParameterNonSimple() {
+    this.bit_field_ = VariableModeField.update(this.bit_field_, kLet);
+    this.bit_field_ = InitializationFlagField.update(this.bit_field_, kNeedsInitialization);
+  }
   static DefaultInitializationFlag(mode) { return mode === kVar ? kCreatedInitialized : kNeedsInitialization; }
 };
 
@@ -455,5 +471,16 @@ class ObjectLiteralProperty extends LiteralProperty {
   }
   IsPrototype() {
     return this.kind_ === PROTOTYPE;
+  }
+}
+
+export class Parameter extends ZoneObject {
+  constructor(pattern, initializer, position, initializer_end_position, is_rest) {
+    // PointerWithPayload
+    this.initializer_ = initializer;
+    this.is_rest_ = is_rest;
+    this.pattern = pattern;
+    this.position = position;
+    this.initializer_end_position = initializer_end_position;
   }
 }

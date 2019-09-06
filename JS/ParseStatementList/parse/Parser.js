@@ -1,6 +1,7 @@
 import { 
   Expression,
-  AstNodeFactory
+  AstNodeFactory,
+  Parameter
 } from '../ast/Ast';
 import { DeclarationParsingResult, Declaration } from './DeclarationParsingResult';
 import AstValueFactory from '../ast/AstValueFactory';
@@ -73,6 +74,7 @@ import {
   kSloppyMode,
   kStrictMode,
   _kBlock,
+  kTemporary,
 } from '../enum';
 
 import {
@@ -91,6 +93,8 @@ import {
   IsPropertyName,
   IsStrictReservedWord,
   IsArrowFunction,
+  IsGetterFunction,
+  IsSetterFunction,
 } from '../util';
 
 import {
@@ -107,6 +111,9 @@ import {
   kParamAfterRest,
   kRestDefaultInitializer,
   kStrictEvalArguments,
+  kBadGetterArity,
+  kBadSetterArity,
+  kBadSetterRestParameter,
 } from '../MessageTemplate';
 
 const kStatementListItem = 0;
@@ -1527,8 +1534,9 @@ export default class Parser extends ParserBase {
     expected_property_count = this.function_state_.expected_property_count();
     suspend_count = this.function_state_.suspend_count();
   }
+
   /**
-   * ...
+   * 以下内容为解析函数参数
    * @param {ParserFormalParameters*} parameters 
    */
   ParseFormalParameterList(parameters) {
@@ -1619,13 +1627,71 @@ export default class Parser extends ParserBase {
       f.set_raw_name(cons_name);
     }
   }
-  AddFormalParameter() {
-
+  /**
+   * 添加单个形参到容器中
+   * @param {ParserFormalParameters*} parameters 参数描述类
+   * @param {Expression*} pattern 形参
+   * @param {Expression*} initializer 参数默认值(没有就是null)
+   * @param {int} initializer_end_position 位置
+   * @param {bool} is_rest 由于rest只能是最后一个 所以这个直接代表当前参数是否是rest参数
+   */
+  AddFormalParameter(parameters, pattern, initializer, initializer_end_position, is_rest) {
+    parameters.UpdateArityAndFunctionLength(initializer !== null, is_rest);
+    let parameter = new Parameter(pattern, initializer, this.scanner.location().beg_pos, initializer_end_position, is_rest);
+    parameters.params.push(parameter);
   }
   ClassifyParameter(parameters, begin, end) {
     if(this.IsEvalOrArguments(parameters)) throw new Error(kStrictEvalArguments);
   }
+  CheckArityRestrictions(param_count, function_kind, has_rest, formals_start_pos, formals_end_pos) {
+    if(this.HasCheckedSyntax()) return;
+    if(IsGetterFunction(function_kind) && param_count !== 0) throw new Error(kBadGetterArity);
+    else if(IsSetterFunction(function_kind)) {
+      if(param_count !== 1) throw new Error(kBadSetterArity);
+      if(has_rest) throw new Error(kBadSetterRestParameter);
+    }
+  }
+  HasCheckedSyntax() {
+    return this.scope_.GetDeclarationScope().has_checked_syntax_;
+  }
+  /**
+   * 
+   * @param {ParserFormalParameters*} parameters 
+   */
+  DeclareFormalParameters(parameters) {
+    /**
+     * 出现以下三种情况时该值是false
+     * 1.rest参数
+     * 2.默认参数
+     * 3.解构参数
+     */
+    let is_simple = parameters.is_simple;
+    let scope = parameters.scope;
+    if(!is_simple) scope.MakeParametersNonSimple();
+    for(let parameter of parameters.params) {
+      let is_optional = parameter.initializer() !== null;
+      // 根据simple属性来决定参数
+      scope.DeclareParameter(
+        is_simple ? parameter.name() : this.ast_value_factory_.empty_string(),
+        is_simple ? kVar : kTemporary,
+        is_optional, parameter.is_rest_, this.ast_value_factory_, parameter.position
+      );
+    }
+  }
 
+  /**
+   * 以下内容为解析函数体
+   * @param {StatementListT*} body 
+   * @param {Identifier} function_name 
+   * @param {int} pos 
+   * @param {FormalParameters} parameters 
+   * @param {FunctionKind} kind 
+   * @param {FunctionSyntaxKind} function_syntax_kind 
+   * @param {FunctionBodyType} body_type 
+   */
+  ParseFunctionBody(body, function_name, pos, parameters, kind, function_syntax_kind, body_type) {
+  }
+ 
   DeclareFunction() {
 
   }
@@ -1642,6 +1708,14 @@ class ParsingModeScope {
   }
 }
 
+class ParameterParsingScope {
+  constructor(parser, parameters) {
+    this.parser_ = parser;
+    this.parent_parameters_ = this.parser_.parameters_;
+    this.parser_.parameters_ = parameters;
+  }
+}
+
 class FormalParametersBase {
   constructor(scope) {
     this.scope = scope;
@@ -1649,6 +1723,31 @@ class FormalParametersBase {
     this.is_simple = true;
     this.function_length = 0;
     this.arity = 0;
+  }
+  /**
+   * 返回形参数量 去除rest
+   * 与布尔值计算会自动转换 我就不用管了
+   */
+  num_parameters() {
+    return this.arity - this.has_rest;
+  }
+  /**
+   * 更新函数的参数数量与length属性
+   * 任何情况下arity都会增加
+   * 而function.length必须满足以下条件才会增加
+   * 1、该参数不存在默认值
+   * 2、不是rest参数
+   * 3、length、arity相等
+   * 那么length的意思就是 从第一个形参开始计数 直接碰到有默认值的参数或rest
+   * (a,b,c) => length => 3
+   * (a,b,c = 1) => length => 2
+   * (a=1,b,c) => length => 0
+   * @param {bool} is_optional 当前参数是否有默认值
+   * @param {bool} is_rest 是否是rest参数
+   */
+  UpdateArityAndFunctionLength(is_optional, is_rest) {
+    if(!is_optional && !is_rest && this.function_length === this.arity) ++this.function_length;
+    ++this.arity;
   }
 }
 
@@ -1658,12 +1757,4 @@ class ParserFormalParameters extends FormalParametersBase {
     this.params = [];
   }
 
-}
-
-class ParameterParsingScope {
-  constructor(parser, parameters) {
-    this.parser_ = parser;
-    this.parent_parameters_ = this.parser_.parameters_;
-    this.parser_.parameters_ = parameters;
-  }
 }

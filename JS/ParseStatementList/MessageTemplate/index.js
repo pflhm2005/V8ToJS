@@ -23,3 +23,6 @@ export const kTooManyParameters = 'Too many parameters in function definition (o
 export const kParamAfterRest = 'Rest parameter must be last formal parameter';
 export const kRestDefaultInitializer = 'Rest parameter may not have a default initializer';
 export const kStrictEvalArguments = 'Unexpected eval or arguments in strict mode';
+export const kBadGetterArity = 'Getter must not have any formal parameters.';
+export const kBadSetterArity = 'Setter must have exactly one formal parameter.';
+export const kBadSetterRestParameter = 'Setter function argument must not be a rest parameter';

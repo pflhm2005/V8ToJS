@@ -3,39 +3,15 @@ import {
   IsDecimalDigit,
 } from '../util';
 
-// Mask constant for checking if a name has a computed hash code
-// and if it is a string that is an array index.  The least significant bit
-// indicates whether a hash code has been computed.  If the hash code has
-// been computed the 2nd bit tells whether the string can be used as an
-// array index.
-const kIsNotArrayIndexMask = 1 << 1;
-const kNofHashBitFields = 2;
-
-// Shift constant retrieving hash code from hash field.
-export const kHashShift = kNofHashBitFields;
-
-// Only these bits are relevant in the hash, since the top two are shifted
-// out.
-const kHashBitMask = 0xffffffff >> kHashShift;
-
-// For strings which are array indexes the hash value has the string length
-// mixed into the hash, mainly to avoid a hash value of zero which would be
-// the case for the string '0'. 24 bits are used for the array index value.
-const kArrayIndexValueBits = 24;
-
-
-// Maximum number of characters to consider when trying to convert a string
-// value into an array index.
-const kMaxArrayIndexSize = 10;
-
-// Max length for computing hash. For strings longer than this limit the
-// string length is used as the hash value.
-const kMaxHashCalcLength = 16383;
-
-const kZeroHash = 27;
-
-const ArrayIndexValueBits_kShift = kNofHashBitFields; // 2
-const ArrayIndexLengthBits_kShift = kNofHashBitFields + kArrayIndexValueBits; // 26
+import { 
+  ArrayIndexLengthBits_kShift,
+  kMaxArrayIndexSize,
+  kMaxHashCalcLength,
+  kHashBitMask,
+  kZeroHash,
+  kIsNotArrayIndexMask,
+  kHashShift
+} from '../enum';
 
 /**
  * 1、非数字直接返回false
@@ -56,7 +32,7 @@ export const TryAddIndexChar = (index, c) => {
  * 下面全是不懂的位运算
  */
 const MakeArrayIndexHash = (value, length) => {
-  value <<= ArrayIndexValueBits_kShift;
+  value <<= ArrayIndexLengthBits_kShift;
   value |= length << ArrayIndexLengthBits_kShift;
   return value;
 };
