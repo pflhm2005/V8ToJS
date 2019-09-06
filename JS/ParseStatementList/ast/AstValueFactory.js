@@ -17,6 +17,8 @@ export default class AstValueFactory {
   }
 
   dot_string() { return '.'; }
+  eval_string() { return 'eval'; }
+  arguments_string() { return 'arguments'; }
   dot_result_string() { return '.result'; }
   prototype_string() { return 'prototype'; }
   proto_string() { return '__proto__'; }

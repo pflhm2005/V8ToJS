@@ -157,7 +157,11 @@ export class VariableDeclarationParsingScope extends ExpressionScope {
   }
 }
 
-class ParameterDeclarationParsingScope extends ExpressionScope {}
+export class ParameterDeclarationParsingScope extends ExpressionScope {
+  constructor(parser) {
+    super(parser, kParameterDeclaration);
+  }
+}
 
 /**
  * 这个类纯粹就是用来管理错误的

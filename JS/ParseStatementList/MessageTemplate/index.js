@@ -17,3 +17,9 @@ export const kDuplicateProto = 'Duplicate __proto__ fields are not allowed in ob
 
 export const kInvalidCoverInitializedName = 'Invalid shorthand property initializer';
 export const kMissingFunctionName = 'Function statements require a function name';
+export const kArgStringTerminatesParametersEarly = 'Arg string terminates parameters early';
+export const kUnexpectedEndOfArgString = 'Unexpected end of arg string';
+export const kTooManyParameters = 'Too many parameters in function definition (only 65534 allowed)';
+export const kParamAfterRest = 'Rest parameter must be last formal parameter';
+export const kRestDefaultInitializer = 'Rest parameter may not have a default initializer';
+export const kStrictEvalArguments = 'Unexpected eval or arguments in strict mode';

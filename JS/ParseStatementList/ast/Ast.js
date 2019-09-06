@@ -35,6 +35,7 @@ import {
   GETTER,
   SETTER,
   _kEmptyStatement,
+  _kClassLiteral,
 } from "../enum";
 
 import {
@@ -44,6 +45,7 @@ import {
   IsLabeledField,
   TokenField,
   HashMap,
+  IsResolvedField,
 } from '../util';
 
 export class AstNodeFactory {
@@ -122,6 +124,7 @@ class AstNode {
   }
   IsVariableProxy() { return this.node_type() === _kVariableProxy; }
   IsEmptyStatement() { return this.node_type() === _kEmptyStatement; }
+  IsClassLiteral() { return this.node_type() === _kClassLiteral; }
   IsLiteral() { return this.node_type() === _kLiteral; }
   node_type() { return NodeTypeField.decode(this.bit_field_); }
   AsMaterializedLiteral() {
@@ -249,6 +252,9 @@ export class VariableProxy extends Expression {
     variable.set_is_used();
     if (this.is_assigned()) variable.set_maybe_assigned();
   }
+  raw_name() {
+    return IsResolvedField.decode(this.bit_field_) ? this.var_.raw_name_ : this.raw_name_;
+  }
 }
 
 /**
@@ -363,6 +369,24 @@ class ObjectLiteral extends AggregateLiteral {
         }
       }
     }
+  }
+}
+
+class ClassLiteral extends Expression {
+  constructor() {
+    this.constructor_ = null;
+  }
+  constructor() {
+    return this.constructor_;
+  }
+}
+
+class FunctionLiteral extends Expression {
+  constructor() {
+    this.raw_name_ = null;
+  }
+  set_raw_name() {
+    this.raw_name_ = nane;
   }
 }
 
