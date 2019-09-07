@@ -10,21 +10,23 @@ import {
   THIS_VARIABLE,
   kNeedsInitialization,
   kTemporary,
+  EVAL_SCOPE,
+  FUNCTION_SCOPE,
+  MODULE_SCOPE,
+  CATCH_SCOPE,
+  WITH_SCOPE,
+  SCRIPT_SCOPE,
 } from "../enum";
 import { Variable } from "../ast/AST";
-import { IsConciseMethod, IsClassConstructor, IsAccessorFunction } from "../util";
+import { 
+  IsConciseMethod, 
+  IsClassConstructor, 
+  IsAccessorFunction, 
+  IsDerivedConstructor 
+} from "../util";
 // import ThreadedList from '../base/ThreadedList';
 
 class ZoneObject {};
-
-const CLASS_SCOPE = 0;  // class作用域 class a {};
-const EVAL_SCOPE = 1; // eval作用域 eval("var a = 1;")
-const FUNCTION_SCOPE = 2; // 函数作用域 function a() {}
-const MODULE_SCOPE = 3; // 模块作用域 export default {}
-const SCRIPT_SCOPE = 4; // 最外层作用域 默认作用域
-const CATCH_SCOPE = 5;  // catch作用域  try{}catch(){}
-const BLOCK_SCOPE = 6;  // 块作用域 {}
-const WITH_SCOPE = 7; // with作用域 with() {}
 
 /**
  * JS不存在HashMap的数据结构
@@ -129,7 +131,7 @@ export default class Scope extends ZoneObject {
    * @param {Scope} outer 指定的外层作用域
    */
   AllowsLazyParsingWithoutUnresolvedVariables(outer) {
-    for(const s = this; s !== outer; s = s.outer_scope_) {
+    for(let s = this; s !== outer; s = s.outer_scope_) {
       if(s.is_eval_scope()) return this.is_sloppy(s.language_mode());
       if(s.is_catch_scope()) continue;
       if(s.is_with_scope()) continue;
@@ -212,8 +214,8 @@ export default class Scope extends ZoneObject {
    * @param {MaybeAssignedFlag*} maybe_assigned_flag 
    * @param {bool*} was_added 
    */
-  Declare(zone = null, name, mode, kind, initialization_flag, maybe_assigned_flag, was_added) {
-    let { was_added, variable } = this.variables_.Declare(zone, this, name, mode, kind, initialization_flag, maybe_assigned_flag, was_added);
+  Declare(zone = null, name, mode, kind, initialization_flag, maybe_assigned_flag, was_added_param) {
+    let { was_added, variable } = this.variables_.Declare(zone, this, name, mode, kind, initialization_flag, maybe_assigned_flag, was_added_param);
     if(was_added) this.locals_.push(variable);
     return variable;
   }
@@ -259,13 +261,13 @@ export class DeclarationScope extends Scope {
     // 生成this变量
     this.DeclareThis(ast_value_factory);
     // 生成.new.target变量
-    this.new_target_ = this.Declare(null, ast_value_factory.new_target_string(), kConst, NORMAL_VARIABLE, kCreatedInitialized, kNotAssigned, false);
+    this.new_target_ = this.Declare(null, ast_value_factory.GetOneByteStringInternal(ast_value_factory.new_target_string()), kConst, NORMAL_VARIABLE, kCreatedInitialized, kNotAssigned, false);
     if(IsConciseMethod(this.function_kind_) || IsClassConstructor(this.function_kind_) || IsAccessorFunction(this.function_kind_)) {
-      this.EnsureRareData().this._function = this.Declare(null, ast_value_factory.this_function_string(), kConst, NORMAL_VARIABLE, kCreatedInitialized, kNotAssigned, false);
+      this.EnsureRareData().this._function = this.Declare(null, ast_value_factory.GetOneByteStringInternal(ast_value_factory.this_function_string()), kConst, NORMAL_VARIABLE, kCreatedInitialized, kNotAssigned, false);
     }
   }
   DeclareThis(ast_value_factory) {
-    let derived_constructor = IsDerivedConstructor(function_kind_);
+    let derived_constructor = IsDerivedConstructor(this.function_kind_);
     let p1 = derived_constructor ? kConst : kVar;
     let p2 = derived_constructor ? kNeedsInitialization : kCreatedInitialized;
     this.receiver_ = new Variable(this, ast_value_factory.this_string(), p1, THIS_VARIABLE, p2, kNotAssigned);
@@ -298,7 +300,7 @@ export class DeclarationScope extends Scope {
     if(mode === kTemporary) variable = NewTemporary(name);
     else variable = this.LookupLocal(name);
     this.has_rest_ = is_rest;
-    variable.set_initializer_position(position);
+    variable.initializer_position_ = position;
     this.params_.push(variable);
     if(!is_rest) ++this.num_parameters_;
     if(name === ast_value_factory.arguments_string()) this.has_arguments_parameter_ = true;
@@ -309,6 +311,7 @@ export class DeclarationScope extends Scope {
 
 class RareData extends ZoneObject {
   constructor() {
+    super();
     this.this_function = null;
     this.generator_object = null;
   }

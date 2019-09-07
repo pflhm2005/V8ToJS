@@ -38,6 +38,8 @@ import {
   _kClassLiteral,
   PARAMETER_VARIABLE,
   kLet,
+  _kFunctionLiteral,
+  kAnonymousExpression,
 } from "../enum";
 
 import {
@@ -54,6 +56,9 @@ import {
   HasNullPrototypeField,
   NeedsInitialAllocationSiteField,
   IsSimpleField,
+  FunctionSyntaxKindBits,
+  IsConciseMethod,
+  IsNewTargetField,
 } from '../util';
 
 export class AstNodeFactory {
@@ -133,7 +138,8 @@ class AstNode {
   IsVariableProxy() { return this.node_type() === _kVariableProxy; }
   IsEmptyStatement() { return this.node_type() === _kEmptyStatement; }
   IsClassLiteral() { return this.node_type() === _kClassLiteral; }
-  IsLiteral() { return this.node_type() === _kLiteral; }
+  IsFunctionLiteral() { return this.node_type() === _kClassLiteral; }
+  IsLiteral() { return this.node_type() === _kFunctionLiteral; }
   node_type() { return NodeTypeField.decode(this.bit_field_); }
   AsMaterializedLiteral() {
     switch(this.node_type()) {
@@ -221,6 +227,16 @@ export class Expression extends AstNode {
   constructor(pos, type) {
     super(pos, type);
   }
+  IsAnonymousFunctionDefinition() {
+    return (this.IsFunctionLiteral() && this.IsAnonymousFunctionDefinition()) || 
+    (this.IsClassLiteral() && this.IsAnonymousFunctionDefinition());
+  }
+  IsConciseMethodDefinition() {
+    return this.IsFunctionLiteral() && IsConciseMethod(this.kind());
+  }
+  IsAccessorFunctionDefinition() {
+    return this.IsFunctionLiteral() && this.IsAccessorFunctionDefinition(this.kind());
+  }
 }
 
 class Assignment extends Expression {
@@ -262,6 +278,9 @@ export class VariableProxy extends Expression {
   }
   raw_name() {
     return IsResolvedField.decode(this.bit_field_) ? this.var_.raw_name_ : this.raw_name_;
+  }
+  is_new_target() {
+    return IsNewTargetField.decode(this.bit_field_);
   }
 }
 
@@ -385,16 +404,28 @@ class ObjectLiteral extends AggregateLiteral {
 
 class ClassLiteral extends Expression {
   constructor() {
+    super();
     this.constructor_ = null;
   }
-  constructor() {
+  _constructor() {
     return this.constructor_;
   }
 }
 
 class FunctionLiteral extends Expression {
-  constructor() {
-    this.raw_name_ = null;
+  constructor(zone = null, name, ast_value_factory, scope, body, expected_property_count,
+    parameter_count, function_length, function_syntax_kind, has_duplicate_parameters,
+    eager_compile_hint, position, has_braces, function_literal_id, produced_preparse_data = null) {
+      super();
+      this.scope_ = scope;
+      this.raw_name_ = null;
+  }
+  kind() { return this.scope_.function_kind_; }
+  is_anonymous_expression() {
+    return this.syntax_kind() === kAnonymousExpression;
+  }
+  syntax_kind() {
+    return FunctionSyntaxKindBits.decode(this.bit_field_);
   }
   set_raw_name() {
     this.raw_name_ = nane;
@@ -476,11 +507,15 @@ class ObjectLiteralProperty extends LiteralProperty {
 
 export class Parameter extends ZoneObject {
   constructor(pattern, initializer, position, initializer_end_position, is_rest) {
+    super();
     // PointerWithPayload
     this.initializer_ = initializer;
     this.is_rest_ = is_rest;
     this.pattern = pattern;
     this.position = position;
     this.initializer_end_position = initializer_end_position;
+  }
+  name() {
+    return this.pattern.raw_name();
   }
 }

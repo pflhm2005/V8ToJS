@@ -75,6 +75,8 @@ import {
   kStrictMode,
   _kBlock,
   kTemporary,
+  FUNCTION_SCOPE,
+  kParameterDeclaration,
 } from '../enum';
 
 import {
@@ -95,6 +97,10 @@ import {
   IsArrowFunction,
   IsGetterFunction,
   IsSetterFunction,
+  is_sloppy,
+  is_strict,
+  IsValidIdentifier,
+  IsGeneratorFunction,
 } from '../util';
 
 import {
@@ -139,7 +145,7 @@ class ParserBase {
     this.original_scope_ = null;
     this.scope_ = new Scope();
     this.fni_ = new FuncNameInferrer();
-    this.function_state_ = new FunctionState();
+    this.function_state_ = new FunctionState(null, this.scope, null);
     this.default_eager_compile_hint_ = kShouldLazyCompile;
     this.expression_scope_ = null;
     this.pointer_buffer_ = [];
@@ -147,6 +153,7 @@ class ParserBase {
     this.accept_IN_ = true;
 
     this.parameters_ = null;
+    this.parsing_module_ = false;
   }
   /**
    * 大量的工具方法
@@ -167,8 +174,6 @@ class ParserBase {
   NullExpression() { return null; }
   NullIdentifier() { return null; }
   language_mode() { return this.scope_.language_mode(); }
-  is_sloppy(language_mode) { return language_mode === kSloppy; }
-  is_strict(language_mode) { return language_mode === kStrict; }
   peek() {
     return this.scanner.peek();
   }
@@ -213,7 +218,6 @@ class ParserBase {
     while(this.peek() !== 'Token::EOS') {
       let stat = this.ParseStatementListItem();
       if(stat === null) return;
-      if(stat.IsEmptyStatement()) continue;
       body.push(stat);
     }
   }
@@ -1048,8 +1052,8 @@ class ParserBase {
     if(IsAnyIdentifier(token)) {
       let name = this.ParseAndClassifyIdentifier(this.Next());
       // 严格模式禁用eval与arguments
-      if(this.is_strict(this.language_mode()) && this.IsEvalOrArguments(name)) throw new Error(kStrictEvalArguments);
-      this.ExpressionFromIdentifier(name, beg_pos);
+      if(is_strict(this.language_mode()) && this.IsEvalOrArguments(name)) throw new Error(kStrictEvalArguments);
+      return this.ExpressionFromIdentifier(name, beg_pos);
     }
     // CheckStackOverflow();
     if(token === 'Token::LBRACK') result = this.ParseArrayLiteral();
@@ -1142,6 +1146,7 @@ class ParserBase {
    * @param {Boolean} default_export
    */
   _ParseHoistableDeclaration(names = null, default_export = null) {
+    this.expression_scope_ = new VariableDeclarationParsingScope(this, kParameterDeclaration, names);
     this.Consume('Token::FUNCTION');
     let pos = this.position();
     let flags = kIsNormal;
@@ -1164,21 +1169,29 @@ class ParserBase {
   ParseHoistableDeclaration(pos, flags, names, default_export) {
     // this.CheckStackOverflow(); TODO
     if((flags & kIsAsync) !== 0 && this.Check('Token::MUL')) flag |= kIsGenerator;
+
+    let name = null;
+    let name_validity = null;
+    let variable_name = null;
     /**
      * 匿名函数或者函数表达式
      */
-    let name = null;
-    let name_validity = null;
     if(this.peek() === 'Token::LPAREN') {
       if(default_export) {
-        this.GetDefaultStrings(name, variable_name);
+        name = this.ast_value_factory_.default_string();
+        variable_name = this.ast_value_factory_.dot_default_string();
         name_validity = kSkipFunctionNameCheck;
       } else {
         throw new Error(kMissingFunctionName);
       }
-    } else {
+    }
+    /**
+     * 带名字的函数声明
+     */ 
+    else {
+      // 函数名判断是否是保留字
       let is_strict_reserved = IsStrictReservedWord(this.peek());
-      let name = this.ParseIdentifier();
+      let name = this.ParseIdentifier(this.scope_.function_kind_);
       name_validity = is_strict_reserved ? kFunctionNameIsStrictReserved : kFunctionNameValidityUnknown;
       variable_name = name;
     }
@@ -1199,15 +1212,17 @@ class ParserBase {
     let functionLiteral = this.ParseFunctionLiteral(name, this.scanner.location(), name_validity, function_kind, pos, kDeclaration, this.language_mode(), null);
 
     let mode = (!this.scope_.is_declaration_scope() || this.scope_.is_module_scope()) ? kLet : kVar;
-    let kind = this.is_sloppy(this.language_mode()) && 
+    let kind = is_sloppy(this.language_mode()) && 
     !this.scope_.is_declaration_scope() &&
     flags === kIsNormal ? SLOPPY_BLOCK_FUNCTION_VARIABLE : NORMAL_VARIABLE;
     return this.DeclareFunction(variable_name, functionLiteral, mode, kind, pos, this.end_position(), names);
   }
-  ParseIdentifier() {
-    let function_kind = function_state_.kind();
+  ParseIdentifier(function_kind) {
     let next = this.Next();
-    // if(!IsVa) TODO
+    if(!IsValidIdentifier(next, this.language_mode(), 
+    IsGeneratorFunction(function_kind), this.parsing_module_ || IsAsyncFunction(function_kind))) {
+      throw new Error('UnexpectedToken');
+    }
     return this.GetIdentifier();
   }
   PushEnclosingName(name) {
@@ -1419,21 +1434,32 @@ export default class Parser extends ParserBase {
      * 目前的结构 => '(' 函数参数 ')' '{' 函数体 '}'
      */
     let did_preparse_successfully = should_preparse && this.SkipFunction(function_name, kind, function_syntax_kind, scope, -1, -1, null);
+    
+    /**
+     * 下面的变量作为引用传到ParseFunction里去了
+     */
+    // int expected_property_count = 0;
+    // int suspend_count = -1;
+    // int num_parameters = -1;
+    // int function_length = -1;
+    // bool has_duplicate_parameters = false;
+    let result = {};
     if (!did_preparse_successfully) {
       if (should_preparse) this.Consume('Token::LPAREN');
       should_post_parallel_task = false;
-      this.ParseFunction(body, function_name, pos, kind, function_syntax_kind, scope,
-        num_parameters, function_length, has_duplicate_parameters,
-        0, -1, arguments_for_wrapped_function);
+      result = this.ParseFunction(body, function_name, pos, kind, function_syntax_kind, scope,
+        -1, -1, false, 0, -1, arguments_for_wrapped_function);
     }
 
+    let { num_parameters, function_length, has_duplicate_parameters, expected_property_count, suspend_count } = result;
+    return;
     /**
      * 解析完函数后再检测函数名合法性
      * 因为函数名的严格模式取决于外部作用域
      */
     language_mode = scope.language_mode();
     this.CheckFunctionName(language_mode, function_name, function_name_validity, function_name_location);
-    if(this.is_strict(language_mode)) this.CheckStrictOctalLiteral(scope.start_position(), scope.end_position());
+    if(is_strict(language_mode)) this.CheckStrictOctalLiteral(scope.start_position(), scope.end_position());
     let duplicate_parameters = has_duplicate_parameters ? kHasDuplicateParameters : kNoDuplicateParameters;
 
     let function_literal = this.ast_node_factory_.NewFunctionLiteral(
@@ -1451,7 +1477,7 @@ export default class Parser extends ParserBase {
     return function_literal;
   }
   AllowsLazyParsingWithoutUnresolvedVariables() {
-    return this.scope_.AllowsLazyParsingWithoutUnresolvedVariables(original_scope_);
+    return this.scope_.AllowsLazyParsingWithoutUnresolvedVariables(this.original_scope_);
   }
   parse_lazily() {
     return this.mode_ === PARSE_LAZILY;
@@ -1461,8 +1487,8 @@ export default class Parser extends ParserBase {
   }
   SetLanguageMode(scope, mode) {
     let feature;
-    if(this.is_sloppy(mode)) feature = kSloppyMode;
-    else if(this.is_strict(mode)) feature = kStrictMode;
+    if(is_sloppy(mode)) feature = kSloppyMode;
+    else if(is_strict(mode)) feature = kStrictMode;
     else this.UNREACHABLE();
     ++this.use_counts_[feature];
     scope.SetLanguageMode(mode);
@@ -1487,27 +1513,34 @@ export default class Parser extends ParserBase {
   ParseFunction(body, function_name, pos, kind, function_syntax_kind, function_scope,
     num_parameters = -1, function_length = -1, has_duplicate_parameters = false,
     expected_property_count = 0, suspend_count = -1, arguments_for_wrapped_function = null) {
+
     let mode = new ParsingModeScope(this, this.allow_lazy_ ? PARSE_LAZILY : PARSE_EAGERLY);
     let function_state = new FunctionState(this.function_state_, this.scope_, function_scope);
 
     let is_wrapped = function_syntax_kind === kWrapped;
 
     let expected_parameters_end_pos = this.parameters_end_pos_;
-    if(expected_parameters_end_pos !== kNoSourcePosition) {
-      this.parameters_end_pos_ = kNoSourcePosition;
-    }
+    if(expected_parameters_end_pos !== kNoSourcePosition) this.parameters_end_pos_ = kNoSourcePosition;
 
     let formals = new ParserFormalParameters(function_scope);
     {
       let formals_scope = new ParameterDeclarationParsingScope(this);
       /**
-       * 被括号包住的函数参数与正常的不一样
-       * (function(a,b,c) {})(1,2,3)
+       * 类型待定
        */
       if(is_wrapped) {
-        // TODO
+        for(const arg of arguments_for_wrapped_function) {
+          const is_rest = false;
+          let argument = this.ExpressionFromIdentifier(arg, kNoSourcePosition);
+          this.AddFormalParameter(formals, argument, null, kNoSourcePosition, is_rest);
+        }
+        this.DeclareFormalParameters(formals);
       }
+      /**
+       * 正常声明的函数
+       */
       else {
+        // 解析参数
         this.ParseFormalParameterList(formals);
         if(expected_parameters_end_pos !== kNoSourcePosition) {
           let position = this.peek_position();
@@ -1529,10 +1562,12 @@ export default class Parser extends ParserBase {
     /**
      * 解析函数体
      */
-    this.ParseFunctionBody(body, function_name, pos, formals, kind, function_syntax_kind, _kBlock);
+    // this.ParseFunctionBody(body, function_name, pos, formals, kind, function_syntax_kind, _kBlock);
     has_duplicate_parameters = formals.has_duplicate();
-    expected_property_count = this.function_state_.expected_property_count();
-    suspend_count = this.function_state_.suspend_count();
+    expected_property_count = function_state.expected_property_count_;
+    suspend_count = function_state.suspend_count_;
+    console.log(formals);
+    return { num_parameters, function_length, has_duplicate_parameters, expected_property_count, suspend_count };
   }
 
   /**
@@ -1540,7 +1575,14 @@ export default class Parser extends ParserBase {
    * @param {ParserFormalParameters*} parameters 
    */
   ParseFormalParameterList(parameters) {
-    let scope = new ParameterParsingScope(this, parameters);
+    /**
+     * C++有很多声明但是不调用的方法
+     * 但实际操作写在了析构函数中 比如这里的声明
+     * 目的是缓存当前scope的parameters_ 解析完后还原
+     * ParameterParsingScope scope(impl(), parameters);
+     */
+    let parent_parameters_ = this.parameters_;
+    this.parameter_ = parameters;
     if(this.peek() !== 'Token::RPAREN') {
       while(true) {
         // 形参数量有限制
@@ -1562,6 +1604,7 @@ export default class Parser extends ParserBase {
       }
     }
     this.DeclareFormalParameters(parameters);
+    this.parameters_ = parent_parameters_;
   }
   ParseFormalParameter(parameters) {
     // FuncNameInferrerState fni_state(&fni_);
@@ -1575,7 +1618,7 @@ export default class Parser extends ParserBase {
      * 简单 (a, b) => {}
      * 复杂 ({a,b }, [c, d]) => {}
      */
-    if(this.IsIdentifier(pattern)) this.ClassifyParameter(this.AsIdentifier(pattern), pos, this.end_position());
+    if(this.IsIdentifier(pattern)) this.ClassifyParameter(pattern, pos, this.end_position());
     else parameters.is_simple = false;
 
     let initializer = this.NullExpression();
@@ -1593,7 +1636,7 @@ export default class Parser extends ParserBase {
     let declaration_end = decls.length;
     let initializer_end = this.end_position();
     for(; declaration_it < declaration_end; declaration_it++) {
-      decls[declaration_it].var().set_initializer_position(initializer_end);
+      decls[declaration_it].var().initializer_position_ = initializer_end;
     }
 
     this.AddFormalParameter(parameters, pattern, initializer, this.end_position(), parameters.has_rest);
@@ -1609,11 +1652,16 @@ export default class Parser extends ParserBase {
     this.SetFunctionName(value, identifier.raw_name());
   }
   SetFunctionName(value, name, prefix = null) {
-    // if(!value.IsAnonymousFunctionDefinition()) return;
+    /**
+     * 匿名函数、属性简写、get/set
+     */
+    if(!value.IsAnonymousFunctionDefinition() &&
+      !value.IsConciseMethodDefinition() &&
+      !value.IsAccessorFunctionDefinition()) return;
     // 这里调用了AsFunctionLiteral方法进行了强转
     let f = value;
     // 如果是class 这里同样会调用AsClassLiteral强转
-    if(value.IsClassLiteral()) f = v.constructor();
+    if(value.IsClassLiteral()) f = v._constructor();
     /**
      * 到这里最终会变成一个函数字面量
      * 只有FunctionLiteral类才有set_raw_name方法
@@ -1669,13 +1717,13 @@ export default class Parser extends ParserBase {
     let scope = parameters.scope;
     if(!is_simple) scope.MakeParametersNonSimple();
     for(let parameter of parameters.params) {
-      let is_optional = parameter.initializer() !== null;
+      let is_optional = parameter.initializer_ !== null;
       // 根据simple属性来决定参数
-      scope.DeclareParameter(
-        is_simple ? parameter.name() : this.ast_value_factory_.empty_string(),
-        is_simple ? kVar : kTemporary,
-        is_optional, parameter.is_rest_, this.ast_value_factory_, parameter.position
-      );
+      // scope.DeclareParameter(
+      //   is_simple ? parameter.name() : this.ast_value_factory_.empty_string(),
+      //   is_simple ? kVar : kTemporary,
+      //   is_optional, parameter.is_rest_, this.ast_value_factory_, parameter.position
+      // );
     }
   }
 
@@ -1705,14 +1753,6 @@ class ParsingModeScope {
     this.parser_ = parser;
     this.old_mode_ = parser.mode_;
     this.parser_.mode_ = mode;
-  }
-}
-
-class ParameterParsingScope {
-  constructor(parser, parameters) {
-    this.parser_ = parser;
-    this.parent_parameters_ = this.parser_.parameters_;
-    this.parser_.parameters_ = parameters;
   }
 }
 
@@ -1755,6 +1795,9 @@ class ParserFormalParameters extends FormalParametersBase {
   constructor(scope) {
     super(scope);
     this.params = [];
+    this.duplicate_loc = new Location().invalid();
   }
-
+  has_duplicate() {
+    return this.duplicate_loc.IsValid();
+  }
 }

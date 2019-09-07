@@ -24,4 +24,10 @@ export default class FunctionState extends BlockState {
   RecordFunctionOrEvalCall() { 
     this.contains_function_or_eval_ = true;
   }
+  kind() {
+    return this.scope_.function_kind_;
+  }
+  next_function_is_likely_called() {
+    return this.next_function_is_likely_called_;
+  }
 }

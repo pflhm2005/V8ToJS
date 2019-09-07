@@ -15,6 +15,7 @@ import {
   kTooManyVariables,
   kLetInLexicalBinding,
 } from '../MessageTemplate';
+import Location from '../scanner/Location';
 
 const kExpressionIndex = 0;
 const kPatternIndex = 1;
@@ -160,6 +161,13 @@ export class VariableDeclarationParsingScope extends ExpressionScope {
 export class ParameterDeclarationParsingScope extends ExpressionScope {
   constructor(parser) {
     super(parser, kParameterDeclaration);
+    this.duplicate_loc_ = new Location().invalid();
+  }
+  has_duplicate() {
+    return this.duplicate_loc_.IsValid();
+  }
+  duplicate_location() {
+    return this.duplicate_loc_;
   }
 }
 

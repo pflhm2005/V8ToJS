@@ -1,7 +1,6 @@
 export const kNoSourcePosition = -1;
 export const kMaxAscii = 127;
 export const kEndOfInput = -1;
-export const kMaxArguments = (1 << 16) - 2;
 
 /**
  * 变量初始化类型
@@ -143,3 +142,12 @@ export const kRegExpMatchAllWithNonGlobalRegExp = 78;
 // web_feature.mojom; use_counter_callback.cc; and enums.xml. V8 changes to
 // this list need to be landed first; then changes on the Chromium side.
 export const kUseCounterFeatureCount = 79;  // This enum value must be last.
+
+export const CLASS_SCOPE = 0;  // class作用域 class a {};
+export const EVAL_SCOPE = 1; // eval作用域 eval("var a = 1;")
+export const FUNCTION_SCOPE = 2; // 函数作用域 function a() {}
+export const MODULE_SCOPE = 3; // 模块作用域 export default {}
+export const SCRIPT_SCOPE = 4; // 最外层作用域 默认作用域
+export const CATCH_SCOPE = 5;  // catch作用域  try{}catch(){}
+export const BLOCK_SCOPE = 6;  // 块作用域 {}
+export const WITH_SCOPE = 7; // with作用域 with() {}

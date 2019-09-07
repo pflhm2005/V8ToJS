@@ -11,9 +11,8 @@ export default class AstValueFactory {
     // this.hash_seed_ = BigInt(15853730874361889590); 
     this.hash_seed_ = 1704808181;
     this.string_end_ = [];
-
-    this.empty_cons_string_ = this.NewConsString();
     this.cons_string_ar = [];
+    this.empty_cons_string_ = this.NewConsString();
   }
 
   dot_string() { return '.'; }
@@ -26,7 +25,8 @@ export default class AstValueFactory {
   new_target_string() { return '.new.target'; }
   this_string() { return 'this'; }
   this_function_string() { return '.this_function'; }
-
+  default_string() { return 'default'; }
+  dot_default_string() { return '.default'; }
 
   empty_cons_string() { return this.empty_cons_string_; }
   NewConsString() {
@@ -108,6 +108,7 @@ export default class AstValueFactory {
 
 class AstConsString extends ZoneObject {
   constructor() {
+    super();
     this.next_ = null;
     this.segment_ = [];
   }

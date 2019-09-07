@@ -1,5 +1,24 @@
-import { kLastLexicalVariableMode, kAsyncArrowFunction, kAsyncGeneratorFunction, kArrowFunction, kAsyncConciseMethod, kAsyncConciseGeneratorMethod, kConciseGeneratorMethod, kClassMembersInitializerFunction, kBaseConstructor, kDerivedConstructor, kGetterFunction, kSetterFunction, kDefaultDerivedConstructor } from "../enum";
+import {
+  kLastLexicalVariableMode, 
+  kAsyncArrowFunction,
+  kAsyncGeneratorFunction, 
+  kArrowFunction, 
+  kAsyncConciseMethod, 
+  kAsyncConciseGeneratorMethod, 
+  kConciseGeneratorMethod, 
+  kClassMembersInitializerFunction, 
+  kBaseConstructor, 
+  kDerivedConstructor, 
+  kGetterFunction, 
+  kSetterFunction,
+  kDefaultDerivedConstructor, 
+  kSloppy,
+  kStrict
+} from "../enum";
 import { TokenIsInRange, IsInRange } from './Identifier';
+
+export const is_sloppy = language_mode => language_mode === kSloppy;
+export const is_strict = language_mode => language_mode === kStrict;
 
 /**
  * 表达式类型判定
@@ -14,6 +33,7 @@ export const IsLexicalVariableMode = (mode) =>{
 export const IsAutoSemicolon = (token) => TokenIsInRange(token, 'SEMICOLON', 'EOS');
 export const IsAsyncFunction = (kind) => IsInRange(kind, kAsyncArrowFunction, kAsyncGeneratorFunction);
 export const IsArrowFunction = (kind) => IsInRange(kind, kArrowFunction, kAsyncArrowFunction);
+export const IsGeneratorFunction = (kind) => IsInRange(kind, kAsyncConciseGeneratorMethod, kConciseGeneratorMethod);
 export const IsConciseMethod = (kind) => IsInRange(kind, kAsyncConciseMethod, kAsyncConciseGeneratorMethod) || IsInRange(kind, kConciseGeneratorMethod, kClassMembersInitializerFunction);
 export const IsClassConstructor = (kind) => IsInRange(kind, kBaseConstructor, kDerivedConstructor);
 export const IsAccessorFunction = (kind) => IsInRange(kind, kGetterFunction, kSetterFunction);
@@ -31,3 +51,10 @@ export const IsStrictReservedWord = token => TokenIsInRange(token, 'YIELD', 'ESC
 
 export const IsGetterFunction = kind => kind === kGetterFunction;
 export const IsSetterFunction = kind => kind === kSetterFunction;
+
+export const IsValidIdentifier = (token, language_mode, is_generator, disallow_await) => {
+  if(TokenIsInRange(token, 'IDENTIFIER', 'ASYNC')) return true;
+  if(token === 'Token::AWAIT') return !disallow_await;
+  if(token === 'Token::YIELD') return !is_generator && is_sloppy(language_mode);
+  return IsStrictReservedWord(token) && is_sloppy(language_mode);
+}

@@ -8,6 +8,24 @@ import {
  * 这个类是一个模板类
  * template <class T, int shift, int size, class U = int>
  * class BitField {}
+ * @param {Number} shift 偏移位数
+ * @param {Number} size 类型的枚举数量
+ * 
+ * @example
+ * BitField(0, 6)
+ * @description 相当于bitmap 总数量为 (1 << 6) - 1
+ * 
+ * @example
+ * let IsKeywordBits = BitField(0, 1);
+ * let IsPropertyNameBits = BitField(1, 1);
+ * let bit_field = 0;
+ * bit_field |= IsKeywordBits.encode(true) | IsPropertyNameBits.encode(false); // 01
+ * // ~kMask => ~(100 - 10) => ~10 => 01
+ * // 使用&重置自己bitField区域的值 然后重新进行|运算
+ * bit_field = IsPropertyNameBits.update(bit_field, 1);
+ * @description
+ * 表示在这个BitField内 有两种不同的参数 每种参数的枚举数量为2
+ * 可能值分别为 00 01 10 11
  */
 const BitField = (shift, size) => {
   let kShift = shift;
@@ -29,14 +47,6 @@ const BitField = (shift, size) => {
   };
 }
 
-/**
- * shift =>0 size => 6
- * kMax => (1 << 6) - 1 => 1000000 - 1 => 111111
- * 当shift为0时 kMask === KMax
- * 当shift为2时 
- * kMask => ((1 << 6) << 2) - (1 << 2) => 100000000 - 100 => 11111100
- * 相当于kMax左移两位
- */
 export const NodeTypeField = BitField(0, 6);
 
 /**
@@ -102,7 +112,7 @@ export const HoleCheckModeField = BitField(11, 1);
  * using ArrayIndexLengthBits = BitField<unsigned int, kNofHashBitFields + kArrayIndexValueBits, kArrayIndexLengthBits>;
  */
 export const ArrayIndexValueBits = BitField(kNofHashBitFields, kArrayIndexValueBits);
-export const ArrayIndexValueBits = BitField(kNofHashBitFields + kArrayIndexValueBits, kArrayIndexLengthBits);
+export const ArrayIndexLengthBits = BitField(kNofHashBitFields + kArrayIndexValueBits, kArrayIndexLengthBits);
 
 /**
  * using IsKeywordBits = BitField8<bool, 0, 1>;
@@ -125,3 +135,14 @@ export const HasElementsField = BitField(9, 1);
 export const HasRestPropertyField = BitField(10, 1);
 export const FastElementsField = BitField(11, 1);
 export const HasNullPrototypeField = BitField(12, 1);
+
+/**
+ * 
+ */
+export const FunctionSyntaxKindBits = BitField(7, 3);
+export const Pretenure = BitField(10, 1);
+export const HasDuplicateParameters = BitField(11, 1);
+export const DontOptimizeReasonField = BitField(12, 8);
+export const RequiresInstanceMembersInitializer = BitField(20, 1);
+export const HasBracesField = BitField(21, 1);
+export const OneshotIIFEBit = BitField(22, 1);

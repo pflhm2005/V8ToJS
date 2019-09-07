@@ -43,7 +43,7 @@ export class FuncNameInferrer {
       this.names_stack_.push(new Name(name, kLiteralName));
     }
   }
-  PushEnclosingName() {
+  PushEnclosingName(name) {
     // if(!name.IsEmpty() && )
       this.names_stack_.push(new Name(name, kEnclosingConstructorName));
   }
