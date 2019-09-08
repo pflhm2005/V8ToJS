@@ -160,3 +160,8 @@ export const kFunctionLiteralIdInvalid = -1;
 export const kFunctionLiteralIdTopLevel = 0;
 export const kSmallOrderedHashSetMinCapacity = 4;
 export const kSmallOrderedHashMapMinCapacity = 4;
+
+export const PERFORMANCE_RESPONSE = 0;
+export const PERFORMANCE_ANIMATION = 0;
+export const PERFORMANCE_IDLE = 0;
+export const PERFORMANCE_LOAD = 0;
