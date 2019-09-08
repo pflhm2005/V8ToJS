@@ -7,3 +7,6 @@ export * from './NodeType';
 export * from './Token';
 export * from './Object';
 export * from './name';
+export * from './Compile';
+export * from './Roots';
+export * from './ParseInfo';

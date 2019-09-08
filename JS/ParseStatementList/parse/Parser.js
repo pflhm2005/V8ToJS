@@ -1255,7 +1255,7 @@ class ParserBase {
  * template <typename Impl> class ParserBase {...}
  * Parser、ParserBase基本上是一个类
  */
-export default class Parser extends ParserBase {
+class Parser extends ParserBase {
   constructor(scanner) {
     super(scanner);
     this.mode_ = PARSE_EAGERLY;
@@ -1801,3 +1801,5 @@ class ParserFormalParameters extends FormalParametersBase {
     return this.duplicate_loc.IsValid();
   }
 }
+
+export default Parser;

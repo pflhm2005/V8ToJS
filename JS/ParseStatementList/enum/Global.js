@@ -151,3 +151,12 @@ export const SCRIPT_SCOPE = 4; // 最外层作用域 默认作用域
 export const CATCH_SCOPE = 5;  // catch作用域  try{}catch(){}
 export const BLOCK_SCOPE = 6;  // 块作用域 {}
 export const WITH_SCOPE = 7; // with作用域 with() {}
+
+export const NOT_NATIVES_CODE = 0;
+export const EXTENSION_CODE = 1;
+export const INSPECTOR_CODE = 2;
+
+export const kFunctionLiteralIdInvalid = -1;
+export const kFunctionLiteralIdTopLevel = 0;
+export const kSmallOrderedHashSetMinCapacity = 4;
+export const kSmallOrderedHashMapMinCapacity = 4;
