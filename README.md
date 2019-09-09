@@ -17,5 +17,5 @@ npm install babel-preset-env -D
 
 启动解析 运行
 ```
-babel-node --presets env Hello-world
+babel-node --presets env HelloWorld
 ```
