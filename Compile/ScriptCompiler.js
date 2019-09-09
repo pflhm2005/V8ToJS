@@ -9,7 +9,7 @@ import {
   kIsModule,
   kEagerCompile,
   TYPE_NORMAL,
-} from "../ParseStatementList/enum";
+} from "../enum";
 import ParseInfo from "./ParseInfo";
 import { FLAG_use_strict } from "./Flag";
 import Parsing from "./Parsing";

@@ -1,9 +1,9 @@
 import { 
   Expression,
   AstNodeFactory,
-} from '../ast/Ast';
+} from '../../ast/Ast';
 import { DeclarationParsingResult, Declaration } from './DeclarationParsingResult';
-import AstValueFactory from '../ast/AstValueFactory';
+import AstValueFactory from '../../ast/AstValueFactory';
 import Location from '../scanner/Location';
 import { 
   VariableDeclarationParsingScope,
@@ -12,7 +12,6 @@ import {
 import Scope, { DeclarationScope } from './Scope';
 
 import { FuncNameInferrer, State } from './FuncNameInferrer';
-import FunctionState from './FunctionState';
 
 import ParsePropertyInfo from './ParsePropertyInfo';
 
@@ -62,7 +61,7 @@ import {
   _kBlock,
   FUNCTION_SCOPE,
   kParameterDeclaration,
-} from '../enum';
+} from '../../enum';
 
 import {
   IsAnyIdentifier,
@@ -84,7 +83,7 @@ import {
   is_strict,
   IsValidIdentifier,
   IsGeneratorFunction,
-} from '../util';
+} from '../../util';
 
 import {
   kTooManyArguments,
@@ -93,7 +92,7 @@ import {
   kInvalidCoverInitializedName,
   kMissingFunctionName,
   kStrictEvalArguments,
-} from '../MessageTemplate';
+} from '../../MessageTemplate';
 
 const kStatementListItem = 0;
 const kStatement = 1;

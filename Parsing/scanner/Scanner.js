@@ -7,7 +7,7 @@ import {
   kMaxAscii, 
   kIdentifierNeedsSlowPath,
   kEndOfInput,
-} from '../enum';
+} from '../../enum';
 
 import {
   TerminatesLiteral,
@@ -27,14 +27,14 @@ import {
   IsDecimalNumberKind,
   IsValidBigIntKind,
   IsWhiteSpaceOrLineTerminator,
-} from '../util';
+} from '../../util';
 
 import {
   kStrictDecimalWithLeadingZero,
   kZeroDigitNumericSeparator,
   kContinuousNumericSeparator,
   kTrailingNumericSeparator,
-} from '../MessageTemplate';
+} from '../../MessageTemplate';
 
 const IMPLICIT_OCTAL = 0;
 const BINARY = 1;

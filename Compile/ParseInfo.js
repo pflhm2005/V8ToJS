@@ -1,4 +1,4 @@
-import AstValueFactory from '../ParseStatementList/ast/AstValueFactory';
+import AstValueFactory from '../ast/AstValueFactory';
 
 import { 
   kNormalFunction, 
@@ -12,7 +12,7 @@ import {
   kCollect,
   TYPE_NORMAL,
   kWrapped,
-} from "../ParseStatementList/enum";
+} from "../enum";
 
 import { 
   FLAG_always_opt, 

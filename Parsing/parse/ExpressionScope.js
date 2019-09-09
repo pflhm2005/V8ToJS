@@ -1,20 +1,20 @@
-import { Variable, VariableProxy } from '../ast/Ast';
+import { Variable, VariableProxy } from '../../ast/Ast';
 
 import {
   NORMAL_VARIABLE,
 
   kNoSourcePosition
-} from '../enum';
+} from '../../enum';
 
 import {
   IsLexicalVariableMode,
   IsInRange,
-} from '../util';
+} from '../../util';
 
 import {
   kTooManyVariables,
   kLetInLexicalBinding,
-} from '../MessageTemplate';
+} from '../../MessageTemplate';
 import Location from '../scanner/Location';
 
 const kExpressionIndex = 0;

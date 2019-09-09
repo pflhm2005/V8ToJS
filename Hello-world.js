@@ -1,5 +1,5 @@
-// import Scanner from './ParseStatementList/scanner/Scanner';
-// // import Parser from './ParseStatementList/parse/Parser';
+// import Scanner from './Parsing/scanner/Scanner';
+// // import Parser from './Parsing/parse/Parser';
 // /**
 //  * 普通node模式不支持import语法
 //  * 需安装babel-node工具

@@ -1,4 +1,4 @@
-import { IsInRange } from "../util";
+import { IsInRange } from "../../util";
 
 class Location {
   constructor(start, end) {

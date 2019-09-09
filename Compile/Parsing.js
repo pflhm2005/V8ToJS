@@ -1,6 +1,6 @@
-import Parser from '../ParseStatementList/parse/Parser';
-import Scanner from '../ParseStatementList/scanner/Scanner';
-import Stream from '../ParseStatementList/scanner/Stream';
+import Parser from '../Parsing/parse/Parser';
+import Scanner from '../Parsing/scanner/Scanner';
+import Stream from '../Parsing/scanner/Stream';
 
 export default class Parsing {
   static ParseProgram(info, isolate) {

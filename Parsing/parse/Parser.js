@@ -13,7 +13,7 @@ import {
   PARSE_LAZILY,
   kSloppyMode,
   kStrictMode,
-} from '../enum';
+} from '../../enum';
 
 import { 
   kParamDupe,
@@ -22,7 +22,7 @@ import {
   kUnexpectedEndOfArgString, 
   kTooManyParameters, 
   kParamAfterRest 
-} from '../MessageTemplate';
+} from '../../MessageTemplate';
 
 
 /**

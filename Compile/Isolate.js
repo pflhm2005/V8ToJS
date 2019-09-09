@@ -1,5 +1,5 @@
 import Factory from "./Factory";
-import { PERFORMANCE_ANIMATION, kNone } from "../ParseStatementList/enum";
+import { PERFORMANCE_ANIMATION, kNone } from "../enum";
 
 let isolate_counter = 0;
 

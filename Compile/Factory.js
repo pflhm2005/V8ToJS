@@ -1,5 +1,5 @@
 import Script from './ScriptCompiler';
-import { kEmptyFixedArray, SCRIPT_TYPE, TYPE_NORMAL } from "../ParseStatementList/enum";
+import { kEmptyFixedArray, SCRIPT_TYPE, TYPE_NORMAL } from "../enum";
 
 export default class Factory {
   constructor(isolate) {

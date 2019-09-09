@@ -16,14 +16,14 @@ import {
   CATCH_SCOPE,
   WITH_SCOPE,
   SCRIPT_SCOPE,
-} from "../enum";
-import { Variable } from "../ast/AST";
+} from "../../enum";
+import { Variable } from "../../ast/AST";
 import { 
   IsConciseMethod, 
   IsClassConstructor, 
   IsAccessorFunction, 
   IsDerivedConstructor 
-} from "../util";
+} from "../../util";
 // import ThreadedList from '../base/ThreadedList';
 
 class ZoneObject {};

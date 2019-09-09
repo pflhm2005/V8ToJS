@@ -9,7 +9,7 @@ import {
   kAssign,
   kMethod,
   kClassField,
-} from '../enum';
+} from '../../enum';
 
 export default class ParsePropertyInfo {
   constructor(parser, accumulation_scope = null) {
