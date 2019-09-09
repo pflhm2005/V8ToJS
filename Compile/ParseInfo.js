@@ -12,6 +12,7 @@ import {
   kCollect,
   TYPE_NORMAL,
   kWrapped,
+  kDeclaration,
 } from "../enum";
 
 import { 
@@ -92,6 +93,9 @@ export default class ParseInfo {
     this.pending_error_handler_ = null;
     this.consumed_preparse_data_ = new ConsumedPreparseData();
 
+    this.maybe_outer_scope_info_ = null;
+    this.function_syntax_kind_ = kDeclaration;
+
     this.SetFlag(kMightAlwaysOpt, FLAG_always_opt || FLAG_prepare_always_opt);
     this.SetFlag(kAllowLazyCompile, FLAG_lazy);
     this.SetFlag(kAllowNativeSyntax, FLAG_allow_natives_syntax);
@@ -105,6 +109,7 @@ export default class ParseInfo {
     if(v) this.flags_ |= f;
     else this.flags_ &= ~f;
   }
+  is_eval() { return this.GetFlag(kEval); }
   is_module() { return this.GetFlag(kModule); }
   set_module(v) { this.SetFlag(kModule); }
 
@@ -114,7 +119,10 @@ export default class ParseInfo {
   is_eager() { return this.GetFlag(kEager); }
   set_eager(v) { this.SetFlag(kEager, v); }
 
+  is_wrapped_as_function() { return this.function_syntax_kind_ === kWrapped; }
+
   set_language_mode(v) { this.SetFlag(kStrictMode, v); }
+  is_strict_mode() { return this.GetFlag(kStrictMode); }
 
   allow_natives_syntax() { return this.GetFlag(kAllowNativeSyntax); }
   allow_harmony_dynamic_import() { return this.GetFlag(kAllowHarmonyDynamicImport); }

@@ -165,3 +165,6 @@ export const PERFORMANCE_RESPONSE = 0;
 export const PERFORMANCE_ANIMATION = 0;
 export const PERFORMANCE_IDLE = 0;
 export const PERFORMANCE_LOAD = 0;
+
+export const kIncludingVariables = 0;
+export const kScopesOnly = 0;

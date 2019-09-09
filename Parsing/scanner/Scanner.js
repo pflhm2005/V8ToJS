@@ -54,8 +54,12 @@ const Smi_kMaxValue = 2**31 - 1;
 const kCharacterLookaheadBufferSize = 1;
 
 export default class Scanner {
-  constructor(source_string) {
-    this.source_ = new Stream(source_string);
+  constructor(source, is_module) {
+    this.source_ = source;
+    this.found_html_comment_ = false;
+    this.allow_harmony_optional_chaining_ = false;
+    this.allow_harmony_nullish_ = false;
+    this.is_module_ = is_module;
     /**
      * 当前字符的Unicode编码
      * 如果为null代表解析完成
@@ -70,7 +74,7 @@ export default class Scanner {
     this.next_next_ = new TokenDesc();
     this.token_storage_ = [];
 
-    this.octal_pos_ = null;
+    this.octal_pos_ = new Location().invalid();
     this.octal_message_ = '';
   }
   source_pos() {

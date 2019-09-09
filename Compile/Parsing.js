@@ -1,4 +1,4 @@
-import Parser from '../Parsing/parse/Parser';
+import Parser from '../Parsing/Parser';
 import Scanner from '../Parsing/scanner/Scanner';
 import Stream from '../Parsing/scanner/Stream';
 
@@ -10,7 +10,6 @@ export default class Parsing {
     let stream = new Stream(source);
     info.character_stream_ = stream;
     info.scanner_ = new Scanner(info.character_stream_, info.is_module());
-    console.log(source);
     let parser = new Parser(info);
 
     let result = parser.ParseProgram(isolate, info);

@@ -1,16 +1,17 @@
 import { 
   Expression,
   AstNodeFactory,
-} from '../../ast/Ast';
+} from '../ast/Ast';
 import { DeclarationParsingResult, Declaration } from './DeclarationParsingResult';
-import AstValueFactory from '../../ast/AstValueFactory';
-import Location from '../scanner/Location';
+import AstValueFactory from '../ast/AstValueFactory';
+import Location from './scanner/Location';
 import { 
   VariableDeclarationParsingScope,
   AccumulationScope,
 } from './ExpressionScope';
-import Scope, { DeclarationScope } from './Scope';
+import Scope, { FunctionDeclarationScope, ScriptDeclarationScope } from './Scope';
 
+import FunctionState from './FunctionState';
 import { FuncNameInferrer, State } from './FuncNameInferrer';
 
 import ParsePropertyInfo from './ParsePropertyInfo';
@@ -61,7 +62,7 @@ import {
   _kBlock,
   FUNCTION_SCOPE,
   kParameterDeclaration,
-} from '../../enum';
+} from '../enum';
 
 import {
   IsAnyIdentifier,
@@ -83,7 +84,7 @@ import {
   is_strict,
   IsValidIdentifier,
   IsGeneratorFunction,
-} from '../../util';
+} from '../util';
 
 import {
   kTooManyArguments,
@@ -92,7 +93,7 @@ import {
   kInvalidCoverInitializedName,
   kMissingFunctionName,
   kStrictEvalArguments,
-} from '../../MessageTemplate';
+} from '../MessageTemplate';
 
 const kStatementListItem = 0;
 const kStatement = 1;
@@ -115,25 +116,33 @@ export default class ParserBase {
    */
   constructor(zone = null, scanner, stack_limit, extension, ast_value_factory, pending_error_handler, 
     runtime_call_stats, logger, script_id, parsing_module, parsing_on_main_thread) {
-    this.scope_ = null;
+    this.scope_ = new Scope(null);
     this.original_scope_ = null;
-    this.function_state_ = null;
+    this.function_state_ = new FunctionState(null, this.scope_, null);
     this.extension_ = extension;
+
     this.fni = new FuncNameInferrer(ast_value_factory);
     this.ast_value_factory_ = ast_value_factory;
     this.ast_node_factory_ = new AstNodeFactory(ast_value_factory, null);
     this.runtime_call_stats_ = runtime_call_stats;
     this.logger_ = logger;
+
     this.parsing_on_main_thread_ = parsing_on_main_thread;
     this.parsing_module_ = parsing_module;
-    this.stack_limit_ = stack_limit;
+    this.stack_limit_ = stack_limit;  // 155704134568
     this.pending_error_handler_ = pending_error_handler;
     this.zone_ = zone;
+
     this.expression_scope_ = null;
     this.scanner_ = scanner;
     this.function_literal_id_ = 0;
     this.script_id_ = script_id;
     this.default_eager_compile_hint_ = kShouldLazyCompile;
+
+    this.parameters_ = new ParserFormalParameters();
+    this.next_arrow_function_info_ = new NextArrowFunctionInfo();
+    this.accept_IN_ = true;
+    
     this.allow_natives_ = false;
     this.allow_harmony_dynamic_import_ = false;
     this.allow_harmony_import_meta_ = false;
@@ -142,13 +151,6 @@ export default class ParserBase {
 
     this.pointer_buffer_ = []; // 32
     this.variable_buffer_ = []; // 32
-    
-    // this.scope_ = new Scope();
-    // this.function_state_ = new FunctionState(null, this.scope, null);
-
-    // this.accept_IN_ = true;
-
-    // this.parameters_ = null;
   }
   /**
    * 大量的工具方法
@@ -160,12 +162,28 @@ export default class ParserBase {
   UNREACHABLE() {
     this.scanner.UNREACHABLE();
   }
+  /**
+   * 这里的DeclarationScope存在构造函数重载 并且初始化方式不一致
+   * 手动分成两个不同的子类
+   */
   NewFunctionScope(kind) {
-    let result = new DeclarationScope(this.scope_, FUNCTION_SCOPE, kind);
+    let result = new FunctionDeclarationScope(null, this.scope_, FUNCTION_SCOPE, kind);
     this.function_state_.RecordFunctionOrEvalCall();
     if(!IsArrowFunction(kind)) result.DeclareDefaultFunctionVariables(this.ast_value_factory_);
     return result;
   }
+  NewScriptScope() {
+    return new ScriptDeclarationScope(null, this.ast_value_factory_);
+  }
+  // TODO
+  NewEvalScope() {
+    return null;
+  }
+  // TODO
+  NewModuleScope() {
+    return null;
+  }
+  ResetFunctionLiteralId() { this.function_literal_id_ = 0; }
   NullExpression() { return null; }
   NullIdentifier() { return null; }
   language_mode() { return this.scope_.language_mode(); }
@@ -208,11 +226,16 @@ export default class ParserBase {
    * 省去了use strict、use asm的解析
    * 直接进入了正常语法树parse
    */
-  ParseStatementList() {
-    let body = [];
-    while(this.peek() !== 'Token::EOS') {
+  ParseStatementList(body, end_token) {
+    while(this.peek() === 'Token::STRING') {
+      // TODO;
+    }
+    console.log(this.scanner_);
+
+    while(this.peek() !== end_token) {
       let stat = this.ParseStatementListItem();
       if(stat === null) return;
+      if(stat.IsEmptyStatement()) continue;
       body.push(stat);
     }
   }
@@ -1242,3 +1265,51 @@ export default class ParserBase {
     return kFunctionKinds[is_method][i][j];
   }
 }
+
+class FormalParametersBase {
+  constructor(scope) {
+    this.scope = scope;
+    this.has_rest = false;
+    this.is_simple = true;
+    this.function_length = 0;
+    this.arity = 0;
+  }
+  /**
+   * 返回形参数量 去除rest
+   * 与布尔值计算会自动转换 我就不用管了
+   */
+  num_parameters() {
+    return this.arity - this.has_rest;
+  }
+  /**
+   * 更新函数的参数数量与length属性
+   * 任何情况下arity都会增加
+   * 而function.length必须满足以下条件才会增加
+   * 1、该参数不存在默认值
+   * 2、不是rest参数
+   * 3、length、arity相等
+   * 那么length的意思就是 从第一个形参开始计数 直接碰到有默认值的参数或rest
+   * (a,b,c) => length => 3
+   * (a,b,c = 1) => length => 2
+   * (a=1,b,c) => length => 0
+   * @param {bool} is_optional 当前参数是否有默认值
+   * @param {bool} is_rest 是否是rest参数
+   */
+  UpdateArityAndFunctionLength(is_optional, is_rest) {
+    if(!is_optional && !is_rest && this.function_length === this.arity) ++this.function_length;
+    ++this.arity;
+  }
+}
+
+class ParserFormalParameters extends FormalParametersBase {
+  constructor(scope) {
+    super(scope);
+    this.params = [];
+    this.duplicate_loc = new Location().invalid();
+  }
+  has_duplicate() {
+    return this.duplicate_loc.IsValid();
+  }
+}
+
+class NextArrowFunctionInfo {}

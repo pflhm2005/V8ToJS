@@ -16,14 +16,17 @@ import {
   CATCH_SCOPE,
   WITH_SCOPE,
   SCRIPT_SCOPE,
-} from "../../enum";
-import { Variable } from "../../ast/AST";
+  kNormalFunction,
+  kDynamicGlobal,
+  kNoSourcePosition,
+} from "../enum";
+import { Variable } from "../ast/AST";
 import { 
   IsConciseMethod, 
   IsClassConstructor, 
   IsAccessorFunction, 
   IsDerivedConstructor 
-} from "../../util";
+} from "../util";
 // import ThreadedList from '../base/ThreadedList';
 
 class ZoneObject {};
@@ -71,21 +74,17 @@ class VariableMap {
 export default class Scope extends ZoneObject {
   constructor(zone, outer_scope = null, scope_type = SCRIPT_SCOPE) {
     super();
+    this.zone_ = null;
     this.outer_scope_ = outer_scope;
-    this.inner_scope_ = null;
-    this.is_declaration_scope_ = 1;
-    this.start_position_ = 0;
-
-    this.scope_type_ = scope_type;
-
-    this.is_strict_ = kSloppy;
-
     // The variables declared in this scope:
     //
     // All user-declared variables (incl. parameters).  For script scopes
     // variables may be implicitly 'declared' by being used (possibly in
     // an inner scope) with no intervening with statements or eval calls.
     this.variables_ = new VariableMap();
+    this.scope_type_ = scope_type;
+
+    this.is_strict_ = kSloppy;
     /**
      * ThreadedList<Declaration> decls
      * 这是一个类似于链表的数据结构
@@ -99,11 +98,28 @@ export default class Scope extends ZoneObject {
     // base::ThreadedList<Variable> locals_;
     this.locals_ = [];
 
-    /**
-     * 内存管理相关
-     */
-    this.zone_ = null;
+    this.SetDefaults();
   }
+  SetDefaults() {
+    this.inner_scope_ = null;
+    this.sibling_ = null;
+    this.start_position_ = kNoSourcePosition;
+    this.end_position_ = kNoSourcePosition;
+    this.num_stack_slots_ = 0;
+    // this.num_heap_slots_ = 
+
+    this.calls_eval_ = false;
+    this.sloppy_eval_can_extend_vars_ = false;
+    this.scope_nonlinear_ = false;
+    this.is_hidden_ = false;
+    this.is_debug_evaluate_scope_ = false;
+    this.inner_scope_calls_eval_ = false;
+    this.force_context_allocation_for_parameters_ = false;
+
+    this.is_declaration_scope_ = false;
+    this.must_use_preparsed_scope_data_ = false;
+  }
+
   zone() { return this.zone_; }
   set_start_position(statement_pos) { this.start_position_ = statement_pos; }
 
@@ -127,6 +143,23 @@ export default class Scope extends ZoneObject {
   declarations() { return this.decls_; }
   outer_scope() { return this.outer_scope_; }
   /**
+   * 初始化origin_scope_ 即最外层作用域
+   * @param {Isolate*} isolate 
+   * @param {Zone*} zone null
+   * @param {ScopeInfo} scope_info null
+   * @param {DeclarationScope*} script_scope null
+   * @param {AstValueFactory*} ast_value_factory 
+   * @param {DeserializationMode} deserialization_mode kIncludingVariables
+   */
+  // DeserializeScopeChain(isolate, zone, scope_info, script_scope, ast_value_factory, deserialization_mode) {
+  //   let current_scope = null;
+  //   let innermost_scope = null;
+  //   let outer_scope = null;
+  //   while(!scope_info) {
+  //   }
+  // }
+
+  /**
    * 遍历作用域链 判定是否有未处理的变量
    * @param {Scope} outer 指定的外层作用域
    */
@@ -145,10 +178,7 @@ export default class Scope extends ZoneObject {
     while (!scope.is_declaration_scope()) {
       scope = scope.outer_scope();
     }
-    return scope.AsDeclarationScope();
-  }
-  AsDeclarationScope() {
-    return new DeclarationScope();
+    return scope;
   }
   /**
    * 根据name生成一个Variable实例 绑定到Declaration上面
@@ -226,16 +256,7 @@ export default class Scope extends ZoneObject {
   LookupLocal(name) {
     return this.variables_.Lookup(name);
   }
-}
 
-export class DeclarationScope extends Scope {
-  constructor(zone = null, outer_scope, scope_type, function_kind) {
-    super(zone, outer_scope, scope_type);
-    this.function_kind_ = function_kind;
-    this.num_parameters_ = 0;
-    this.params_ = [];
-    this.SetDefaults();
-  }
   SetDefaults() {
     this.is_declaration_scope_ = true;
     this.has_simple_parameters_ = true;
@@ -270,7 +291,7 @@ export class DeclarationScope extends Scope {
     let derived_constructor = IsDerivedConstructor(this.function_kind_);
     let p1 = derived_constructor ? kConst : kVar;
     let p2 = derived_constructor ? kNeedsInitialization : kCreatedInitialized;
-    this.receiver_ = new Variable(this, ast_value_factory.this_string(), p1, THIS_VARIABLE, p2, kNotAssigned);
+    this.receiver_ = new Variable(this, ast_value_factory.GetOneByteStringInternal(ast_value_factory.this_string()), p1, THIS_VARIABLE, p2, kNotAssigned);
   }
   EnsureRareData() {
     if(this.rare_data_ === null) this.rare_data_ = new RareData();
@@ -306,6 +327,29 @@ export class DeclarationScope extends Scope {
     if(name === ast_value_factory.arguments_string()) this.has_arguments_parameter_ = true;
     variable.set_is_used();
     return variable;
+  }
+}
+
+export class FunctionDeclarationScope extends Scope {
+  constructor(zone = null, outer_scope, scope_type, function_kind) {
+    super(zone, outer_scope, scope_type);
+    this.function_kind_ = function_kind;
+    this.num_parameters_ = 0;
+    this.params_ = [];
+    this.SetDefaults();
+  }
+}
+
+export class ScriptDeclarationScope extends Scope {
+  constructor(zone, ast_value_factory) {
+    super(zone);
+    this.function_kind_ = kNormalFunction;
+    this.params_ = [];
+    this.SetDefaults();
+    this.receiver_ = this.DeclareDynamicGlobal(ast_value_factory.GetOneByteStringInternal(ast_value_factory.this_string()), THIS_VARIABLE, this);
+  }
+  DeclareDynamicGlobal(name, kind, cache) {
+    return cache.variables_.Declare(null, this, name, kDynamicGlobal, kind, kCreatedInitialized, kNotAssigned, false);
   }
 }
 

@@ -1,4 +1,5 @@
 import ParserBase from './ParserBase';
+import FunctionState from './FunctionState';
 
 import { 
   PARSE_EAGERLY, 
@@ -13,7 +14,8 @@ import {
   PARSE_LAZILY,
   kSloppyMode,
   kStrictMode,
-} from '../../enum';
+  kIncludingVariables,
+} from '../enum';
 
 import { 
   kParamDupe,
@@ -22,7 +24,7 @@ import {
   kUnexpectedEndOfArgString, 
   kTooManyParameters, 
   kParamAfterRest 
-} from '../../MessageTemplate';
+} from '../MessageTemplate';
 
 
 /**
@@ -58,6 +60,57 @@ class Parser extends ParserBase {
     this.allow_allow_harmony_private_methods_ = info.allow_harmony_private_methods();
     this.use_counts_ = new Array(kUseCounterFeatureCount).fill(0);
   }
+  ParseProgram(isolate, info) {
+    // let runtime_timer = new RuntimeCallTimerScope(this.runtime_call_stats_, info.is_eval() ? )
+    // 初始化顶层作用域
+    this.DeserializeScopeChain(isolate, info, info.maybe_outer_scope_info_, kIncludingVariables);
+    this.scanner_.Initialize();
+    let result = this.DoParseProgram(isolate, info);
+
+    // more...
+    return result;
+  }
+  DoParseProgram(isolate, info) {
+    let mode = new ParsingModeScope(this, this.allow_lazy_ ? PARSE_LAZILY : PARSE_EAGERLY);
+    this.ResetFunctionLiteralId();
+    let result = null;
+    {
+      let outer = this.original_scope_;
+      if(info.is_eval()) outer = this.NewEvalScope(outer);
+      else if(this.parsing_module_) outer = this.NewModuleScope(info.script_scope_);
+      // C++赋值深拷贝
+      let scope = outer;
+      scope.set_start_position(0);
+      /**
+       * C++空指针nullptr依然是引用传递 不同于JS的null
+       * 有时候变量会在我不注意时初始化
+       * 比如这里的参数是作为引用传递进去 顺便被初始化了
+       */
+      let function_state = new FunctionState(this.function_state_, this.scope_, scope);
+      // 这里暂时不知道是新的内存空间还是旧的
+      let body = [];
+      if(this.parsing_module_) {}
+      else if (info.is_wrapped_as_function()) this.ParseWrapped(isolate, info, body, scope, null);
+      else {
+        this.scope_.SetLanguageMode(info.is_strict_mode());
+        this.ParseStatementList(body, 'Token::EOS');
+      }
+
+      this.scope_.end_position_ = this.peek_position();
+      // more...
+    }
+  }
+  DeserializeScopeChain(isolate, info, maybe_outer_scope_info_, mode) {
+    this.InitializeEmptyScopeChain(info);
+    // this.original_scope_ = Scope.DeserializeScopeChain(isolate, null, maybe_outer_scope_info_, info.script_scope_, this.ast_value_factory_, mode);
+  }
+  InitializeEmptyScopeChain(info) {
+    let script_scope = this.NewScriptScope();
+    info.script_scope_ = script_scope;
+    this.original_scope_ = script_scope;
+  }
+  ParseWrapped() {}
+
   IsEval(identifier) {
     return identifier.literal_bytes_ === this.ast_value_factory_.eval_string();
   }
@@ -75,10 +128,6 @@ class Parser extends ParserBase {
     let operand = expression;
     return operand !== null && !operand.is_new_target();
   }
-  ParseProgram() {
-
-  }
-
   /**
    * 返回一个变量代理 继承于Expression类
    * @returns {VariableProxy}
@@ -551,52 +600,6 @@ class ParsingModeScope {
     this.parser_ = parser;
     this.old_mode_ = parser.mode_;
     this.parser_.mode_ = mode;
-  }
-}
-
-class FormalParametersBase {
-  constructor(scope) {
-    this.scope = scope;
-    this.has_rest = false;
-    this.is_simple = true;
-    this.function_length = 0;
-    this.arity = 0;
-  }
-  /**
-   * 返回形参数量 去除rest
-   * 与布尔值计算会自动转换 我就不用管了
-   */
-  num_parameters() {
-    return this.arity - this.has_rest;
-  }
-  /**
-   * 更新函数的参数数量与length属性
-   * 任何情况下arity都会增加
-   * 而function.length必须满足以下条件才会增加
-   * 1、该参数不存在默认值
-   * 2、不是rest参数
-   * 3、length、arity相等
-   * 那么length的意思就是 从第一个形参开始计数 直接碰到有默认值的参数或rest
-   * (a,b,c) => length => 3
-   * (a,b,c = 1) => length => 2
-   * (a=1,b,c) => length => 0
-   * @param {bool} is_optional 当前参数是否有默认值
-   * @param {bool} is_rest 是否是rest参数
-   */
-  UpdateArityAndFunctionLength(is_optional, is_rest) {
-    if(!is_optional && !is_rest && this.function_length === this.arity) ++this.function_length;
-    ++this.arity;
-  }
-}
-
-class ParserFormalParameters extends FormalParametersBase {
-  constructor(scope) {
-    super(scope);
-    this.params = [];
-    this.duplicate_loc = new Location().invalid();
-  }
-  has_duplicate() {
-    return this.duplicate_loc.IsValid();
   }
 }
 

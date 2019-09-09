@@ -12,9 +12,8 @@ export default class FunctionState extends BlockState {
     super(scope_stack, scope);
     this.expected_property_count_ = 0;
     this.suspend_count_ = 0;
-    this.function_state_stack_ = [];
-    if(function_state_stack) this.function_state_stack_.push(function_state_stack);
-    this.outer_function_state_ = function_state_stack;
+    this.function_state_stack_ = function_state_stack;
+    this.outer_function_state_ = null;
     this.scope_ = scope;
     this.dont_optimize_reason_ = kNoReason;
     this.next_function_is_likely_called_ = false;
