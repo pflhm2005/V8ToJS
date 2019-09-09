@@ -8,6 +8,7 @@ import {
   kIsOpaque,
   kIsModule,
   kEagerCompile,
+  TYPE_NORMAL,
 } from "../ParseStatementList/enum";
 import ParseInfo from "./ParseInfo";
 import { FLAG_use_strict } from "./Flag";
@@ -43,8 +44,8 @@ class Compiler {
     let compile_timer = new ScriptCompileTimerScope(isolate, no_cache_reason);
 
     let source_length = source.length;
-    // isolate.counters().total_load_size().Increment(source_length);
-    // isolate.counters().total_compile_size().Increment(source_length);
+    isolate.async_counters_.total_load_size_ += source_length;
+    isolate.async_counters_.total_compile_size_ += source_length;
 
     let language_mode = FLAG_use_strict;
     let compilation_cache = isolate.compilation_cache_;
@@ -82,7 +83,7 @@ function GetScriptDetails(isolate, resource_name, resource_line_offset, resource
   if(resource_line_offset) script_details.line_offset = resource_line_offset;
   if(resource_column_offset) script_details.column_offset = resource_column_offset;
 
-  script_details.host_defined_options = isolate.factory.empty_fixed_array();
+  script_details.host_defined_options = isolate.factory_.empty_fixed_array();
   if(host_defined_options) script_details.host_defined_options = host_defined_options;
   if(source_map_url) script_details.source_map_url = source_map_url;
   return script_details;
@@ -169,6 +170,16 @@ class ScriptCompileTimerScope {
 }
 
 export default class Script {
+  constructor(type) {
+    this.type_ = type;
+  }
+  IsUserJavaScript() {
+    return this.type_ === TYPE_NORMAL;
+  }
+  // TODO
+  is_wrapped() {
+    return false;
+  }
   static Compile(context, source, origin = null) {
     if(origin) {
       let script_source = new Source(source, origin);

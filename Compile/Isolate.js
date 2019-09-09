@@ -1,5 +1,5 @@
 import Factory from "./Factory";
-import { PERFORMANCE_ANIMATION } from "../ParseStatementList/enum";
+import { PERFORMANCE_ANIMATION, kNone } from "../ParseStatementList/enum";
 
 let isolate_counter = 0;
 
@@ -15,13 +15,36 @@ export default class Isolate {
     this.cancelable_task_manager_ = new CancelableTaskManager();
 
     this.thread_manager_ = new ThreadManager(this);
-    
+    this.handle_scope_data_ = new HandleScopeData();
+    // this.handle_scope_data_.Initialize(); 这一步操作已经在构造函数进行了处理
+    // ISOLATE_INIT_LIST 这里有大量的初始化
 
-    this.factory = new Factory(this);
+    this.logger_ = null;
+    this.async_counters_ = null;
+    this.InitializeLoggingAndCounters();
+    // this.InitializeDefaultEmbeddedBlob();
+    this.default_microtask_queue_ = null;
+    MicrotaskQueue.SetUpDefaultMicrotaskQueue(this);
+
+    // 下面的是动态更新
+    this.factory_ = new Factory(this);
     this.roots_table = [0];
     this.compilation_cache_ = new CompilationCache();
 
     this.scriptId = -1;
+    this.type_profile_mode_ = kNone;
+  }
+  set_default_microtask_queue(value) {
+    this.default_microtask_queue_ = value;
+  }
+  InitializeLoggingAndCounters() {
+    if(this.logger_ === null) this.logger_ = new Logger(this);
+    this.InitializeCounters();
+  }
+  InitializeCounters() {
+    if(this.async_counters_) return false;
+    this.async_counters_ = new Counters(this);
+    return true;
   }
   native_context() {
     return null;
@@ -54,9 +77,49 @@ export class CreateParams {
   }
 }
 
+class HandleScopeData {
+  constructor() {
+    this.next = null;
+    this.limit = null;
+    this.sealed_level = 0;
+    this.level = 0;
+    this.canonical_scope = null;
+  }
+}
+
 class CompilationCache {
   LookupScript() {
     return null;
+  }
+}
+
+class Logger {
+
+}
+
+class Counters {
+  constructor(isolate) {
+    this.runtime_call_stats_ = null;
+    this.worker_thread_runtime_call_stats_ = null;
+    this.isolate_ = isolate;
+    this.stats_table_ = this;
+
+    this.total_load_size_ = 0;
+    this.total_compile_size_ = 0;
+    this.total_parse_size_ = 0;
+  }
+}
+
+class MicrotaskQueue {
+  constructor() {
+    this.next_ = null;
+    this.prev_ = null;
+  }
+  static SetUpDefaultMicrotaskQueue(isolate) {
+    let microtask_queue = new MicrotaskQueue();
+    microtask_queue.next_ = microtask_queue;
+    microtask_queue.prev_ = microtask_queue;
+    isolate.set_default_microtask_queue(microtask_queue);
   }
 }
 

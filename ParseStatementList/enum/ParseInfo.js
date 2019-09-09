@@ -1,38 +1,15 @@
-export const  // ---------- Input flags ---------------------------
-export const  kToplevel = 1 << 0;
-export const  kEager = 1 << 1;
-export const  kEval = 1 << 2;
-export const  kStrictMode = 1 << 3;
-export const  kNative = 1 << 4;
-export const  kParseRestriction = 1 << 5;
-export const  kModule = 1 << 6;
-export const  kAllowLazyParsing = 1 << 7;
-export const  kIsNamedExpression = 1 << 8;
-export const  kLazyCompile = 1 << 9;
-export const  kCollectTypeProfile = 1 << 10;
-export const  kCoverageEnabled = 1 << 11;
-export const  kBlockCoverageEnabled = 1 << 12;
-export const  kIsAsmWasmBroken = 1 << 13;
-export const  kOnBackgroundThread = 1 << 14;
-export const  kWrappedAsFunction = 1 << 15;  // Implicitly wrapped as function.
-export const  kAllowEvalCache = 1 << 16;
-export const  kIsDeclaration = 1 << 17;
-export const  kRequiresInstanceMembersInitializer = 1 << 18;
-export const  kContainsAsmModule = 1 << 19;
-export const  kMightAlwaysOpt = 1 << 20;
-export const  kAllowLazyCompile = 1 << 21;
-export const  kAllowNativeSyntax = 1 << 22;
-export const  kAllowHarmonyPublicFields = 1 << 23;
-export const  kAllowHarmonyStaticFields = 1 << 24;
-export const  kAllowHarmonyDynamicImport = 1 << 25;
-export const  kAllowHarmonyImportMeta = 1 << 26;
-export const  kAllowHarmonyNumericSeparator = 1 << 27;
-export const  kAllowHarmonyPrivateFields = 1 << 28;
-export const  kAllowHarmonyPrivateMethods = 1 << 29;
-export const  kIsOneshotIIFE = 1 << 30;
-export const  kCollectSourcePositions = 1 << 31;
-
 export const kIsSharedCrossOrigin = 1;
 export const kIsOpaque = 1 << 1;
 export const kIsWasm = 1 << 2;
 export const kIsModule = 1 << 3;
+
+export const TYPE_NATIVE = 0;
+export const TYPE_EXTENSION = 1;
+export const TYPE_NORMAL = 2;
+export const TYPE_WASM = 3;
+export const TYPE_INSPECTOR = 4
+
+export const SCRIPT_TYPE = 0;
+
+export const kNone = 0;
+export const kCollect = 1;
