@@ -100,27 +100,56 @@ const kStatement = 1;
 const kForStatement = 2;
 
 export default class ParserBase {
-  constructor() {
-    // scanner.Initialize();
-    this.function_literal_id_ = 0;
-    // this.scanner = scanner;
-    this.ast_value_factory_ = new AstValueFactory();
-    this.ast_node_factory_ = new AstNodeFactory(this.ast_value_factory_);
-    /**
-     * 顶层作用域
-     */
+  /**
+   * 来源于ParseInfo
+   * @param {Zone*} zone 
+   * @param {Scanner*} scanner 
+   * @param {uintptr_t*} stack_limit 
+   * @param {Extension*} extension 
+   * @param {AstValueFactory*} ast_value_factory 
+   * @param {PendingCompilationErrorHandler*} pending_error_handler 
+   * @param {RuntimeCallStats*} runtime_call_stats 
+   * @param {Logger*} logger 
+   * @param {int} script_id 
+   * @param {bool} parsing_module 
+   * @param {bool} parsing_on_main_thread 
+   */
+  constructor(zone = null, scanner, stack_limit, extension, ast_value_factory, pending_error_handler, 
+    runtime_call_stats, logger, script_id, parsing_module, parsing_on_main_thread) {
+    this.scope_ = null;
     this.original_scope_ = null;
-    this.scope_ = new Scope();
-    this.fni_ = new FuncNameInferrer();
-    this.function_state_ = new FunctionState(null, this.scope, null);
-    this.default_eager_compile_hint_ = kShouldLazyCompile;
+    this.function_state_ = null;
+    this.extension_ = extension;
+    this.fni = new FuncNameInferrer(ast_value_factory);
+    this.ast_value_factory_ = ast_value_factory;
+    this.ast_node_factory_ = new AstNodeFactory(ast_value_factory, null);
+    this.runtime_call_stats_ = runtime_call_stats;
+    this.logger_ = logger;
+    this.parsing_on_main_thread_ = parsing_on_main_thread;
+    this.parsing_module_ = parsing_module;
+    this.stack_limit_ = stack_limit;
+    this.pending_error_handler_ = pending_error_handler;
+    this.zone_ = zone;
     this.expression_scope_ = null;
-    this.pointer_buffer_ = [];
+    this.scanner_ = scanner;
+    this.function_literal_id_ = 0;
+    this.script_id_ = script_id;
+    this.default_eager_compile_hint_ = kShouldLazyCompile;
+    this.allow_natives_ = false;
+    this.allow_harmony_dynamic_import_ = false;
+    this.allow_harmony_import_meta_ = false;
+    this.allow_harmony_private_methods_ = false;
+    this.allow_eval_cache_ = true;
 
-    this.accept_IN_ = true;
+    this.pointer_buffer_ = []; // 32
+    this.variable_buffer_ = []; // 32
+    
+    // this.scope_ = new Scope();
+    // this.function_state_ = new FunctionState(null, this.scope, null);
 
-    this.parameters_ = null;
-    this.parsing_module_ = false;
+    // this.accept_IN_ = true;
+
+    // this.parameters_ = null;
   }
   /**
    * 大量的工具方法

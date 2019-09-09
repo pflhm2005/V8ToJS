@@ -1,4 +1,5 @@
 import Parser from '../ParseStatementList/parse/Parser';
+import Scanner from '../ParseStatementList/scanner/Scanner';
 import Stream from '../ParseStatementList/scanner/Stream';
 
 export default class Parsing {
@@ -6,10 +7,10 @@ export default class Parsing {
     // more
     let source = info.script_.source_;
     isolate.async_counters_.total_parse_size_ += source.length;
-    console.log(info.character_stream_);
     let stream = new Stream(source);
     info.character_stream_ = stream;
-
+    info.scanner_ = new Scanner(info.character_stream_, info.is_module());
+    console.log(source);
     let parser = new Parser(info);
 
     let result = parser.ParseProgram(isolate, info);

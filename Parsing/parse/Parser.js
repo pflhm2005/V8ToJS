@@ -12,7 +12,7 @@ import {
   kShouldLazyCompile,
   PARSE_LAZILY,
   kSloppyMode,
-  kStrictMode
+  kStrictMode,
 } from '../enum';
 
 import { 
@@ -32,12 +32,30 @@ import {
  * Parser、ParserBase基本上是一个类
  */
 class Parser extends ParserBase {
-  constructor() {
-    super();
-    this.mode_ = PARSE_EAGERLY;
+  constructor(info) {
+    super(null, info.scanner_, info.stack_limit_, info.extension_, info.ast_value_factory_,
+      info.pending_error_handler_, info.runtime_call_stats_, info.logger_,0, info.is_module(), true);
+    this.info_ = info;
+    this.scanner = info.scanner_;
+    this.preparser_zone_ = null;
+    this.reusable_preparser_ = null;
+    this.mode_ = PARSE_EAGERLY; // Lazy mode must be set explicitly.
+    this.source_range_map_ = null;
     this.target_stack_ = null;
+    this.total_preparse_skipped_ = 0;
+    this.consumed_preparse_data_ = info.consumed_preparse_data_;
+    this.preparse_data_buffer_ = null;
     this.parameters_end_pos_ = kNoSourcePosition;
-    this.allow_lazy_ = false;
+
+    let can_compile_lazily = info.allow_lazy_compile() && !info.is_eager();
+    this.default_eager_compile_hint_ = can_compile_lazily ? kShouldLazyCompile : kShouldEagerCompile;
+    this.allow_lazy_ = info.allow_lazy_compile() && info.allow_lazy_parsing() && info.extension_ === null && can_compile_lazily;
+    this.allow_natives_ = info.allow_natives_syntax();
+    this.allow_harmony_dynamic_import_ = info.allow_harmony_dynamic_import();
+    this.allow_harmony_import_meta_ = info.allow_harmony_import_meta();
+    this.allow_harmony_nullish_ = info.allow_harmony_nullish();
+    this.allow_harmony_optional_chaining_ = info.allow_harmony_optional_chaining();
+    this.allow_allow_harmony_private_methods_ = info.allow_harmony_private_methods();
     this.use_counts_ = new Array(kUseCounterFeatureCount).fill(0);
   }
   IsEval(identifier) {
