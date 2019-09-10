@@ -3,7 +3,7 @@ import Scanner from '../Parsing/scanner/Scanner';
 import Stream from '../Parsing/scanner/Stream';
 
 export default class Parsing {
-  static ParseProgram(info, isolate) {
+  static ParseProgram(info, isolate, mode = kYes) {
     // more
     let source = info.script_.source_;
     isolate.async_counters_.total_parse_size_ += source.length;
@@ -13,11 +13,16 @@ export default class Parsing {
     let parser = new Parser(info);
 
     let result = parser.ParseProgram(isolate, info);
-    // if(result === null) throw new Error('pending_error');
-    // else {
-    //   // info.set_language_mode(info.literal_.language_mode_);
-    // }
-    // info.literal_ = result;
+    info.literal_ = result;
+    if(result) {
+      info.set_language_mode(info.literal_.language_mode());
+      if(info.is_eval()) info.set_allow_eval_cache(parser.allow_eval_cache_);
+    }
+    
+    if(mode === kYes) {
+      // if(result === null) 
+      parser.UpdateStatistics(isolate, info.script_);
+    }
     return result !== null;
   }
 }

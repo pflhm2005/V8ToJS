@@ -9,7 +9,7 @@ export default class TokenDesc {
      */
     this.location = new Location(0, 0);
     /**
-     * 负责管理字符串
+     * 负责管理字面量 包括字符串、数字等
      * 还有一个raw_literal_chars属性储存源字符串
      */
     this.literal_chars = new LiteralBuffer();
@@ -19,7 +19,7 @@ export default class TokenDesc {
      */
     this.token = 'Token::UNINITIALIZED';
     /**
-     * 处理小整数
+     * 保存小整数
      */
     this.smi_value_ = 0;
     this.after_line_terminator = false;

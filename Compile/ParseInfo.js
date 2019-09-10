@@ -124,6 +124,8 @@ export default class ParseInfo {
   set_language_mode(v) { this.SetFlag(kStrictMode, v); }
   is_strict_mode() { return this.GetFlag(kStrictMode); }
 
+  set_allow_eval_cache(v) { this.SetFlag(kAllowEvalCache, v); }
+
   allow_natives_syntax() { return this.GetFlag(kAllowNativeSyntax); }
   allow_harmony_dynamic_import() { return this.GetFlag(kAllowHarmonyDynamicImport); }
   allow_harmony_import_meta() { return this.GetFlag(kAllowHarmonyImportMeta); }

@@ -58,6 +58,7 @@ export default class AstValueFactory {
       return this.one_character_strings_[key];
     }
     let hash_field = StringHasher.HashSequentialString(literal, literal.length, this.hash_seed_);
+    // 最后返回的必须是无符号整数
     hash_field >>>= 0;
     return this.GetString(hash_field, true, literal);
   }

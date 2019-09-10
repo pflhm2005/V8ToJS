@@ -281,7 +281,7 @@ export default class ParserBase {
       case 'Token::ASYNC':
         return true;
       case 'Token::FUTURE_STRICT_RESERVED_WORD':
-        return is_sloppy(language_mode());
+        return is_sloppy(this.language_mode());
       default:
         return false;
     }

@@ -25,6 +25,7 @@ import {
   kTooManyParameters, 
   kParamAfterRest 
 } from '../MessageTemplate';
+import { is_strict } from '../util';
 
 
 /**
@@ -67,7 +68,9 @@ class Parser extends ParserBase {
     this.scanner_.Initialize();
     let result = this.DoParseProgram(isolate, info);
 
-    // more...
+    // MaybeResetCharacterStream(info, result);
+    // MaybeProcessSourceRanges(info, result, stack_limit_);
+    // HandleSourceURLComments(isolate, info->script());
     return result;
   }
   DoParseProgram(isolate, info) {
@@ -97,8 +100,15 @@ class Parser extends ParserBase {
       }
 
       this.scope_.end_position_ = this.peek_position();
-      // more...
+
+      let parameter_count = this.parsing_module_ ? 1 : 0;
+      result = this.ast_node_factory_.NewScriptOrEvalFunctionLiteral(scope, body, function_state.expected_property_count_, parameter_count);
+      result.suspend_count_ = function_state.suspend_count_;
     }
+
+    info.max_function_literal_id_ = this.function_literal_id_;
+    // RecordFunctionLiteralSourceRange(result);
+    return result;
   }
   DeserializeScopeChain(isolate, info, maybe_outer_scope_info_, mode) {
     this.InitializeEmptyScopeChain(info);

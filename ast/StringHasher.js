@@ -15,9 +15,9 @@ import {
 
 /**
  * 1、非数字直接返回false
- * 2、if分支判断中的429496729数字是2^32为4294967296 必须比这个小
- * 所能接受的最大值是4294967294
- * 3、结果是一层层叠起来 
+ * 2、关于if分支判断中的429496729
+ * 这是因为index的类型为int32 即2^32为4294967296 下一步是要乘以10 所以必须小于这个值除以10 即429496729
+ * 3、结果是一层层叠起来
  * 例如12345 index初始值为1 叠加过程为 1 => 12 => 123 => 1234 => 12345
  */
 export const TryAddIndexChar = (index, c) => {
@@ -60,6 +60,7 @@ export default class StringHasher {
       if (IsDecimalDigit(chars[0]) && (length === 1 || chars[0] !== '0')) {
         /**
          * 这里通过与0的Unicode计算后得到实际数值
+         * 由于每次都会走这一步 所以number就不做重置处理了
          */
         this.number = chars[0] - '0';
         let i = 1;

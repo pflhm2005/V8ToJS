@@ -66,13 +66,13 @@ export default class Scanner {
      */
     this.c0_ = null;
     /**
-     * 其实v8有三个词法描述类
+     * scanner有三个词法描述类 分别代表当前、下一个、下下一个三个Token
      * token_storage_是一个数组 里面装着那个三个类
      */
     this.current_ = new TokenDesc();
     this.next_ = new TokenDesc();
     this.next_next_ = new TokenDesc();
-    this.token_storage_ = [];
+    this.token_storage_ = [this.current_, this.next_, this.next_next_];
 
     this.octal_pos_ = new Location().invalid();
     this.octal_message_ = '';
@@ -105,7 +105,7 @@ export default class Scanner {
      * (cur_, next_, Token::UNINITIALIZED) => (next_, 新Scan的Token, Token::UNINITIALIZED)
      * 2、next_next_若有值 不会进行Scan 仅进行移位
      * (cur_, next_, next_next_) => (next_, next_next_, Token::UNINITIALIZED)
-     * @returns {Token} 返回next_.token
+     * @returns {Token} 返回解析前的next_.token
      */
     let previous = this.current_;
     this.current_ = this.next_;
@@ -118,12 +118,8 @@ export default class Scanner {
       this.next_next_ = previous;
       previous.token = 'Token::UNINITIALIZED';
     }
-    // console.log(this.current().token, this.current().literal_chars.one_byte_literal());
     return this.current().token;
   }
-  /**
-   * 字面量对象方法
-   */
   AddLiteralChar(c) {
     this.next().literal_chars.AddChar(c);
   }
@@ -145,8 +141,7 @@ export default class Scanner {
   location() { return this.current().location; }
   Peek() { return this.source_.Peek(); }
   /**
-   * 返回next_next_的值或
-   * next_保持不变、将下一个token解析到next_next_上 
+   * 返回next_next_的值或next_保持不变 将下一个token解析到next_next_上 
    */
   PeekAhead() {
     if (this.next_next().token !== 'Token::UNINITIALIZED') return this.next_next().token;
@@ -160,7 +155,7 @@ export default class Scanner {
   }
   smi_value() { return this.current().smi_value_; }
   /**
-   * 返回当前Token
+   * 初始化scanner 同时解析第一个Token
    */
   Initialize() {
     this.Init();
@@ -169,10 +164,10 @@ export default class Scanner {
   }
   Init() {
     this.Advance();
-
-    this.token_storage_[0] = this.current_;
-    this.token_storage_[1] = this.next_;
-    this.token_storage_[2] = this.next_next_;
+    // 源码在这里初始化 对于JS来说没必要
+    // this.token_storage_[0] = this.current_;
+    // this.token_storage_[1] = this.next_;
+    // this.token_storage_[2] = this.next_next_;
   }
   Advance() {
     this.c0_ = this.source_.Advance();
@@ -679,7 +674,7 @@ export default class Scanner {
         // can_be_keyword = CharCanBeKeyword(c);
       }
     }
-    // 逻辑同上 进这里代表首字符Ascii值就过大
+    // 逻辑同上 进这里代表首字符Ascii值就过大 暂时不实现这种特殊情况了
     // return ScanIdentifierOrKeywordInnerSlow(escaped, can_be_keyword);
   }
   // 跳到另外一个文件里实现
