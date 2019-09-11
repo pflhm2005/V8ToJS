@@ -168,3 +168,7 @@ export const PERFORMANCE_LOAD = 0;
 
 export const kIncludingVariables = 0;
 export const kScopesOnly = 0;
+
+export const kMappedArguments = 0;
+export const kUnmappedArguments = 0;
+export const kRestParameter = 0;

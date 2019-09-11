@@ -91,6 +91,7 @@ class CompilationCache {
   LookupScript() {
     return null;
   }
+  PutScript() {}
 }
 
 class Logger {

@@ -19,13 +19,16 @@ import {
   kNormalFunction,
   kDynamicGlobal,
   kNoSourcePosition,
+  kMappedArguments,
+  kUnmappedArguments,
 } from "../enum";
 import { Variable } from "../ast/AST";
 import { 
   IsConciseMethod, 
   IsClassConstructor, 
   IsAccessorFunction, 
-  IsDerivedConstructor 
+  IsDerivedConstructor, 
+  IsClassMembersInitializerFunction
 } from "../util";
 // import ThreadedList from '../base/ThreadedList';
 
@@ -106,7 +109,7 @@ export default class Scope extends ZoneObject {
     this.start_position_ = kNoSourcePosition;
     this.end_position_ = kNoSourcePosition;
     this.num_stack_slots_ = 0;
-    // this.num_heap_slots_ = 
+    this.num_heap_slots_ = 0;
 
     this.calls_eval_ = false;
     this.sloppy_eval_can_extend_vars_ = false;
@@ -158,7 +161,9 @@ export default class Scope extends ZoneObject {
   //   while(!scope_info) {
   //   }
   // }
-
+  AllowsLazyCompilation() {
+    return !this.force_eager_compilation_ && !IsClassMembersInitializerFunction(this.function_kind_);
+  }
   /**
    * 遍历作用域链 判定是否有未处理的变量
    * @param {Scope} outer 指定的外层作用域
@@ -327,6 +332,12 @@ export default class Scope extends ZoneObject {
     if(name === ast_value_factory.arguments_string()) this.has_arguments_parameter_ = true;
     variable.set_is_used();
     return variable;
+  }
+
+  static DeclarationScope() {}
+  NeedsContext() { return this.num_heap_slots_ > 0; }
+  GetArgumentsType() {
+    return this.is_sloppy(this.language_mode()) && this.has_simple_parameters_ ? kMappedArguments : kUnmappedArguments;
   }
 }
 

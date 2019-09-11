@@ -105,6 +105,8 @@ export default class AstValueFactory {
     this.string_end_.push(string);
     return string;
   }
+
+  Internalize() {}
 }
 
 class AstConsString extends ZoneObject {

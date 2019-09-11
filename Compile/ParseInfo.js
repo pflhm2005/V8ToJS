@@ -105,10 +105,6 @@ export default class ParseInfo {
     this.SetFlag(kAllowHarmonyNullish, FLAG_harmony_nullish);
     this.SetFlag(kAllowHarmonyPrivateMethods, FLAG_harmony_private_methods);
   }
-  SetFlag(f, v = false) {
-    if(v) this.flags_ |= f;
-    else this.flags_ &= ~f;
-  }
   is_eval() { return this.GetFlag(kEval); }
   is_module() { return this.GetFlag(kModule); }
   set_module(v) { this.SetFlag(kModule); }
@@ -120,11 +116,16 @@ export default class ParseInfo {
   set_eager(v) { this.SetFlag(kEager, v); }
 
   is_wrapped_as_function() { return this.function_syntax_kind_ === kWrapped; }
+  is_asm_wasm_broken() { return this.GetFlag(kIsAsmWasmBroken); }
 
   set_language_mode(v) { this.SetFlag(kStrictMode, v); }
   is_strict_mode() { return this.GetFlag(kStrictMode); }
 
   set_allow_eval_cache(v) { this.SetFlag(kAllowEvalCache, v); }
+
+  collect_type_profile() { return this.GetFlag(kCollectTypeProfile); }
+  might_always_opt() { return this.GetFlag(kMightAlwaysOpt); }
+  collect_source_positions() { return this.GetFlag(kCollectSourcePositions); }
 
   allow_natives_syntax() { return this.GetFlag(kAllowNativeSyntax); }
   allow_harmony_dynamic_import() { return this.GetFlag(kAllowHarmonyDynamicImport); }
@@ -134,6 +135,10 @@ export default class ParseInfo {
   allow_harmony_private_methods() { return this.GetFlag(kAllowHarmonyPrivateMethods); }
 
   GetFlag(f) { return (this.flags_ & f) !== 0; }
+  SetFlag(f, v = false) {
+    if(v) this.flags_ |= f;
+    else this.flags_ &= ~f;
+  }
   /**
    * 
    * @param {Isolate*} isolate V8实例

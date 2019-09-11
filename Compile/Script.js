@@ -7,75 +7,10 @@ import {
   kIsWasm,
   kIsOpaque,
   kIsModule,
-  kEagerCompile,
   TYPE_NORMAL,
 } from "../enum";
-import ParseInfo from "./ParseInfo";
-import { FLAG_use_strict } from "./Flag";
-import Parsing from "./Parsing";
 
-function NewScript(isolate, parse_info, source, script_details, origin_options, natives) {
-  let script = parse_info.CreateScript(isolate, source, origin_options, natives);
-  // more
-  return script;
-}
-
-function CompileToplevel(parse_info, isolate, is_compiled_scope) {
-  // more
-  if(parse_info.literal_ === null && Parsing.ParseProgram(parse_info, isolate)) return;
-  // more
-} 
-
-class Compiler {
-  /**
-   * 
-   * @param {Isolate*} isolate 
-   * @param {String} source 源字符串
-   * @param {ScriptDetails} script_details 默认构造
-   * @param {ScriptOriginOptions} origin_options 默认构造
-   * @param {Extension*} extension null
-   * @param {ScriptData} cached_data 默认构造
-   * @param {CompileOptions} compile_options kNoCompileOptions
-   * @param {NoCacheReason} no_cache_reason kNoCacheNoReason
-   * @param {NativesFlag} natives NOT_NATIVES_CODE
-   */
-  static GetSharedFunctionInfoForScript(isolate, source, script_details, origin_options, extension,
-    cached_data, compile_options, no_cache_reason, natives) {
-    let compile_timer = new ScriptCompileTimerScope(isolate, no_cache_reason);
-
-    let source_length = source.length;
-    isolate.async_counters_.total_load_size_ += source_length;
-    isolate.async_counters_.total_compile_size_ += source_length;
-
-    let language_mode = FLAG_use_strict;
-    let compilation_cache = isolate.compilation_cache_;
-
-    let maybe_result = null;
-    let is_compiled_scope = new IsCompiledScope();
-    if(extension === null) {
-      let can_consume_code_cache = compile_options === kConsumeCodeCache;
-      if(can_consume_code_cache) compile_timer.set_consuming_code_cache();
-      maybe_result = compilation_cache.LookupScript(source, script_details.name_obj, script_details.line_offset,
-        script_details.column_offset, origin_options, isolate.native_context(), language_mode);
-      if(maybe_result) compile_timer.set_hit_isolate_cache();
-      else if(can_consume_code_cache) {
-        compile_timer.set_consuming_code_cache();
-        // more
-      }
-    }
-    if(maybe_result === null) {
-      let parse_info = new ParseInfo(isolate);
-      NewScript(isolate, parse_info, source, script_details, origin_options, natives);
-      if(origin_options.IsModule()) parse_info.set_module();
-      parse_info.extension_ = extension;
-      parse_info.set_eager(compile_options === kEagerCompile);
-
-      parse_info.set_language_mode(language_mode);
-      maybe_result = CompileToplevel(parse_info, isolate, is_compiled_scope);
-      // more
-    }
-  }
-}
+import Compiler from "./Complier";
 
 function GetScriptDetails(isolate, resource_name, resource_line_offset, resource_column_offset, source_map_url, host_defined_options) {
   let script_details = new ScriptDetails();
@@ -93,7 +28,9 @@ class ScriptCompiler {
   static Compile(context, source, options = kNoCompileOptions, no_cache_reason = kNoCacheNoReason) {
     let isolate = context.GetIsolate();
     let maybe = this.CompileUnboundInternal(isolate, source, options, no_cache_reason);
-    // more
+
+    // v8::Context::Scope scope(context);
+    return maybe.BindToCurrentContext();
   }
   static CompileUnboundInternal(isolate, source, options, no_cache_reason) {
     let script_data = new ScriptData();
@@ -102,7 +39,9 @@ class ScriptCompiler {
       source.resource_column_offset, source.source_map_url, source.host_defined_options);
     let maybe_function_info = Compiler.GetSharedFunctionInfoForScript(isolate, source.source_string, script_details,
       source.resource_options, null, script_data, options, no_cache_reason, NOT_NATIVES_CODE);
-    // more
+    
+    // if(options === kConsumeCodeCache) 
+    return new UnboundScript(maybe_function_info);
   }
 }
 
@@ -151,22 +90,6 @@ class ScriptOriginOptions {
   IsModule() { return (this.flags_ & kIsModule) !== 0; }
 
   Flags() { return this.flags_; }
-}
-
-class IsCompiledScope {
-  constructor() {
-    this.retain_bytecode_=  null;
-    this.is_compiled_ = false;
-  }
-}
-
-class ScriptCompileTimerScope {
-  set_hit_isolate_cache() {
-
-  }
-  set_consuming_code_cache() {
-
-  }
 }
 
 export default class Script {

@@ -146,3 +146,12 @@ export const DontOptimizeReasonField = BitField(12, 8);
 export const RequiresInstanceMembersInitializer = BitField(20, 1);
 export const HasBracesField = BitField(21, 1);
 export const OneshotIIFEBit = BitField(22, 1);
+
+export const VariableModeField = BitField(0, 4);
+export const VariableKindField = BitField(4, 3);
+export const LocationField = BitField(7, 3);
+export const ForceContextAllocationField = BitField(10, 1);
+export const IsUsedField = BitField(11, 1);
+export const InitializationFlagField = BitField(12, 1);
+export const ForceHoleInitializationField = BitField(13, 1);
+export const MaybeAssignedFlagField = BitField(14, 1);

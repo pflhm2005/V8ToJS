@@ -38,6 +38,7 @@ export default class Factory {
   empty_fixed_array() {
     return new FixedArray();
   }
+  NewSharedFunctionInfoForLiteral() {}
 }
 
 class FixedArray {}

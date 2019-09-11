@@ -39,6 +39,8 @@ export const IsClassConstructor = (kind) => IsInRange(kind, kBaseConstructor, kD
 export const IsAccessorFunction = (kind) => IsInRange(kind, kGetterFunction, kSetterFunction);
 export const IsDerivedConstructor = (kind) => IsInRange(kind, kDefaultDerivedConstructor, kDerivedConstructor);
 
+export const IsClassMembersInitializerFunction = (kind) => kind === kClassMembersInitializerFunction;
+
 export const IsArrowOrAssignmentOp = (token) => TokenIsInRange(token, 'ARROW', 'ASSIGN_SUB');
 
 export const IsUnaryOrCountOp = op => TokenIsInRange(op, 'ADD', 'DEC');

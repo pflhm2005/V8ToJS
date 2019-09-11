@@ -11,3 +11,6 @@ export const kMaybeAsyncArrowParameterDeclaration = 2;
 export const kParameterDeclaration = 3;
 export const kVarDeclaration = 4;
 export const kLexicalDeclaration = 5;
+
+export const kRequired = 0;
+export const kElided = 0;

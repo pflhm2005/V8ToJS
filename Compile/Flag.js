@@ -8,3 +8,4 @@ export const FLAG_harmony_import_meta = true;
 export const FLAG_harmony_optional_chaining = false;
 export const FLAG_harmony_nullish = false;
 export const FLAG_harmony_private_methods = false;
+export const FLAG_stress_lazy_source_positions = false;

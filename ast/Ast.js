@@ -59,6 +59,7 @@ import {
   FunctionSyntaxKindBits,
   IsConciseMethod,
   IsNewTargetField,
+  LocationField,
 } from '../util';
 
 export class AstNodeFactory {
@@ -414,11 +415,12 @@ class ClassLiteral extends Expression {
 
 class FunctionLiteral extends Expression {
   constructor(zone = null, name, ast_value_factory, scope, body, expected_property_count,
-    parameter_count, function_length, function_syntax_kind, has_duplicate_parameters,
-    eager_compile_hint, position, has_braces, function_literal_id, produced_preparse_data = null) {
-      super();
-      this.scope_ = scope;
-      this.raw_name_ = null;
+  parameter_count, function_length, function_syntax_kind, has_duplicate_parameters,
+  eager_compile_hint, position, has_braces, function_literal_id, produced_preparse_data = null) {
+    super();
+    this.scope_ = scope;
+    this.raw_name_ = null;
+    this.suspend_count_ = 0;
   }
   kind() { return this.scope_.function_kind_; }
   is_anonymous_expression() {
@@ -429,6 +431,12 @@ class FunctionLiteral extends Expression {
   }
   set_raw_name() {
     this.raw_name_ = nane;
+  }
+  AllowsLazyCompilation() {
+    return this.scope_.AllowsLazyCompilation();
+  }
+  CanSuspend() {
+    return this.suspend_count_ > 0;
   }
 }
 
@@ -456,6 +464,8 @@ export class Variable extends ZoneObject {
     this.initializer_position_ = kNoSourcePosition;
     this.bit_field_ = 0; // TODO
   }
+  mode() { return VariableModeField.decode(this.bit_field_); }
+  location() { return LocationField.decode(this.bit_field_); }
   set_is_used() { this.bit_field_ = NodeTypeField.update(this.bit_field_, true); }
   set_maybe_assigned() { this.bit_field_ = NodeTypeField.update(this.bit_field_, kMaybeAssigned); }
   is_parameter() { return VariableKindField.decode(this.bit_field_) === PARAMETER_VARIABLE; }
