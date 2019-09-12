@@ -62,6 +62,7 @@ import {
   _kBlock,
   FUNCTION_SCOPE,
   kParameterDeclaration,
+  kAllowLabelledFunctionStatement,
 } from '../enum';
 
 import {
@@ -160,7 +161,7 @@ export default class ParserBase {
   // TODO
   IsAssignableIdentifier() {}
   UNREACHABLE() {
-    this.scanner.UNREACHABLE();
+    this.scanner_.UNREACHABLE();
   }
   /**
    * 这里的DeclarationScope存在构造函数重载 并且初始化方式不一致
@@ -188,33 +189,33 @@ export default class ParserBase {
   NullIdentifier() { return null; }
   language_mode() { return this.scope_.language_mode(); }
   peek() {
-    return this.scanner.peek();
+    return this.scanner_.peek();
   }
   Next() {
-    return this.scanner.Next();
+    return this.scanner_.Next();
   }
   PeekAhead() {
-    return this.scanner.PeekAhead();
+    return this.scanner_.PeekAhead();
   }
   PeekInOrOf() {
     return this.peek() === 'Token::IN'
     //  || PeekContextualKeyword(ast_value_factory()->of_string());
   }
   position() {
-    return this.scanner.location().beg_pos;
+    return this.scanner_.location().beg_pos;
   }
   peek_position() {
-    return this.scanner.peek_location().beg_pos;
+    return this.scanner_.peek_location().beg_pos;
   }
   end_position() {
-    return this.scanner.location().end_pos;
+    return this.scanner_.location().end_pos;
   }
   Consume(token) {
-    let next = this.scanner.Next();
+    let next = this.scanner_.Next();
     return next === token;
   }
   Check(token) {
-    let next = this.scanner.peek();
+    let next = this.scanner_.peek();
     if (next === token) {
       this.Consume(next);
       return true;
@@ -247,6 +248,9 @@ export default class ParserBase {
     switch(this.peek()) {
       case 'Token::FUNCTION':
         return this._ParseHoistableDeclaration(null, false);
+      case 'Token::CLASS':
+        this.Consume('Token::CLASS');
+        return this.ParseClassDeclaration(null, false);
       case 'Token::VAR':
       case 'Token::CONST':
         return this.ParseVariableStatement(kStatementListItem, null);
@@ -255,8 +259,134 @@ export default class ParserBase {
           return this.ParseVariableStatement(kStatementListItem, null);
         }
         break;
+      case 'Token::ASYNC':
+        if(this.peek() === 'Token::FUNCTION' && !this.scanner_.HasLineTerminatorBeforeNext()) {
+          this.Consume('Token::ASYNC');
+          return this.ParseAsyncFunctionDeclaration(null, false);
+        }
+        break;
+      default:
+        break;
     }
+    return this.ParseStatement(null, null, kAllowLabelledFunctionStatement);
   }
+  ParseStatement() {}
+
+  /**
+   * 解析函数声明 存在变量提升
+   * 此处有函数重载 由于重载函数多处调用 这个2参调用少 改个名
+   * @param {AstRawString*} names
+   * @param {Boolean} default_export
+   */
+  _ParseHoistableDeclaration(names = null, default_export = false) {
+    this.expression_scope_ = new VariableDeclarationParsingScope(this, kParameterDeclaration, names);
+    this.Consume('Token::FUNCTION');
+    let pos = this.position();
+    let flags = kIsNormal;
+    // function *fn() {}表示Generator函数
+    if(this.Check('Token::MUL')) flags |= kIsGenerator;
+    this.ParseHoistableDeclaration(pos, flags, names, default_export);
+  }
+  /**
+   * 普通函数声明的格式如下(function与*字符串已经在上一个函数中被Consume了):
+   * 1、'function' Identifier '(' FormalParameters ')' '{' FunctionBody '}'
+   * 2、'function' '(' FormalParameters ')' '{' FunctionBody '}'
+   * Generator函数声明格式如下:
+   * 1、'function' '*' Identifier '(' FormalParameters ')' '{' FunctionBody '}'
+   * 2、'function' '*' '(' FormalParameters ')' '{' FunctionBody '}'
+   * 均分为正常与匿名 default_export负责标记这个区别
+   * @param {int} pos 位置
+   * @param {ParseFunctionFlags} flags 函数类型推断
+   * @param {AstRawString*} names 函数名
+   * @param {Boolean} default_export 
+   */
+  ParseHoistableDeclaration(pos, flags, names, default_export) {
+    // this.CheckStackOverflow(); TODO
+    if((flags & kIsAsync) !== 0 && this.Check('Token::MUL')) flag |= kIsGenerator;
+
+    // 函数名
+    let name = null;
+    let variable_name = null;
+    // 函数名的严格模式检测
+    let name_validity = null;
+    /**
+     * 匿名函数
+     * 内部依然会默认设置函数名 并跳过函数名检测阶段
+     * function(){}
+     */
+    if(this.peek() === 'Token::LPAREN') {
+      if(default_export) {
+        name = this.ast_value_factory_.default_string();
+        variable_name = this.ast_value_factory_.dot_default_string();
+        name_validity = kSkipFunctionNameCheck;
+      } else {
+        throw new Error(kMissingFunctionName);
+      }
+    }
+    /**
+     * 带名字的函数声明
+     */ 
+    else {
+      // 函数名判断是否是保留字
+      let is_strict_reserved = IsStrictReservedWord(this.peek());
+      // 对函数名进行标识符的解析
+      name = this.ParseIdentifier(this.function_state_.kind());
+      name_validity = is_strict_reserved ? kFunctionNameIsStrictReserved : kFunctionNameValidityUnknown;
+      // C++深拷贝跟喝水一样 这里暂时同一个引用
+      variable_name = name;
+    }
+
+    /**
+     * 这里的C++源码代码如下
+     * FuncNameInferrerState fni_state(&fni_);
+     * 很多地方都有这个声明 但是fni_state实际上并没有调用
+     * 目的是为了触发构造函数的++this.fni_.scope_depth_
+     */
+    this.fni_.scope_depth_++;
+    this.PushEnclosingName(name);
+    let function_kind = this.FunctionKindFor(flags);
+    /**
+     * 解析函数参数与函数体
+     * @returns {FunctionLiteral}
+     */
+    let functionLiteral = this.ParseFunctionLiteral(name, this.scanner_.location(), name_validity, function_kind, pos, kDeclaration, this.language_mode(), null);
+
+    let mode = (!this.scope_.is_declaration_scope() || this.scope_.is_module_scope()) ? kLet : kVar;
+    let kind = is_sloppy(this.language_mode()) && 
+    !this.scope_.is_declaration_scope() &&
+    flags === kIsNormal ? SLOPPY_BLOCK_FUNCTION_VARIABLE : NORMAL_VARIABLE;
+    return this.DeclareFunction(variable_name, functionLiteral, mode, kind, pos, this.end_position(), names);
+  }
+  ParseIdentifier(function_kind) {
+    let next = this.Next();
+    if(!IsValidIdentifier(next, this.language_mode(), 
+    IsGeneratorFunction(function_kind), this.parsing_module_ || IsAsyncFunction(function_kind))) {
+      throw new Error('UnexpectedToken');
+    }
+    return this.GetIdentifier();
+  }
+  FunctionKindFor(flags) {
+    return this.FunctionKindForImpl(0, flags);
+  }
+  FunctionKindForImpl(is_method, flags) {
+    let kFunctionKinds = [
+      [
+        [kNormalFunction, kAsyncFunction],
+        [kGeneratorFunction, kAsyncGeneratorFunction]
+      ],
+      [
+        [kConciseMethod, kAsyncConciseMethod],
+        [kConciseGeneratorMethod, kAsyncConciseGeneratorMethod]
+      ]
+    ];
+    let i = Number((flags & kIsGenerator) !== 0);
+    let j = Number((flags & kIsAsync) !== 0);
+    return kFunctionKinds[is_method][i][j];
+  }
+
+  ParseClassDeclaration() {}
+  ParseAsyncFunctionDeclaration() {}
+
   IsNextLetKeyword() {
     /**
      * 这里调用了PeekAhead后赋值了next_next_ 会影响Next方法
@@ -494,13 +624,6 @@ export default class ParserBase {
     // 其他情况都是用保留词做变量名 不合法
     this.UNREACHABLE();
   }
-  GetIdentifier() {
-    return this.GetSymbol();
-  }
-  GetSymbol() {
-    const result = this.scanner.CurrentSymbol(this.ast_value_factory_);
-    return result;
-  }
   // NewRawVariable(name, pos) { return this.ast_node_factory_.NewVariableProxy(name, NORMAL_VARIABLE, pos); }
 
   /**
@@ -608,7 +731,7 @@ export default class ParserBase {
     let lhs_beg_pos = this.peek_position();
     let expression = this.ParseLeftHandSideExpression();
     // V8_LIKELY
-    if (!IsCountOp(this.peek()) || this.scanner.HasLineTerminatorBeforeNext()) return expression;
+    if (!IsCountOp(this.peek()) || this.scanner_.HasLineTerminatorBeforeNext()) return expression;
     return this.ParsePostfixContinuation(expression, lhs_beg_pos);
   }
   ParseAwaitExpression(){}
@@ -658,8 +781,8 @@ export default class ParserBase {
       let kind = kArrowFunction;
       // V8_UNLIKELY
       if (token === 'Token::ASYNC' 
-      && !this.scanner.HasLineTerminatorBeforeNext()
-      && !this.scanner.literal_contains_escapes()) {
+      && !this.scanner_.HasLineTerminatorBeforeNext()
+      && !this.scanner_.literal_contains_escapes()) {
         // async普通函数
         if (this.peek() === 'Token::FUNCTION') return this.ParseAsyncFunctionLiteral();
         // async箭头函数
@@ -704,15 +827,15 @@ export default class ParserBase {
       case 'Token::FALSE_LITERAL':
         return this.ast_node_factory_.NewBooleanLiteral(false, pos);
       case 'Token::SMI': {
-        let value = this.scanner.smi_value();
+        let value = this.scanner_.smi_value();
         return this.ast_node_factory_.NewSmiLiteral(value, pos);
       }
       case 'Token:NUMBER': {
-        let value = this.scanner.DoubleValue();
+        let value = this.scanner_.DoubleValue();
         return this.ast_node_factory_.NewNumberLiteral(value, pos);
       }
       case 'Token::BIGINT':
-        return this.ast_node_factory_.NewBigIntLiteral(new AstBigInt(this.scanner.CurrentLiteralAsCString()), pos);
+        return this.ast_node_factory_.NewBigIntLiteral(new AstBigInt(this.scanner_.CurrentLiteralAsCString()), pos);
       case 'Token::STRING':
         return this.ast_node_factory_.NewStringLiteral(this.GetSymbol(), pos);
     }
@@ -744,7 +867,7 @@ export default class ParserBase {
         }
         default:
           let pos;
-          if (this.scanner.current_token() === 'Token::IDENTIFIER') pos = this.position();
+          if (this.scanner_.current_token() === 'Token::IDENTIFIER') pos = this.position();
           else {
             pos = this.peek_position();
             // TODO
@@ -806,7 +929,7 @@ export default class ParserBase {
   }
   ParseObjectPropertyDefinition(prop_info, has_seen_proto) {
     let name_token = this.peek();
-    let next_loc = this.scanner.peek_location();
+    let next_loc = this.scanner_.peek_location();
 
     let name_expression = this.ParseProperty(prop_info);
 
@@ -823,7 +946,7 @@ export default class ParserBase {
        * 最常见的键值对形式 { a: 1 }
        */
       case kValue: {
-        if (!prop_info.is_computed_name && this.scanner.CurrentLiteralEquals('__proto__')) {
+        if (!prop_info.is_computed_name && this.scanner_.CurrentLiteralEquals('__proto__')) {
           if (has_seen_proto) throw new Error(kDuplicateProto);
           has_seen_proto = true;
         }
@@ -895,13 +1018,13 @@ export default class ParserBase {
        */
       if ((token !== 'Token::MUL'
       && prop_info.ParsePropertyKindFromToken(token))
-      || this.scanner.HasLineTerminatorBeforeNext()) {
+      || this.scanner_.HasLineTerminatorBeforeNext()) {
         prop_info.name = this.GetIdentifier();
         this.PushLiteralName(prop_info.name);
         return this.NewStringLiteral(prop_info.name, this.position());
       }
       // V8_UNLIKELY
-      if(this.scanner.literal_contains_escapes()) throw new Error('UnexpectedToken Token::ESCAPED_KEYWORD');
+      if(this.scanner_.literal_contains_escapes()) throw new Error('UnexpectedToken Token::ESCAPED_KEYWORD');
       // 给属性上标记
       prop_info.function_flags = kIsAsync;
       prop_info.kind = kMethod;
@@ -931,7 +1054,7 @@ export default class ParserBase {
         return this.NewStringLiteral(prop_info.name, this.position());
       }
       // V8_UNLIKELY
-      if (this.scanner.literal_contains_escapes()) throw new Error('UnexpectedToken Token::ESCAPED_KEYWORD');
+      if (this.scanner_.literal_contains_escapes()) throw new Error('UnexpectedToken Token::ESCAPED_KEYWORD');
       if (token === 'Token::GET') prop_info.kind = kAccessorGetter;
       if (token === 'Token::SET') prop_info.kind = kAccessorSetter;
     }
@@ -975,7 +1098,7 @@ export default class ParserBase {
       
       case 'Token::SMI':
         this.Consume('Token::SMI');
-        index = this.scanner.smi_value();
+        index = this.scanner_.smi_value();
         is_array_index = true;
         prop_info.name = this.GetSymbol();
         break;
@@ -1149,121 +1272,13 @@ export default class ParserBase {
     /**
      * ;, }, EOS
      */
-    if(this.scanner.HasLineTerminatorBeforeNext() || IsAutoSemicolon(tok)) {
+    if(this.scanner_.HasLineTerminatorBeforeNext() || IsAutoSemicolon(tok)) {
       return ;
     }
     throw new Error('UnexpectedToken');
   }
 
   FailureExpression() { throw new Error('UnexpectedExpression'); }
-
-  /**
-   * 解析函数声明 存在变量提升
-   * 此处有函数重载 由于重载函数多处调用 这个2参调用少 改个名
-   * @param {AstRawString*} names
-   * @param {Boolean} default_export
-   */
-  _ParseHoistableDeclaration(names = null, default_export = null) {
-    this.expression_scope_ = new VariableDeclarationParsingScope(this, kParameterDeclaration, names);
-    this.Consume('Token::FUNCTION');
-    let pos = this.position();
-    let flags = kIsNormal;
-    if(this.Check('Token::MUL')) flag |= kIsGenerator;
-    this.ParseHoistableDeclaration(pos, flags, names, default_export);
-  }
-  /**
-   * 普通函数声明的格式如下:
-   * 1、'function' Identifier '(' FormalParameters ')' '{' FunctionBody '}'
-   * 2、'function' '(' FormalParameters ')' '{' FunctionBody '}'
-   * Generator函数声明格式如下:
-   * 1、'function' '*' Identifier '(' FormalParameters ')' '{' FunctionBody '}'
-   * 2、'function' '*' '(' FormalParameters ')' '{' FunctionBody '}'
-   * 均分为正常与匿名 default_export负责标记这个区别
-   * @param {int} pos 
-   * @param {ParseFunctionFlags} flags 
-   * @param {AstRawString*} names 
-   * @param {Boolean} default_export 
-   */
-  ParseHoistableDeclaration(pos, flags, names, default_export) {
-    // this.CheckStackOverflow(); TODO
-    if((flags & kIsAsync) !== 0 && this.Check('Token::MUL')) flag |= kIsGenerator;
-
-    let name = null;
-    let name_validity = null;
-    let variable_name = null;
-    /**
-     * 匿名函数或者函数表达式
-     */
-    if(this.peek() === 'Token::LPAREN') {
-      if(default_export) {
-        name = this.ast_value_factory_.default_string();
-        variable_name = this.ast_value_factory_.dot_default_string();
-        name_validity = kSkipFunctionNameCheck;
-      } else {
-        throw new Error(kMissingFunctionName);
-      }
-    }
-    /**
-     * 带名字的函数声明
-     */ 
-    else {
-      // 函数名判断是否是保留字
-      let is_strict_reserved = IsStrictReservedWord(this.peek());
-      let name = this.ParseIdentifier(this.scope_.function_kind_);
-      name_validity = is_strict_reserved ? kFunctionNameIsStrictReserved : kFunctionNameValidityUnknown;
-      variable_name = name;
-    }
-
-    /**
-     * 这里的C++源码代码如下
-     * FuncNameInferrerState fni_state(&fni_);
-     * 很多地方都有这个声明 但是fni_state实际上并没有调用
-     * 目的是为了触发构造函数的++this.fni_.scope_depth_
-     */
-    this.fni_.scope_depth_++;
-    this.PushEnclosingName(name);
-    let function_kind = this.FunctionKindFor(flags);
-    /**
-     * 解析函数参数与函数体
-     * @returns {FunctionLiteral}
-     */
-    let functionLiteral = this.ParseFunctionLiteral(name, this.scanner.location(), name_validity, function_kind, pos, kDeclaration, this.language_mode(), null);
-
-    let mode = (!this.scope_.is_declaration_scope() || this.scope_.is_module_scope()) ? kLet : kVar;
-    let kind = is_sloppy(this.language_mode()) && 
-    !this.scope_.is_declaration_scope() &&
-    flags === kIsNormal ? SLOPPY_BLOCK_FUNCTION_VARIABLE : NORMAL_VARIABLE;
-    return this.DeclareFunction(variable_name, functionLiteral, mode, kind, pos, this.end_position(), names);
-  }
-  ParseIdentifier(function_kind) {
-    let next = this.Next();
-    if(!IsValidIdentifier(next, this.language_mode(), 
-    IsGeneratorFunction(function_kind), this.parsing_module_ || IsAsyncFunction(function_kind))) {
-      throw new Error('UnexpectedToken');
-    }
-    return this.GetIdentifier();
-  }
-  PushEnclosingName(name) {
-    this.fni_.PushEnclosingName(name);
-  }
-  FunctionKindFor(flags) {
-    return this.FunctionKindForImpl(0, flags);
-  }
-  FunctionKindForImpl(is_method, flags) {
-    let kFunctionKinds = [
-      [
-        [kNormalFunction, kAsyncFunction],
-        [kGeneratorFunction, kAsyncGeneratorFunction]
-      ],
-      [
-        [kConciseMethod, kAsyncConciseMethod],
-        [kConciseGeneratorMethod, kAsyncConciseGeneratorMethod]
-      ]
-    ];
-    let i = Number((flags & kIsGenerator) !== 0);
-    let j = Number((flags & kIsAsync) !== 0);
-    return kFunctionKinds[is_method][i][j];
-  }
 }
 
 class FormalParametersBase {

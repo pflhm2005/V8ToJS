@@ -15,6 +15,7 @@ import {
   kSloppyMode,
   kStrictMode,
   kIncludingVariables,
+  kYes,
 } from '../enum';
 
 import { 
@@ -39,7 +40,7 @@ class Parser extends ParserBase {
     super(null, info.scanner_, info.stack_limit_, info.extension_, info.ast_value_factory_,
       info.pending_error_handler_, info.runtime_call_stats_, info.logger_,0, info.is_module(), true);
     this.info_ = info;
-    this.scanner = info.scanner_;
+    // this.scanner = info.scanner_;
     this.preparser_zone_ = null;
     this.reusable_preparser_ = null;
     this.mode_ = PARSE_EAGERLY; // Lazy mode must be set explicitly.
@@ -138,6 +139,18 @@ class Parser extends ParserBase {
     let operand = expression;
     return operand !== null && !operand.is_new_target();
   }
+
+  GetIdentifier() {
+    return this.GetSymbol();
+  }
+  GetSymbol() {
+    const result = this.scanner_.CurrentSymbol(this.ast_value_factory_);
+    return result;
+  }
+  PushEnclosingName(name) {
+    this.fni_.PushEnclosingName(name);
+  }
+
   /**
    * 返回一个变量代理 继承于Expression类
    * @returns {VariableProxy}
@@ -406,7 +419,7 @@ class Parser extends ParserBase {
           return;
         }
         this.Expect('Token::RPAREN');
-        let formals_end_position = this.scanner.location().end_pos;
+        let formals_end_position = this.scanner_.location().end_pos;
         this.CheckArityRestrictions(formals.arity, kind, formals.has_rest, function_scope.start_position_, formals_end_position);
         this.Expect('Token::LBRACE');
       }
@@ -542,7 +555,7 @@ class Parser extends ParserBase {
    */
   AddFormalParameter(parameters, pattern, initializer, initializer_end_position, is_rest) {
     parameters.UpdateArityAndFunctionLength(initializer !== null, is_rest);
-    let parameter = new Parameter(pattern, initializer, this.scanner.location().beg_pos, initializer_end_position, is_rest);
+    let parameter = new Parameter(pattern, initializer, this.scanner_.location().beg_pos, initializer_end_position, is_rest);
     parameters.params.push(parameter);
   }
   ClassifyParameter(parameters, begin, end) {

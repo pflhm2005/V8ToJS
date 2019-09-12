@@ -7,7 +7,7 @@ const kMaxOneCharStringValue = 128;
 export default class AstValueFactory {
   constructor() {
     this.one_character_strings_ = new Array(kMaxOneCharStringValue).fill(null);
-    this.string_table_ = new Map();
+    this.string_table_ = [];
     // this.hash_seed_ = BigInt(15853730874361889590); 
     this.hash_seed_ = 1704808181;
     this.string_end_ = [];
@@ -41,13 +41,19 @@ export default class AstValueFactory {
      */
     this.cons_string_ar.push(string);
   }
+  /**
+   * 源码中参数是一个vector容器 这里直接用字符串代替了
+   * @param {Vector<const uint8_t>} literal 
+   */
   GetOneByteString(literal) {
     return this.GetOneByteStringInternal(literal);
   }
   GetOneByteStringInternal(literal) {
+    // 单字符特殊处理 有一个映射表单独缓存了所有key
     if (literal.length === 1 && literal[0].charCodeAt() < kMaxOneCharStringValue) {
       let key = literal[0].charCodeAt();
       /**
+       * V8_UNLIKELY
        * 单字符变量第一次出现会进这里
        * one_character_strings_是一个长度为128的Vector 保存每一个字符生成的hash值
        */
@@ -63,40 +69,49 @@ export default class AstValueFactory {
     return this.GetString(hash_field, true, literal);
   }
   GetString(hash_field, is_one_byte, literal_bytes) {
-    let new_string = new AstRawString(is_one_byte, literal_bytes, hash_field);
+    let key = new AstRawString(is_one_byte, literal_bytes, hash_field);
     // 这里实际传的key是对象的指针
-    let entry = this.LookupOrInsert(new_string, new_string.Hash());
+    let entry = this.LookupOrInsert(key, key.Hash());
     /**
      * 源码由HashMap返回
      * key是一个void*、value是对应的hash值
      */
-    if (entry === null) {
+    if (entry.value === null) {
       // 在指定的内存上初始化对象 对JS来说毫无意义
       // int length = literal_bytes.length();
       // byte* new_literal_bytes = zone_->NewArray<byte>(length);
       // memcpy(new_literal_bytes, literal_bytes.begin(), length);
       // AstRawString* new_string = new (zone_) AstRawString(is_one_byte, Vector<const byte>(new_literal_bytes, length), hash_field);
-      this.AddString(new_string);
-      // 感觉是这么个逻辑
+      this.AddString(key);
       // entry->key = new_string;
       // entry->value = reinterpret_cast<void*>(1);
-      this.string_table_.set(new_string, 1);
+      /**
+       * C++中两个地址相同的对象全等
+       * 所以上面的代码value直接用一个给定指针代替
+       * JS不存在这种科技 因此用Hash值作为标示判定对象的相等
+       */
+      entry.key = key;
+      entry.value = key.Hash();
     }
     // 源码将void*强转返回 => reinterpret_cast<AstRawString*>
-    return new_string;
+    return entry.key;
   }
   /**
    * 
    * @param {AstRawString*} key 源码是指针 这里只能用对象代替
    * @param {Number} value Hash值
    */
-  LookupOrInsert(key, value) {
-    if (this.string_table_.has(key)) {
-      this.string_table_.get(key);
-      return key;
+  LookupOrInsert(key, hash) {
+    let tar = this.string_table_.find(v => v.hash === hash);
+    if(!tar) {
+      let result = {
+        key: null,
+        value: null
+      };
+      this.string_table_.push(result);
+      return result;
     }
-    this.string_table_.set(key, value);
-    return null;
+    return tar;
   }
   AddString(string) {
     /**

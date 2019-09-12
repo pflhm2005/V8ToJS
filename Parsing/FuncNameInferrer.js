@@ -1,3 +1,5 @@
+import { IsUppercase } from "../util";
+
 const kEnclosingConstructorName = 0;
 const kLiteralName = 1;
 const kVariableName = 2;
@@ -44,8 +46,9 @@ export class FuncNameInferrer {
     }
   }
   PushEnclosingName(name) {
-    // if(!name.IsEmpty() && )
+    if(!name.IsEmpty() && IsUppercase(name.FirstCharacter())) {
       this.names_stack_.push(new Name(name, kEnclosingConstructorName));
+    }
   }
   AddFunction(func_to_infer) {
     if(this.IsOpen()) {

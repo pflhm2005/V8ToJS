@@ -38,8 +38,9 @@ export const IsInRange = (c, lower_limit, higher_limit) => {
  * 将大写字母转换为小写字母
  */
 export const AsciiAlphaToLower = (c) => {
-  if(typeof c !== 'number') c = c.charCodeAt();
-  return String.fromCharCode(c | 0x20);
+  // if(typeof c !== 'number') c = c.charCodeAt();
+  // return String.fromCharCode(c | 0x20);
+  return c.toLowerCase();
 }
 
 
@@ -110,6 +111,7 @@ export const IsIdentifierStart = (c) => {
   if (typeof c === 'number') c = UnicodeToAsciiMapping[c];
   return ('A' <= c && c <= 'Z') || ('a' <= c && c <= 'z') || c === '_';
 }
+export const IsUppercase = (c) => 'A' <= c && c <= 'Z';
 
 /**
  * 判断token是否在给定范围内
@@ -129,7 +131,8 @@ export const TokenIsInRange = (token, lower_limit, higher_limit) => {
  * 逻辑如下 反正相当于JS的includes
  */
 const IsInString = (tar, c, i = 0) => {
-  return i >= tar.length ? false : tar[i] === c ? true : IsInString(tar, c, i + 1);
+  // return i >= tar.length ? false : tar[i] === c ? true : IsInString(tar, c, i + 1);
+  return tar.includes(c);
 }
 
 /**
@@ -271,6 +274,6 @@ const token_flags = TokenMapping.map(o => {
 
 export const IsPropertyName = (token) => {
   let idx = TokenEnumList.findIndex(v => v === token.slice(7));
-  return token_flags[idx];
-  // return IsPropertyNameBits.decode(token_flags[idx]);
+  // return token_flags[idx];
+  return IsPropertyNameBits.decode(token_flags[idx]);
 }

@@ -8,6 +8,8 @@ export default class AstRawString {
     this.hash_field_ = hash_field_;
     this.is_one_byte_ = is_one_byte_;
   }
+  IsEmpty() { return this.literal_bytes_.length === 0; }
+  FirstCharacter() { return this.literal_bytes_[0]; }
   StringToArrayIndex(stream, index) {
     let result = {
       is_array_index: false,
