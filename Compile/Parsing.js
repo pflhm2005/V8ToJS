@@ -15,13 +15,13 @@ export default class Parsing {
 
     let result = parser.ParseProgram(isolate, info);
     info.literal_ = result;
-    if(result) {
+    if (result) {
       info.set_language_mode(info.literal_.language_mode());
-      if(info.is_eval()) info.set_allow_eval_cache(parser.allow_eval_cache_);
+      if (info.is_eval()) info.set_allow_eval_cache(parser.allow_eval_cache_);
     }
     
-    if(mode === kYes) {
-      // if(result === null) 
+    if (mode === kYes) {
+      // if (result === null) 
       parser.UpdateStatistics(isolate, info.script_);
     }
     return result !== null;

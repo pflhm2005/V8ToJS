@@ -34,7 +34,7 @@ class CompilationJob {
     this.state_ = initial_state;
   }
   UpdateState(status, next_state) {
-    if(status === SUCCEEDED) this.state_ = next_state;
+    if (status === SUCCEEDED) this.state_ = next_state;
     else this.state_ = kFailed;
     return status;
   }
@@ -70,7 +70,7 @@ class InterpreterCompilationJob extends UnoptimizedCompilationJob {
     // 可以激活FLAG_print_ast标记来打印抽象语法树
     // MaybePrintAst(parse_info(), compilation_info());
     this.generator_.GenerateBytecode(this.stack_limit_);
-    if(this.generator_.stack_overflow_) return FAILED;
+    if (this.generator_.stack_overflow_) return FAILED;
     return SUCCEEDED;
   }
 }
@@ -83,14 +83,14 @@ class UnoptimizedCompilationInfo {
     this.feedback_vector_spec_ = null;
     this.literal_ = literal;
     this.source_range_map_ = parse_info.source_range_map_;
-    if(parse_info.is_eval()) this.SetFlag(kIsEval);
-    if(parse_info.collect_type_profile()) this.SetFlag(kCollectTypeProfile);
-    if(parse_info.might_always_opt()) this.SetFlag(kMightAlwaysOpt);
-    if(parse_info.collect_source_positions()) this.SetFlag(kCollectSourcePositions);
+    if (parse_info.is_eval()) this.SetFlag(kIsEval);
+    if (parse_info.collect_type_profile()) this.SetFlag(kCollectTypeProfile);
+    if (parse_info.might_always_opt()) this.SetFlag(kMightAlwaysOpt);
+    if (parse_info.collect_source_positions()) this.SetFlag(kCollectSourcePositions);
   }
   GetFlag(f) { return (this.flags_ & f) !== 0; }
   SetFlag(f, v = false) {
-    if(v) this.flags_ |= f;
+    if (v) this.flags_ |= f;
     else this.flags_ &= ~f;
   }
   collect_source_positions() { return this.GetFlag(kCollectSourcePositions); }
@@ -103,7 +103,7 @@ class UnoptimizedCompilationInfo {
     return this.scope().num_parameters() + 1;
   }
   SourcePositionRecordingMode() {
-    if(this.collect_source_positions()) return RECORD_SOURCE_POSITIONS;
+    if (this.collect_source_positions()) return RECORD_SOURCE_POSITIONS;
     return this.literal_.AllowsLazyCompilation() ? RECORD_SOURCE_POSITIONS : LAZY_SOURCE_POSITIONS;
   }
 }

@@ -31,10 +31,19 @@ const kLexicalDeclaration = 5;
 const kMaxNumFunctionLocals = (1 << 23) - 1;
 
 class ExpressionScope {
+  /**
+   * ExpressionScope构造时做两件事
+   * 1、将当前parser的expression_scope_赋值给parent_属性
+   * 2、设置parser的expression_scope_为新生成的实例
+   * 析构时会将parent_赋值给parser_的expression_scope_
+   * 因此这里会形成一个scope链
+   * JS无法模拟析构 头疼
+   */
   constructor(parser, type) {
     this.parser_ = parser;
     this.parent_ = parser.expression_scope_;
     this.type_ = type;
+    parser.expression_scope_ = this;
   }
   CanBeParameterDeclaration() {
     return IsInRange(this.type_, kMaybeArrowParameterDeclaration, kParameterDeclaration);
@@ -113,7 +122,7 @@ export class ExpressionParsingScope extends ExpressionScope {
   ValidateExpression() { this.Validate(kExpressionIndex); }
   is_valid(index) { return !locations_[index].IsValid(); }
   Validate(index) {
-    if(!is_valid(index)) RTCStatsReport(index);
+    if (!is_valid(index)) RTCStatsReport(index);
     this.mark_verified();
   }
   TrackVariable(variable) {
@@ -190,7 +199,7 @@ export class AccumulationScope {
     // }
   }
   Accumulate() {
-    if(this.scope_ === null) return;
+    if (this.scope_ === null) return;
   }
   copy(entry) {
     this.messages_[entry] = this.scope_.messages_[entry];

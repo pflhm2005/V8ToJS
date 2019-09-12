@@ -80,7 +80,7 @@ export default class BytecodeGenerator {
     this.catch_prediction_ = UNCAUGHT;
     this.stack_limit_ = 0;
     this.stack_overflow_ = false;
-    if(info.has_source_range_map()) this.block_coverage_builder_ = new BlockCoverageBuilder(null, new BytecodeArrayBuilder(), info.source_range_map_);
+    if (info.has_source_range_map()) this.block_coverage_builder_ = new BlockCoverageBuilder(null, new BytecodeArrayBuilder(), info.source_range_map_);
   }
   feedback_spec() {
     return this.info_.feedback_vector_spec_;
@@ -106,8 +106,8 @@ export default class BytecodeGenerator {
 
     this.AllocateTopLevelRegisters();
 
-    if(this.info_.literal_.CanSuspend()) this.BuildGeneratorPrologue();
-    if(this.closure_scope_.NeedsContext()) {
+    if (this.info_.literal_.CanSuspend()) this.BuildGeneratorPrologue();
+    if (this.closure_scope_.NeedsContext()) {
       this.BuildNewLocalActivationContext();
       let local_function_context = new ContextScope(this, this.closure_scope_);
       this.BuildLocalActivationContextInitialization();
@@ -120,7 +120,7 @@ export default class BytecodeGenerator {
     this.VisitArgumentsObject(this.closure_scope_.arguments_);
   }
   VisitArgumentsObject(variable) {
-    if(variable === null) return;
+    if (variable === null) return;
     this.builder_.CreateArguments(this.closure_scope_.GetArgumentsType());
     this.BuildVariableAssignment(variable, 'Token::ASSIGN', kElided);
   }

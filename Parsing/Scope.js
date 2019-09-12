@@ -170,9 +170,9 @@ export default class Scope extends ZoneObject {
    */
   AllowsLazyParsingWithoutUnresolvedVariables(outer) {
     for(let s = this; s !== outer; s = s.outer_scope_) {
-      if(s.is_eval_scope()) return this.is_sloppy(s.language_mode());
-      if(s.is_catch_scope()) continue;
-      if(s.is_with_scope()) continue;
+      if (s.is_eval_scope()) return this.is_sloppy(s.language_mode());
+      if (s.is_catch_scope()) continue;
+      if (s.is_with_scope()) continue;
       return false;
     }
     return true;
@@ -251,7 +251,7 @@ export default class Scope extends ZoneObject {
    */
   Declare(zone = null, name, mode, kind, initialization_flag, maybe_assigned_flag, was_added_param) {
     let { was_added, variable } = this.variables_.Declare(zone, this, name, mode, kind, initialization_flag, maybe_assigned_flag, was_added_param);
-    if(was_added) this.locals_.push(variable);
+    if (was_added) this.locals_.push(variable);
     return variable;
   }
   /**
@@ -288,7 +288,7 @@ export default class Scope extends ZoneObject {
     this.DeclareThis(ast_value_factory);
     // 生成.new.target变量
     this.new_target_ = this.Declare(null, ast_value_factory.GetOneByteStringInternal(ast_value_factory.new_target_string()), kConst, NORMAL_VARIABLE, kCreatedInitialized, kNotAssigned, false);
-    if(IsConciseMethod(this.function_kind_) || IsClassConstructor(this.function_kind_) || IsAccessorFunction(this.function_kind_)) {
+    if (IsConciseMethod(this.function_kind_) || IsClassConstructor(this.function_kind_) || IsAccessorFunction(this.function_kind_)) {
       this.EnsureRareData().this._function = this.Declare(null, ast_value_factory.GetOneByteStringInternal(ast_value_factory.this_function_string()), kConst, NORMAL_VARIABLE, kCreatedInitialized, kNotAssigned, false);
     }
   }
@@ -299,14 +299,14 @@ export default class Scope extends ZoneObject {
     this.receiver_ = new Variable(this, ast_value_factory.GetOneByteStringInternal(ast_value_factory.this_string()), p1, THIS_VARIABLE, p2, kNotAssigned);
   }
   EnsureRareData() {
-    if(this.rare_data_ === null) this.rare_data_ = new RareData();
+    if (this.rare_data_ === null) this.rare_data_ = new RareData();
     return this.rare_data_;
   }
   MakeParametersNonSimple() {
     this.SetHasNonSimpleParameters();
     for(let p of this.variables_) {
       let variable = p.value;
-      if(variable.is_parameter()) Variable.MakeParameterNonSimple();
+      if (variable.is_parameter()) Variable.MakeParameterNonSimple();
     }
   }
   SetHasNonSimpleParameters() {
@@ -323,13 +323,13 @@ export default class Scope extends ZoneObject {
    */
   DeclareParameter(name, mode, is_optional, is_rest, ast_value_factory, position) {
     let variable = null;
-    if(mode === kTemporary) variable = NewTemporary(name);
+    if (mode === kTemporary) variable = NewTemporary(name);
     else variable = this.LookupLocal(name);
     this.has_rest_ = is_rest;
     variable.initializer_position_ = position;
     this.params_.push(variable);
-    if(!is_rest) ++this.num_parameters_;
-    if(name === ast_value_factory.arguments_string()) this.has_arguments_parameter_ = true;
+    if (!is_rest) ++this.num_parameters_;
+    if (name === ast_value_factory.arguments_string()) this.has_arguments_parameter_ = true;
     variable.set_is_used();
     return variable;
   }

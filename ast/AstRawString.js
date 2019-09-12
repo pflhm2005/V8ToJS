@@ -32,7 +32,7 @@ export default class AstRawString {
     let d = ch - '0';
     let r = d;
     for(let i = 1; i < stream.length; i++) {
-      if(!TryAddIndexChar(r, stream[i])) {
+      if (!TryAddIndexChar(r, stream[i])) {
         result.is_array_index = false;
         return result;
       }
@@ -46,9 +46,9 @@ export default class AstRawString {
       is_array_index: false,
       index,
     };
-    if((this.hash_field_ & kIsNotArrayIndexMask) !== 0) return result;
+    if ((this.hash_field_ & kIsNotArrayIndexMask) !== 0) return result;
     result.is_array_index = true;
-    if(this.literal_bytes_.length <= kMaxCachedArrayIndexLength) {
+    if (this.literal_bytes_.length <= kMaxCachedArrayIndexLength) {
       result.index = ArrayIndexValueBits.decode(this.hash_field_);
     } else {
       result = StringToArrayIndex(this.literal_bytes_, index);

@@ -14,13 +14,13 @@ import Compiler from "./Complier";
 
 function GetScriptDetails(isolate, resource_name, resource_line_offset, resource_column_offset, source_map_url, host_defined_options) {
   let script_details = new ScriptDetails();
-  if(resource_name) script_details.name_obj = resource_name;
-  if(resource_line_offset) script_details.line_offset = resource_line_offset;
-  if(resource_column_offset) script_details.column_offset = resource_column_offset;
+  if (resource_name) script_details.name_obj = resource_name;
+  if (resource_line_offset) script_details.line_offset = resource_line_offset;
+  if (resource_column_offset) script_details.column_offset = resource_column_offset;
 
   script_details.host_defined_options = isolate.factory_.empty_fixed_array();
-  if(host_defined_options) script_details.host_defined_options = host_defined_options;
-  if(source_map_url) script_details.source_map_url = source_map_url;
+  if (host_defined_options) script_details.host_defined_options = host_defined_options;
+  if (source_map_url) script_details.source_map_url = source_map_url;
   return script_details;
 }
 
@@ -34,13 +34,13 @@ class ScriptCompiler {
   }
   static CompileUnboundInternal(isolate, source, options, no_cache_reason) {
     let script_data = new ScriptData();
-    if(options === kConsumeCodeCache) script_data = new ScriptData(source.cached_data.data, source.cached_data.length);
+    if (options === kConsumeCodeCache) script_data = new ScriptData(source.cached_data.data, source.cached_data.length);
     let script_details = GetScriptDetails(isolate, source.resource_name, source.resource_line_offset,
       source.resource_column_offset, source.source_map_url, source.host_defined_options);
     let maybe_function_info = Compiler.GetSharedFunctionInfoForScript(isolate, source.source_string, script_details,
       source.resource_options, null, script_data, options, no_cache_reason, NOT_NATIVES_CODE);
     
-    // if(options === kConsumeCodeCache) 
+    // if (options === kConsumeCodeCache) 
     return new UnboundScript(maybe_function_info);
   }
 }
@@ -104,7 +104,7 @@ export default class Script {
     return false;
   }
   static Compile(context, source, origin = null) {
-    if(origin) {
+    if (origin) {
       let script_source = new Source(source, origin);
       return ScriptCompiler.Compile(context, script_source);
     }

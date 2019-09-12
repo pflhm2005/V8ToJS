@@ -136,7 +136,7 @@ export default class ParseInfo {
 
   GetFlag(f) { return (this.flags_ & f) !== 0; }
   SetFlag(f, v = false) {
-    if(v) this.flags_ |= f;
+    if (v) this.flags_ |= f;
     else this.flags_ &= ~f;
   }
   /**
@@ -148,9 +148,9 @@ export default class ParseInfo {
    */
   CreateScript(isolate, source, origin_options, natives) {
     let script = null;
-    if(this.script_id_ === -1) isolate.factory_.NewScript(source);
+    if (this.script_id_ === -1) isolate.factory_.NewScript(source);
     else script = isolate.factory_.NewScriptWithId(source, this.script_id_);
-    // if(isolate.NeedsSourcePositionsForProfiling()) Script.InitLineEnds(script);
+    // if (isolate.NeedsSourcePositionsForProfiling()) Script.InitLineEnds(script);
 
     switch(natives) {
       case EXTENSION_CODE:
@@ -172,7 +172,7 @@ export default class ParseInfo {
     this.SetFlag(kAllowLazyParsing);
     this.SetFlag(kToplevel);
     this.SetFlag(kCollectTypeProfile, isolate.type_profile_mode_ === kCollect && script.type_ === TYPE_NORMAL);
-    if(script.is_wrapped()) this.function_syntax_kind_ = kWrapped;
+    if (script.is_wrapped()) this.function_syntax_kind_ = kWrapped;
   }
   set_script(script) {
     this.script_= script;

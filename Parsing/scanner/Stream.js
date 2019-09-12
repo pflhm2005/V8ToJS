@@ -31,7 +31,7 @@ export default class Stream {
     return this.ReadBlock();
   }
   ReadBlock() {
-    if(this.buffer_end_ !== 0) return false;
+    if (this.buffer_end_ !== 0) return false;
     this.buffer_ = this.source_string.split('').map(v => UnicodeToAsciiMapping.indexOf(v));
     this.buffer_end_ = this.buffer_.length;
     /**
@@ -91,7 +91,7 @@ export default class Stream {
 
     if (next_cursor_pos === this.buffer_end_) {
       this.buffer_cursor_ = this.buffer_end_;
-      if(!this.ReadBlockChecked()) {
+      if (!this.ReadBlockChecked()) {
         this.buffer_cursor_++;
         return kEndOfInput;
       }

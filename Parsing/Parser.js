@@ -27,6 +27,7 @@ import {
   kParamAfterRest 
 } from '../MessageTemplate';
 import { is_strict } from '../util';
+import { Parameter } from '../ast/Ast';
 
 
 /**
@@ -80,8 +81,8 @@ class Parser extends ParserBase {
     let result = null;
     {
       let outer = this.original_scope_;
-      if(info.is_eval()) outer = this.NewEvalScope(outer);
-      else if(this.parsing_module_) outer = this.NewModuleScope(info.script_scope_);
+      if (info.is_eval()) outer = this.NewEvalScope(outer);
+      else if (this.parsing_module_) outer = this.NewModuleScope(info.script_scope_);
       // C++赋值深拷贝
       let scope = outer;
       scope.set_start_position(0);
@@ -93,7 +94,7 @@ class Parser extends ParserBase {
       let function_state = new FunctionState(this.function_state_, this.scope_, scope);
       // 这里暂时不知道是新的内存空间还是旧的
       let body = [];
-      if(this.parsing_module_) {}
+      if (this.parsing_module_) {}
       else if (info.is_wrapped_as_function()) this.ParseWrapped(isolate, info, body, scope, null);
       else {
         this.scope_.SetLanguageMode(info.is_strict_mode());
@@ -139,6 +140,8 @@ class Parser extends ParserBase {
     let operand = expression;
     return operand !== null && !operand.is_new_target();
   }
+  NullExpression() { return null; }
+  NullIdentifier() { return null; }
 
   GetIdentifier() {
     return this.GetSymbol();
@@ -156,10 +159,10 @@ class Parser extends ParserBase {
    * @returns {VariableProxy}
    */
   ExpressionFromIdentifier(name, start_position, infer = kYes) {
-    // 这个fni_暂时不知道干啥的 TODO
-    // if (infer === kYes) {
-    //   this.fni_.PushVariableName(name);
-    // }
+    // 
+    if (infer === kYes) {
+      this.fni_.PushVariableName(name);
+    }
     // 在当前的作用域下生成一个新的变量
     return this.expression_scope_.NewVariable(name, start_position);
   }
@@ -213,7 +216,7 @@ class Parser extends ParserBase {
     let vector = parsing_result.declarations;
     for (const declaration of vector) {
       // 这里的initializer是声明的初始值
-      if(!declaration.initializer) continue;
+      if (!declaration.initializer) continue;
       // 这里第二个参数是parsing_result.descriptor.kind 但是没有使用
       this.InitializeVariables(statements, declaration);
     }
@@ -221,7 +224,7 @@ class Parser extends ParserBase {
   }
   InitializeVariables(vector, declaration) {
     let pos = declaration.value_beg_pos;
-    if(pos === kNoSourcePosition) pos = declaration.initializer.position();
+    if (pos === kNoSourcePosition) pos = declaration.initializer.position();
     let assignment = this.ast_node_factory_.NewAssignment('Token::INIT', declaration.pattern, declaration.initializer, pos);
     vector.push(this.ast_node_factory_.NewExpressionStatement(assignment, pos));
   }
@@ -271,7 +274,7 @@ class Parser extends ParserBase {
      */
     let is_lazy = eager_compile_hint === kShouldLazyCompile;
     // 判断是否是顶级作用域
-    let is_top_level = this.AllowsLazyParsingWithoutUnresolvedVariables();
+    let is_top_level = this.scope_.AllowsLazyParsingWithoutUnresolvedVariables(this.original_scope_);
     let is_eager_top_level_function = !is_lazy && is_top_level;
     let is_lazy_top_level_function = is_lazy && is_top_level;
     let is_lazy_inner_function = is_lazy && !is_top_level;
@@ -322,14 +325,13 @@ class Parser extends ParserBase {
     }
 
     let { num_parameters, function_length, has_duplicate_parameters, expected_property_count, suspend_count } = result;
-    return;
     /**
      * 解析完函数后再检测函数名合法性
      * 因为函数名的严格模式取决于外部作用域
      */
     language_mode = scope.language_mode();
     this.CheckFunctionName(language_mode, function_name, function_name_validity, function_name_location);
-    if(is_strict(language_mode)) this.CheckStrictOctalLiteral(scope.start_position(), scope.end_position());
+    if (is_strict(language_mode)) this.CheckStrictOctalLiteral(scope.start_position(), scope.end_position());
     let duplicate_parameters = has_duplicate_parameters ? kHasDuplicateParameters : kNoDuplicateParameters;
 
     let function_literal = this.ast_node_factory_.NewFunctionLiteral(
@@ -342,12 +344,9 @@ class Parser extends ParserBase {
     this.RecordFunctionLiteralSourceRange(function_literal);
 
     // if (should_post_parallel_task) {}
-    if(should_infer_name) this.fni_.AddFunction(function_literal);
+    if (should_infer_name) this.fni_.AddFunction(function_literal);
 
     return function_literal;
-  }
-  AllowsLazyParsingWithoutUnresolvedVariables() {
-    return this.scope_.AllowsLazyParsingWithoutUnresolvedVariables(this.original_scope_);
   }
   parse_lazily() {
     return this.mode_ === PARSE_LAZILY;
@@ -357,8 +356,8 @@ class Parser extends ParserBase {
   }
   SetLanguageMode(scope, mode) {
     let feature;
-    if(is_sloppy(mode)) feature = kSloppyMode;
-    else if(is_strict(mode)) feature = kStrictMode;
+    if (is_sloppy(mode)) feature = kSloppyMode;
+    else if (is_strict(mode)) feature = kStrictMode;
     else this.UNREACHABLE();
     ++this.use_counts_[feature];
     scope.SetLanguageMode(mode);
@@ -390,7 +389,7 @@ class Parser extends ParserBase {
     let is_wrapped = function_syntax_kind === kWrapped;
 
     let expected_parameters_end_pos = this.parameters_end_pos_;
-    if(expected_parameters_end_pos !== kNoSourcePosition) this.parameters_end_pos_ = kNoSourcePosition;
+    if (expected_parameters_end_pos !== kNoSourcePosition) this.parameters_end_pos_ = kNoSourcePosition;
 
     let formals = new ParserFormalParameters(function_scope);
     {
@@ -398,7 +397,7 @@ class Parser extends ParserBase {
       /**
        * 类型待定
        */
-      if(is_wrapped) {
+      if (is_wrapped) {
         for(const arg of arguments_for_wrapped_function) {
           const is_rest = false;
           let argument = this.ExpressionFromIdentifier(arg, kNoSourcePosition);
@@ -412,10 +411,10 @@ class Parser extends ParserBase {
       else {
         // 解析参数
         this.ParseFormalParameterList(formals);
-        if(expected_parameters_end_pos !== kNoSourcePosition) {
+        if (expected_parameters_end_pos !== kNoSourcePosition) {
           let position = this.peek_position();
-          if(position < expected_parameters_end_pos) throw new Error(kArgStringTerminatesParametersEarly);
-          else if(position > expected_parameters_end_pos) throw new Error(kUnexpectedEndOfArgString);
+          if (position < expected_parameters_end_pos) throw new Error(kArgStringTerminatesParametersEarly);
+          else if (position > expected_parameters_end_pos) throw new Error(kUnexpectedEndOfArgString);
           return;
         }
         this.Expect('Token::RPAREN');
@@ -432,7 +431,7 @@ class Parser extends ParserBase {
     /**
      * 解析函数体
      */
-    // this.ParseFunctionBody(body, function_name, pos, formals, kind, function_syntax_kind, _kBlock);
+    this.ParseFunctionBody(body, function_name, pos, formals, kind, function_syntax_kind, _kBlock);
     has_duplicate_parameters = formals.has_duplicate();
     expected_property_count = function_state.expected_property_count_;
     suspend_count = function_state.suspend_count_;
@@ -453,24 +452,24 @@ class Parser extends ParserBase {
      */
     let parent_parameters_ = this.parameters_;
     this.parameter_ = parameters;
-    if(this.peek() !== 'Token::RPAREN') {
+    if (this.peek() !== 'Token::RPAREN') {
       while(true) {
         // 形参数量有限制
-        if(parameters.arity + 1 > kMaxArguments) throw new Error(kTooManyParameters);
-        // 检查...运算符
+        if (parameters.arity + 1 > kMaxArguments) throw new Error(kTooManyParameters);
+        // 检查'...'运算符
         parameters.has_rest = this.Check('Token::ELLIPSIS');
         this.ParseFormalParameter(parameters);
 
-        if(parameters.has_rest) {
+        if (parameters.has_rest) {
           parameters.is_simple = false;
-          // function a(a, ...b,) {} 这种也是不合法的 rest后面不能加括号
-          if(this.peek() === 'Token::COMMA') throw new Error(kParamAfterRest);
+          // function a(a, ...b,) {} 这种也是不合法的 rest后面不能加逗号
+          if (this.peek() === 'Token::COMMA') throw new Error(kParamAfterRest);
           break;
         }
         // 代表解析完了
-        if(!this.Check('Token::COMMA')) break;
+        if (!this.Check('Token::COMMA')) break;
         // 形参最后的逗号 function a(a, b,) {}
-        if(this.peek() === 'Token::RPAREN') break;
+        if (this.peek() === 'Token::RPAREN') break;
       }
     }
     this.DeclareFormalParameters(parameters);
@@ -488,18 +487,22 @@ class Parser extends ParserBase {
      * 简单 (a, b) => {}
      * 复杂 ({a,b }, [c, d]) => {}
      */
-    if(this.IsIdentifier(pattern)) this.ClassifyParameter(pattern, pos, this.end_position());
+    if (this.IsIdentifier(pattern)) this.ClassifyParameter(pattern, pos, this.end_position());
     else parameters.is_simple = false;
 
     let initializer = this.NullExpression();
     // 解析参数默认值
-    if(this.Check('Token::ASSIGN')) {
+    if (this.Check('Token::ASSIGN')) {
       parameters.is_simple = false;
       // rest参数不能有默认值
-      if(parameters.has_rest) throw new Error(kRestDefaultInitializer);
+      if (parameters.has_rest) throw new Error(kRestDefaultInitializer);
 
       // AcceptINScope accept_in_scope(this, true);
       initializer = this.ParseAssignmentExpression();
+      /**
+       * 这一步基本上不会进
+       * function(a = function(){}, b = class c{}) 一般人不会这么设置默认值
+       */
       this.SetFunctionNameFromIdentifierRef(initializer, pattern);
     }
     let decls = this.scope_.declarations();
@@ -512,34 +515,34 @@ class Parser extends ParserBase {
     this.AddFormalParameter(parameters, pattern, initializer, this.end_position(), parameters.has_rest);
   }
   /**
-   * 给形参设置默认值
+   * 给函数设名字
    * 其中value可能是function也可能是class
    * @param {Expression*} value 值
    * @param {Expression*} identifier 键
    */
   SetFunctionNameFromIdentifierRef(value, identifier) {
-    if(!identifier.IsVariableProxy()) return; 
+    if (!identifier.IsVariableProxy()) return; 
     this.SetFunctionName(value, identifier.raw_name());
   }
   SetFunctionName(value, name, prefix = null) {
     /**
-     * 匿名函数、属性简写、get/set
+     * 匿名函数、属性简写、get/set才需要名字
      */
-    if(!value.IsAnonymousFunctionDefinition() &&
+    if (!value.IsAnonymousFunctionDefinition() &&
       !value.IsConciseMethodDefinition() &&
       !value.IsAccessorFunctionDefinition()) return;
     // 这里调用了AsFunctionLiteral方法进行了强转
     let f = value;
     // 如果是class 这里同样会调用AsClassLiteral强转
-    if(value.IsClassLiteral()) f = v._constructor();
+    if (value.IsClassLiteral()) f = v._constructor();
     /**
      * 到这里最终会变成一个函数字面量
      * 只有FunctionLiteral类才有set_raw_name方法
      */
-    if(f !== null) {
+    if (f !== null) {
       let cons_name = null;
-      if(name !== null) {
-        if(prefix !== null) cons_name = this.ast_value_factory_.NewConsString(prefix, name);
+      if (name !== null) {
+        if (prefix !== null) cons_name = this.ast_value_factory_.NewConsString(prefix, name);
         else cons_name = this.ast_value_factory_.NewConsString(name);
       }
       f.set_raw_name(cons_name);
@@ -559,14 +562,14 @@ class Parser extends ParserBase {
     parameters.params.push(parameter);
   }
   ClassifyParameter(parameters, begin, end) {
-    if(this.IsEvalOrArguments(parameters)) throw new Error(kStrictEvalArguments);
+    if (this.IsEvalOrArguments(parameters)) throw new Error(kStrictEvalArguments);
   }
   CheckArityRestrictions(param_count, function_kind, has_rest, formals_start_pos, formals_end_pos) {
-    if(this.HasCheckedSyntax()) return;
-    if(IsGetterFunction(function_kind) && param_count !== 0) throw new Error(kBadGetterArity);
-    else if(IsSetterFunction(function_kind)) {
-      if(param_count !== 1) throw new Error(kBadSetterArity);
-      if(has_rest) throw new Error(kBadSetterRestParameter);
+    if (this.HasCheckedSyntax()) return;
+    if (IsGetterFunction(function_kind) && param_count !== 0) throw new Error(kBadGetterArity);
+    else if (IsSetterFunction(function_kind)) {
+      if (param_count !== 1) throw new Error(kBadSetterArity);
+      if (has_rest) throw new Error(kBadSetterRestParameter);
     }
   }
   HasCheckedSyntax() {
@@ -585,7 +588,7 @@ class Parser extends ParserBase {
      */
     let is_simple = parameters.is_simple;
     let scope = parameters.scope;
-    if(!is_simple) scope.MakeParametersNonSimple();
+    if (!is_simple) scope.MakeParametersNonSimple();
     for(let parameter of parameters.params) {
       let is_optional = parameter.initializer_ !== null;
       // 根据simple属性来决定参数
@@ -611,7 +614,6 @@ class Parser extends ParserBase {
   }
  
   DeclareFunction() {
-
   }
 }
 

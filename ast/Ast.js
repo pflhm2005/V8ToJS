@@ -384,7 +384,7 @@ class ObjectLiteral extends AggregateLiteral {
        * 1、{ a: 1, a: 2 }  重复定义
        * 2、{ a: 1, get a() {} }  覆盖定义
        */
-      if(!entry) {
+      if (!entry) {
         table.push({ value: literal, hash });
       }
       /**
@@ -396,7 +396,7 @@ class ObjectLiteral extends AggregateLiteral {
         (property.kind_ === SETTER && later_kind === GETTER);
         if (!complementary_accessors) {
           property.emit_store_ = false;
-          if(later_kind === GETTER || later_kind === SETTER) entry.value = property;
+          if (later_kind === GETTER || later_kind === SETTER) entry.value = property;
         }
       }
     }
@@ -499,7 +499,7 @@ class ObjectLiteralProperty extends LiteralProperty {
   constructor(ast_value_factory, key, value, is_computed_name) {
     super(key, value, is_computed_name);
     this.emit_store_ = true;
-    if(!is_computed_name && key.IsString() &&
+    if (!is_computed_name && key.IsString() &&
     key.AsRawString().literal_bytes_ === ast_value_factory.proto_string()) {
       this.kind_ = PROTOTYPE;
     } else if (this.value_.AsMaterializedLiteral() !== null) {

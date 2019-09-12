@@ -55,8 +55,8 @@ export const IsGetterFunction = kind => kind === kGetterFunction;
 export const IsSetterFunction = kind => kind === kSetterFunction;
 
 export const IsValidIdentifier = (token, language_mode, is_generator, disallow_await) => {
-  if(TokenIsInRange(token, 'IDENTIFIER', 'ASYNC')) return true;
-  if(token === 'Token::AWAIT') return !disallow_await;
-  if(token === 'Token::YIELD') return !is_generator && is_sloppy(language_mode);
+  if (TokenIsInRange(token, 'IDENTIFIER', 'ASYNC')) return true;
+  if (token === 'Token::AWAIT') return !disallow_await;
+  if (token === 'Token::YIELD') return !is_generator && is_sloppy(language_mode);
   return IsStrictReservedWord(token) && is_sloppy(language_mode);
 }

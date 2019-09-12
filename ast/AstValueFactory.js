@@ -103,7 +103,7 @@ export default class AstValueFactory {
    */
   LookupOrInsert(key, hash) {
     let tar = this.string_table_.find(v => v.hash === hash);
-    if(!tar) {
+    if (!tar) {
       let result = {
         key: null,
         value: null

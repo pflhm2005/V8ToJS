@@ -124,7 +124,7 @@ export default class Scanner {
     this.next().literal_chars.AddChar(c);
   }
   CurrentLiteralEquals(target) {
-    if(!this.is_literal_one_byte()) return false;
+    if (!this.is_literal_one_byte()) return false;
     let current = this.literal_one_byte_string();
     return current === target;
   }
@@ -354,7 +354,7 @@ export default class Scanner {
             this.UNREACHABLE();
         } 
       }
-      if(this.c0_ === kEndOfInput) return 'Token::EOS';
+      if (this.c0_ === kEndOfInput) return 'Token::EOS';
 
       token = this.SkipWhiteSpace();
     } while(token === 'Token::WHITESPACE')

@@ -170,7 +170,7 @@ export default class ParserBase {
   NewFunctionScope(kind) {
     let result = new FunctionDeclarationScope(null, this.scope_, FUNCTION_SCOPE, kind);
     this.function_state_.RecordFunctionOrEvalCall();
-    if(!IsArrowFunction(kind)) result.DeclareDefaultFunctionVariables(this.ast_value_factory_);
+    if (!IsArrowFunction(kind)) result.DeclareDefaultFunctionVariables(this.ast_value_factory_);
     return result;
   }
   NewScriptScope() {
@@ -185,8 +185,6 @@ export default class ParserBase {
     return null;
   }
   ResetFunctionLiteralId() { this.function_literal_id_ = 0; }
-  NullExpression() { return null; }
-  NullIdentifier() { return null; }
   language_mode() { return this.scope_.language_mode(); }
   peek() {
     return this.scanner_.peek();
@@ -235,8 +233,8 @@ export default class ParserBase {
 
     while(this.peek() !== end_token) {
       let stat = this.ParseStatementListItem();
-      if(stat === null) return;
-      if(stat.IsEmptyStatement()) continue;
+      if (stat === null) return;
+      if (stat.IsEmptyStatement()) continue;
       body.push(stat);
     }
   }
@@ -260,7 +258,7 @@ export default class ParserBase {
         }
         break;
       case 'Token::ASYNC':
-        if(this.peek() === 'Token::FUNCTION' && !this.scanner_.HasLineTerminatorBeforeNext()) {
+        if (this.peek() === 'Token::FUNCTION' && !this.scanner_.HasLineTerminatorBeforeNext()) {
           this.Consume('Token::ASYNC');
           return this.ParseAsyncFunctionDeclaration(null, false);
         }
@@ -284,7 +282,7 @@ export default class ParserBase {
     let pos = this.position();
     let flags = kIsNormal;
     // function *fn() {}表示Generator函数
-    if(this.Check('Token::MUL')) flags |= kIsGenerator;
+    if (this.Check('Token::MUL')) flags |= kIsGenerator;
     this.ParseHoistableDeclaration(pos, flags, names, default_export);
   }
   /**
@@ -302,7 +300,7 @@ export default class ParserBase {
    */
   ParseHoistableDeclaration(pos, flags, names, default_export) {
     // this.CheckStackOverflow(); TODO
-    if((flags & kIsAsync) !== 0 && this.Check('Token::MUL')) flag |= kIsGenerator;
+    if ((flags & kIsAsync) !== 0 && this.Check('Token::MUL')) flag |= kIsGenerator;
 
     // 函数名
     let name = null;
@@ -314,8 +312,8 @@ export default class ParserBase {
      * 内部依然会默认设置函数名 并跳过函数名检测阶段
      * function(){}
      */
-    if(this.peek() === 'Token::LPAREN') {
-      if(default_export) {
+    if (this.peek() === 'Token::LPAREN') {
+      if (default_export) {
         name = this.ast_value_factory_.default_string();
         variable_name = this.ast_value_factory_.dot_default_string();
         name_validity = kSkipFunctionNameCheck;
@@ -346,7 +344,7 @@ export default class ParserBase {
     this.PushEnclosingName(name);
     let function_kind = this.FunctionKindFor(flags);
     /**
-     * 解析函数参数与函数体
+     * 解析函数参数与函数体 跳去parser类
      * @returns {FunctionLiteral}
      */
     let functionLiteral = this.ParseFunctionLiteral(name, this.scanner_.location(), name_validity, function_kind, pos, kDeclaration, this.language_mode(), null);
@@ -359,7 +357,7 @@ export default class ParserBase {
   }
   ParseIdentifier(function_kind) {
     let next = this.Next();
-    if(!IsValidIdentifier(next, this.language_mode(), 
+    if (!IsValidIdentifier(next, this.language_mode(), 
     IsGeneratorFunction(function_kind), this.parsing_module_ || IsAsyncFunction(function_kind))) {
       throw new Error('UnexpectedToken');
     }
@@ -422,7 +420,7 @@ export default class ParserBase {
    */
   ParseVariableStatement(var_context, names) {
     let parsing_result = new DeclarationParsingResult();
-    let result = this.ParseVariableDeclarations(var_context, parsing_result, names);
+    this.ParseVariableDeclarations(var_context, parsing_result, names);
     /**
      * 处理自动插入semicolon
      * 见ECMA-262 11.9 Automatic Semicolon Insertion
@@ -430,7 +428,7 @@ export default class ParserBase {
      * 在若干情况下 源代码需要自动插入分号
      */
     this.ExpectSemicolon();
-    return this.BuildInitializationBlock(result);
+    return this.BuildInitializationBlock(parsing_result);
   }
   ParseVariableDeclarations(var_context, parsing_result, names) {
     parsing_result.descriptor.kind = NORMAL_VARIABLE;
@@ -463,12 +461,12 @@ export default class ParserBase {
      * 由于传进来是一个nullptr 这里手动重置为数组
      */
     if (!names) names = [];
-    // 这一步的目的是设置scope参数
-    this.expression_scope_ = new VariableDeclarationParsingScope(this, parsing_result.descriptor.mode, names);
+    // 这一步的目的是设置parser的expression_scope_参数 设置方式十分狗
+    new VariableDeclarationParsingScope(this, parsing_result.descriptor.mode, names);
     // 获取合适的作用域
     let target_scope = IsLexicalVariableMode(parsing_result.descriptor.mode) ? this.scope_ : this.scope_.GetDeclarationScope();
     let decls = target_scope.declarations();
-    let declaration_it = decls.length ? decls[decls.length - 1] : null;
+    let declaration_it = decls.length;
 
     let bindings_start = this.peek_position();
     /**
@@ -477,11 +475,12 @@ export default class ParserBase {
      */
     do {
       // let fni_state = new State(this.fni_);
+      this.fni_.scope_depth_++;
 
       let decl_pos = this.peek_position();
       // 变量名 => AstRawString*
       let name = null;
-      // 抽象语法树节点 => Expression*
+      // 变量的值 => Expression*
       let pattern = null;
       // 检查下一个token是否是标识符
       if (IsAnyIdentifier(this.peek())) {
@@ -595,22 +594,21 @@ export default class ParserBase {
        * 当成简单的遍历
        * 这里的逻辑JS极难模拟 做简化处理
        */
-      let declaration_end = decls[decls.length - 1];
-      if(declaration_it === null) declaration_end.var().initializer_position_ = initializer_position;
-      // else {
-      //   for(;declaration_it !== declaration_end;declaration_it = declaration_it.next_) {
-      //     declaration_it.var().set_initializer_position(initializer_position);
-      //   }
-      // }
+      let declaration_end = decls.length;
+      for(; declaration_it < declaration_end; declaration_it++) {
+        decls[declaration_it].var().initializer_position_ = initializer_position;
+      }
 
       let decl = new Declaration(pattern, value);
       decl.value_beg_pos = value_beg_pos;
 
       parsing_result.declarations.push(decl);
+
+      this.fni_.names_stack_ = [];
+      this.fni_.scope_depth_--;
     } while (this.Check('Token::COMMA'));
 
     parsing_result.bindings_loc = new Location(bindings_start, this.end_position());
-    return parsing_result;
   }
   /**
    * 跳到scanner实现
@@ -627,11 +625,11 @@ export default class ParserBase {
   // NewRawVariable(name, pos) { return this.ast_node_factory_.NewVariableProxy(name, NORMAL_VARIABLE, pos); }
 
   /**
-   * 处理赋值语法
+   * 处理赋值表达式
    * @returns {Assignment} 返回赋值右值
    */
   ParseAssignmentExpression() {
-    // let expression_scope = new ExpressionParsingScope(this);
+    let expression_scope = new ExpressionParsingScope(this);
     let result = this.ParseAssignmentExpressionCoverGrammar();
     // expression_scope.ValidateExpression();
     return result;
@@ -649,7 +647,7 @@ export default class ParserBase {
    */
   ParseAssignmentExpressionCoverGrammar() {
     let lhs_beg_pos = this.peek_position();
-    if(this.peek() === 'Token:YIELD' && this.is_generator()) return this.ParseYieldExpression();
+    if (this.peek() === 'Token:YIELD' && this.is_generator()) return this.ParseYieldExpression();
     // FuncNameInferrerState fni_state(&fni_);
     /**
      * 解析条件表达式
@@ -662,7 +660,7 @@ export default class ParserBase {
     // 箭头函数 V8_UNLIKELY
     if (op === 'Token::ARROW') {
       let loc = new Location(lhs_beg_pos, this.end_position());
-      // if(...) return this.FailureExpression();
+      // if (...) return this.FailureExpression();
       // TODO
     }
 
@@ -698,10 +696,10 @@ export default class ParserBase {
    * 处理二元表达式
    */
   ParseBinaryExpression(prec) {
-    if(prec < 4) throw new Error('We start using the binary expression parser for prec >= 4 only!');
+    if (prec < 4) throw new Error('We start using the binary expression parser for prec >= 4 only!');
     let x = this.ParseUnaryExpression();
     let prec1 = Precedence(this.peek(), this.accept_IN_);
-    if(prec1 >= prec) return this.ParseBinaryContinuation(x, prec, prec1);
+    if (prec1 >= prec) return this.ParseBinaryContinuation(x, prec, prec1);
     return x;
   }
   /**
@@ -969,8 +967,8 @@ export default class ParserBase {
       case kShorthandOrClassField:
       case kShorthand: {
         // TODO
-        // if(IsValidIdentifier(...))
-        // if(name_token === 'Token::AWAIT') {}
+        // if (IsValidIdentifier(...))
+        // if (name_token === 'Token::AWAIT') {}
         let lhs = this.ExpressionFromIdentifier(name, next_loc.beg_pos);
         // if (!this.IsAssignableIdentifier()) {}
 
@@ -1024,7 +1022,7 @@ export default class ParserBase {
         return this.NewStringLiteral(prop_info.name, this.position());
       }
       // V8_UNLIKELY
-      if(this.scanner_.literal_contains_escapes()) throw new Error('UnexpectedToken Token::ESCAPED_KEYWORD');
+      if (this.scanner_.literal_contains_escapes()) throw new Error('UnexpectedToken Token::ESCAPED_KEYWORD');
       // 给属性上标记
       prop_info.function_flags = kIsAsync;
       prop_info.kind = kMethod;
@@ -1075,11 +1073,11 @@ export default class ParserBase {
         prop_info.is_private = true;
         is_array_index = false;
         this.Consume('Token::PRIVATE_NAME');
-        if(prop_info.kind === kNotSet) prop_info.ParsePropertyKindFromToken(this.peek());
+        if (prop_info.kind === kNotSet) prop_info.ParsePropertyKindFromToken(this.peek());
         prop_info.name = this.GetIdentifier();
         // V8_UNLIKELY
-        if(prop_info.position === kObjectLiteral) throw new Error('UnexpectedToken Token::PRIVATE_NAME');
-        // if(allow_harmony_private_methods() && )
+        if (prop_info.position === kObjectLiteral) throw new Error('UnexpectedToken Token::PRIVATE_NAME');
+        // if (allow_harmony_private_methods() && )
         break;
       }
       /**
@@ -1125,7 +1123,7 @@ export default class ParserBase {
          */
         let expression = this.ParseAssignmentExpression();
         this.Expect('Token::RBRACK');
-        if(prop_info.kind === kNotSet) prop_info.ParsePropertyKindFromToken(this.peek());
+        if (prop_info.kind === kNotSet) prop_info.ParsePropertyKindFromToken(this.peek());
         return expression;
       }
       /**
@@ -1190,15 +1188,15 @@ export default class ParserBase {
     let beg_pos = this.peek_position();
     let token = this.peek();
     let result = null;
-    if(IsAnyIdentifier(token)) {
+    if (IsAnyIdentifier(token)) {
       let name = this.ParseAndClassifyIdentifier(this.Next());
       // 严格模式禁用eval与arguments
-      if(is_strict(this.language_mode()) && this.IsEvalOrArguments(name)) throw new Error(kStrictEvalArguments);
+      if (is_strict(this.language_mode()) && this.IsEvalOrArguments(name)) throw new Error(kStrictEvalArguments);
       return this.ExpressionFromIdentifier(name, beg_pos);
     }
     // CheckStackOverflow();
-    if(token === 'Token::LBRACK') result = this.ParseArrayLiteral();
-    else if(token === 'Token::LBRACE') result = this.ParseObjectLiteral();
+    if (token === 'Token::LBRACK') result = this.ParseArrayLiteral();
+    else if (token === 'Token::LBRACE') result = this.ParseObjectLiteral();
     else throw new Error('UnexpectedToken');
 
     return result;
@@ -1237,7 +1235,7 @@ export default class ParserBase {
   Expect(token) {
     let next = this.Next();
     // V8_UNLIKELY
-    if(next !== token) {
+    if (next !== token) {
       throw new Error('UnexpectedToken');
     }
   }
@@ -1265,14 +1263,14 @@ export default class ParserBase {
     /**
      * 正常情况下会有个分号
      */
-    if(tok === 'Token::SEMICOLON') {
+    if (tok === 'Token::SEMICOLON') {
       this.Next();
       return;
     }
     /**
      * ;, }, EOS
      */
-    if(this.scanner_.HasLineTerminatorBeforeNext() || IsAutoSemicolon(tok)) {
+    if (this.scanner_.HasLineTerminatorBeforeNext() || IsAutoSemicolon(tok)) {
       return ;
     }
     throw new Error('UnexpectedToken');
@@ -1311,7 +1309,7 @@ class FormalParametersBase {
    * @param {bool} is_rest 是否是rest参数
    */
   UpdateArityAndFunctionLength(is_optional, is_rest) {
-    if(!is_optional && !is_rest && this.function_length === this.arity) ++this.function_length;
+    if (!is_optional && !is_rest && this.function_length === this.arity) ++this.function_length;
     ++this.arity;
   }
 }

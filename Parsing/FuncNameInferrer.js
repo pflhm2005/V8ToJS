@@ -41,25 +41,25 @@ export class FuncNameInferrer {
     }
   }
   PushLiteralName(name) {
-    if(this.IsOpen() && name !== this.ast_value_factory_.prototype_string()) {
+    if (this.IsOpen() && name !== this.ast_value_factory_.prototype_string()) {
       this.names_stack_.push(new Name(name, kLiteralName));
     }
   }
   PushEnclosingName(name) {
-    if(!name.IsEmpty() && IsUppercase(name.FirstCharacter())) {
+    if (!name.IsEmpty() && IsUppercase(name.FirstCharacter())) {
       this.names_stack_.push(new Name(name, kEnclosingConstructorName));
     }
   }
   AddFunction(func_to_infer) {
-    if(this.IsOpen()) {
+    if (this.IsOpen()) {
       this.funcs_to_infer_.push(func_to_infer);
     }
   }
   RemoveLastFunction() {
-    if(this.IsOpen() && !this.funcs_to_infer_.length) this.funcs_to_infer_.pop();
+    if (this.IsOpen() && !this.funcs_to_infer_.length) this.funcs_to_infer_.pop();
   }
   Infer() {
-    if(!this.funcs_to_infer_.length) this.InferFunctionsNames();
+    if (!this.funcs_to_infer_.length) this.InferFunctionsNames();
   }
   InferFunctionsNames() {
     let func_name = this.MakeNameFromStack();
@@ -69,13 +69,13 @@ export class FuncNameInferrer {
     this.funcs_to_infer_ = [];
   }
   MakeNameFromStack() {
-    if(this.names_stack_.length === 0) return this.ast_value_factory_.empty_cons_string();
+    if (this.names_stack_.length === 0) return this.ast_value_factory_.empty_cons_string();
     let result = this.ast_value_factory_.NewConsString();
     for(let i = 0; i < this.names_stack_.length - 1; i++) {
       let it = this.names_stack_[i];
       let current = this.names_stack_[i+1];
-      if(current.type() === kVariableName && it.type() === kVariableName) continue;
-      if(!result.IsEmpty()) result.AddString(this.ast_value_factory_.dot_string());
+      if (current.type() === kVariableName && it.type() === kVariableName) continue;
+      if (!result.IsEmpty()) result.AddString(this.ast_value_factory_.dot_string());
       result.AddString(current.name());
     }
     return result;

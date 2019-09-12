@@ -38,11 +38,11 @@ export default class Isolate {
     this.default_microtask_queue_ = value;
   }
   InitializeLoggingAndCounters() {
-    if(this.logger_ === null) this.logger_ = new Logger(this);
+    if (this.logger_ === null) this.logger_ = new Logger(this);
     this.InitializeCounters();
   }
   InitializeCounters() {
-    if(this.async_counters_) return false;
+    if (this.async_counters_) return false;
     this.async_counters_ = new Counters(this);
     return true;
   }

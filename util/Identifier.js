@@ -38,7 +38,7 @@ export const IsInRange = (c, lower_limit, higher_limit) => {
  * 将大写字母转换为小写字母
  */
 export const AsciiAlphaToLower = (c) => {
-  // if(typeof c !== 'number') c = c.charCodeAt();
+  // if (typeof c !== 'number') c = c.charCodeAt();
   // return String.fromCharCode(c | 0x20);
   return c.toLowerCase();
 }
@@ -268,7 +268,7 @@ export const CanBeKeyword = (scan_flags) => {
  */
 const token_flags = TokenMapping.map(o => {
   let key = o.key;
-  if(key && IsInRange(key[0], 'a', 'z')) return (IsKeywordBits.encode(1) | IsPropertyNameBits.encode(1));
+  if (key && IsInRange(key[0], 'a', 'z')) return (IsKeywordBits.encode(1) | IsPropertyNameBits.encode(1));
   return IsPropertyNameBits.encode(Number(IsAnyIdentifier(`Token::${o.token}`)));
 });
 

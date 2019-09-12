@@ -35,28 +35,28 @@ export default class Compiler {
 
     let maybe_result = null;
     let is_compiled_scope = new IsCompiledScope();
-    if(extension === null) {
+    if (extension === null) {
       let can_consume_code_cache = compile_options === kConsumeCodeCache;
-      if(can_consume_code_cache) compile_timer.set_consuming_code_cache();
+      if (can_consume_code_cache) compile_timer.set_consuming_code_cache();
       maybe_result = compilation_cache.LookupScript(source, script_details.name_obj, script_details.line_offset,
         script_details.column_offset, origin_options, isolate.native_context(), language_mode);
-      if(maybe_result) compile_timer.set_hit_isolate_cache();
-      else if(can_consume_code_cache) {
+      if (maybe_result) compile_timer.set_hit_isolate_cache();
+      else if (can_consume_code_cache) {
         compile_timer.set_consuming_code_cache();
         // more
       }
     }
-    if(maybe_result === null) {
+    if (maybe_result === null) {
       let parse_info = new ParseInfo(isolate);
       NewScript(isolate, parse_info, source, script_details, origin_options, natives);
-      if(origin_options.IsModule()) parse_info.set_module();
+      if (origin_options.IsModule()) parse_info.set_module();
       parse_info.extension_ = extension;
       parse_info.set_eager(compile_options === kEagerCompile);
 
       parse_info.set_language_mode(language_mode);
       maybe_result = CompileToplevel(parse_info, isolate, is_compiled_scope);
       
-      if(extension === null) compilation_cache.PutScript(source, isolate.native_context(), language_mode, maybe_result);
+      if (extension === null) compilation_cache.PutScript(source, isolate.native_context(), language_mode, maybe_result);
     }
 
     return maybe_result;
@@ -92,7 +92,7 @@ function NewScript(isolate, parse_info, source, script_details, origin_options, 
 // 太复杂了 只展示主要步骤
 function CompileToplevel(parse_info, isolate, is_compiled_scope) {
   // more
-  if(parse_info.literal_ === null && Parsing.ParseProgram(parse_info, isolate)) return;
+  if (parse_info.literal_ === null && Parsing.ParseProgram(parse_info, isolate)) return;
   // more
   let shared_info = GenerateUnoptimizedCodeForToplevel(isolate, parse_info, null, is_compiled_scope);
   FinalizeScriptCompilation(isolate, parse_info);
@@ -110,7 +110,7 @@ function GenerateUnoptimizedCodeForToplevel(isolate, parse_info, allocator, is_c
   EnsureSharedFunctionInfosArrayOnScript(parse_info, isolate);
   parse_info.ast_value_factory_.Internalize(isolate);
 
-  if(!Compiler.Analyze(parse_info)) return null;
+  if (!Compiler.Analyze(parse_info)) return null;
   Scope.DeclarationScope(parse_info, isolate);
 
   let script = parse_info.script_;
@@ -125,16 +125,16 @@ function GenerateUnoptimizedCodeForToplevel(isolate, parse_info, allocator, is_c
   // }
   let literal = parse_info.literal_;
   let shared_info = Compiler.GetSharedFunctionInfo(literal, script, isolate);
-  // if(shared_info.is_compiled()) 
+  // if (shared_info.is_compiled()) 
   // 处理asm
-  // if(UseAsmWasm(literal, parse_info.is_asm_wasm_broken())) {}
+  // if (UseAsmWasm(literal, parse_info.is_asm_wasm_broken())) {}
 
   let job = Interpreter.NewCompilationJob(parse_info, literal, allocator, null);
-  if(job.ExecuteJob() === FAILED) return null;
+  if (job.ExecuteJob() === FAILED) return null;
 
-  // if(FLAG_stress_lazy_source_positions) ...
+  // if (FLAG_stress_lazy_source_positions) ...
   
-  if(shared_info.is_identical_to(tope_level)) is_compiled_scope = shared_info.is_compiled_scope();
+  if (shared_info.is_identical_to(tope_level)) is_compiled_scope = shared_info.is_compiled_scope();
 
   parse_info.ResetCharacterStream();
   return tope_level;
