@@ -22,6 +22,9 @@ export default class TokenDesc {
      * 保存小整数
      */
     this.smi_value_ = 0;
+    /**
+     * 这个标记的意义尚未明白
+     */
     this.after_line_terminator = false;
   }
 }

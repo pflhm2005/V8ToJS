@@ -26,7 +26,4 @@ export default class FunctionState extends BlockState {
   kind() {
     return this.scope_.function_kind_;
   }
-  next_function_is_likely_called() {
-    return this.next_function_is_likely_called_;
-  }
 }

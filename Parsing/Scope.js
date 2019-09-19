@@ -143,7 +143,6 @@ export default class Scope extends ZoneObject {
   is_sloppy(language_mode) { return language_mode === kSloppy; }
   is_strict(language_mode) { return language_mode !== kSloppy; }
 
-  declarations() { return this.decls_; }
   outer_scope() { return this.outer_scope_; }
   /**
    * 初始化origin_scope_ 即最外层作用域

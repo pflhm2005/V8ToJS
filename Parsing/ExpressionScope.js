@@ -136,7 +136,7 @@ export class VariableDeclarationParsingScope extends ExpressionScope {
   constructor(parser, mode, names) {
     super(parser, IsLexicalVariableMode(mode) ? kLexicalDeclaration : kVarDeclaration);
     this.mode_ = mode;
-    this.names_ = names;
+    this.names_ = names || [];
   }
   /**
    * 回一个AstNode

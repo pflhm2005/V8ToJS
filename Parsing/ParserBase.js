@@ -95,6 +95,7 @@ import {
   kMissingFunctionName,
   kStrictEvalArguments,
 } from '../MessageTemplate';
+import ParserFormalParameters from './function/ParserFormalParameters';
 
 const kStatementListItem = 0;
 const kStatement = 1;
@@ -335,11 +336,11 @@ export default class ParserBase {
     }
 
     /**
-     * 这里的C++源码代码如下
      * FuncNameInferrerState fni_state(&fni_);
-     * 很多地方都有这个声明 但是fni_state实际上并没有调用
-     * 目的是为了触发构造函数的++this.fni_.scope_depth_
+     * 构造 => fni_(fni),top_(fni_names_stack_.size()),++fni_->scope_depth_;
+     * 析构 => fni_names_stack_.resize(top_),--fni_->scope_depth_
      */
+    let top_ = this.fni_.names_stack_.length;
     this.fni_.scope_depth_++;
     this.PushEnclosingName(name);
     let function_kind = this.FunctionKindFor(flags);
@@ -353,7 +354,11 @@ export default class ParserBase {
     let kind = is_sloppy(this.language_mode()) && 
     !this.scope_.is_declaration_scope() &&
     flags === kIsNormal ? SLOPPY_BLOCK_FUNCTION_VARIABLE : NORMAL_VARIABLE;
-    return this.DeclareFunction(variable_name, functionLiteral, mode, kind, pos, this.end_position(), names);
+    let result = this.DeclareFunction(variable_name, functionLiteral, mode, kind, pos, this.end_position(), names);
+    // 析构
+    this.fni_.names_stack_.length = top_;
+    --this.fni_.scope_depth_;
+    return result;
   }
   ParseIdentifier(function_kind) {
     let next = this.Next();
@@ -380,6 +385,110 @@ export default class ParserBase {
     let i = Number((flags & kIsGenerator) !== 0);
     let j = Number((flags & kIsAsync) !== 0);
     return kFunctionKinds[is_method][i][j];
+  }
+  /**
+   * @description 以下内容为解析函数参数
+   * @param {ParserFormalParameters*} parameters 
+   * @return {void}
+   */
+  ParseFormalParameterList(parameters) {
+    /**
+     * C++有很多声明但是不调用的类
+     * 实际操作都在构造和析构函数中 比如这里的声明
+     * 目的是缓存当前scope的parameters_ 解析完后还原 源码如下
+     * ParameterParsingScope scope(impl(), parameters);
+     * 构造 => parser_(parser),parent_parameters_(parser_->parent_parameters_),parser_->parameters_ = parameters
+     * 析构 => parser_->parameters_ = parent_parameters_
+     */
+    let old_parent_parameters_ = this.parent_parameters_;
+    this.parameters_ = parameters;
+    /**
+     * 所有可能的函数参数形式如下
+     * (a, b = 1, c = function(){}, d = class {}, {e, f}, [g, h], ...i)
+     */
+    if (this.peek() !== 'Token::RPAREN') {
+      while(true) {
+        // 形参数量有限制
+        if (parameters.arity + 1 > kMaxArguments) throw new Error(kTooManyParameters);
+        // 检查'...'运算符
+        parameters.has_rest = this.Check('Token::ELLIPSIS');
+        this.ParseFormalParameter(parameters);
+
+        if (parameters.has_rest) {
+          parameters.is_simple = false;
+          // function a(a, ...b,) {} 这种也是不合法的 rest后面不能加逗号
+          if (this.peek() === 'Token::COMMA') throw new Error(kParamAfterRest);
+          break;
+        }
+        // 代表解析完了
+        if (!this.Check('Token::COMMA')) break;
+        // 形参最后的逗号 function a(a, b,) {}
+        if (this.peek() === 'Token::RPAREN') break;
+      }
+    }
+    this.DeclareFormalParameters(parameters);
+    // 析构
+    this.parameters_ = old_parent_parameters_;
+  }
+  /**
+   * @description 解析单个参数
+   * @returns {void}
+   */
+  ParseFormalParameter(parameters) {
+    // FuncNameInferrerState fni_state(&fni_);
+    let top_ = this.fni_.names_stack_.length;
+    this.fni_.scope_depth_++;
+
+    let pos = this.peek_position();
+    let decls = this.scope_.decls_;
+    let declaration_it = decls.length;
+    // 解析形参
+    let pattern = this.ParseBindingPattern();
+    /**
+     * 区分简单与复杂形参
+     * 简单 (a, b) => {}
+     * 复杂 ({a,b }, [c, d]) => {}
+     */
+    if (this.IsIdentifier(pattern)) this.ClassifyParameter(pattern, pos, this.end_position());
+    else parameters.is_simple = false;
+
+    let initializer = null;
+    // 解析参数默认值
+    if (this.Check('Token::ASSIGN')) {
+      parameters.is_simple = false;
+      // rest参数不能有默认值
+      if (parameters.has_rest) throw new Error(kRestDefaultInitializer);
+      
+      /**
+       * AcceptINScope accept_in_scope(this, true);
+       * 构造 => parser_(parser),previous_accept_IN_(parser->accept_IN_),parser_->accept_IN_ = accept_IN_
+       * 析构 => parser_->accept_IN_ = previous_accept_IN_;
+       */
+      let previous_accept_IN_ = this.accept_IN_;
+      this.accept_IN_ = true;
+      initializer = this.ParseAssignmentExpression();
+      /**
+       * 这一步基本上不会进
+       * 处理形式为function(a = function(){}, b = class c{})这样子的参数
+       * 一般人不会这么设置默认值
+       */
+      this.SetFunctionNameFromIdentifierRef(initializer, pattern);
+      // 析构
+      this.accept_IN_ = previous_accept_IN_;
+    }
+    let declaration_end = decls.length;
+    let initializer_end = this.end_position();
+    for(; declaration_it < declaration_end; ++declaration_it) {
+      decls[declaration_it].var().initializer_position_ = initializer_end;
+    }
+
+    this.AddFormalParameter(parameters, pattern, initializer, this.end_position(), parameters.has_rest);
+    // 析构
+    this.fni_.names_stack_.length = top_;
+    --this.fni_.scope_depth_;
+  }
+  ClassifyParameter(parameters, begin, end) {
+    if (this.IsEvalOrArguments(parameters)) throw new Error(kStrictEvalArguments);
   }
 
   ParseClassDeclaration() {}
@@ -417,6 +526,8 @@ export default class ParserBase {
   /**
    * 处理var、let、const声明语句
    * 语句的形式应该是 (var | const | let) (Identifier) (=) (AssignmentExpression)
+   * @param {VariableDeclarationContext} var_context kStatementListItem
+   * @param {ZonePtrList<const AstRawString>*} names null
    */
   ParseVariableStatement(var_context, names) {
     let parsing_result = new DeclarationParsingResult();
@@ -457,24 +568,27 @@ export default class ParserBase {
         break;
     }
     /**
-     * 源码中该变量类型是 ZonePtrList<const AstRawString>* names
-     * 由于传进来是一个nullptr 这里手动重置为数组
+     * VariableDeclarationParsingScope declaration(impl(), parsing_result->descriptor.mode, names);
+     * 这一步的目的是设置parser的expression_scope_参数 设置方式十分狗
+     * 在父类ExpressionScope上存在析构 截取析构相关的逻辑
+     * 构造 => parent_(parser->expression_scope_),parser->expression_scope_ = this;
+     * 析构 => parser_->expression_scope_ = parent_;
+     * 由于初始化的东西较多 不展开了 函数结尾将此实例置null
      */
-    if (!names) names = [];
-    // 这一步的目的是设置parser的expression_scope_参数 设置方式十分狗
-    new VariableDeclarationParsingScope(this, parsing_result.descriptor.mode, names);
+    let expression_scope_ = new VariableDeclarationParsingScope(this, parsing_result.descriptor.mode, names);
     // 获取合适的作用域
     let target_scope = IsLexicalVariableMode(parsing_result.descriptor.mode) ? this.scope_ : this.scope_.GetDeclarationScope();
-    let decls = target_scope.declarations();
+    let decls = target_scope.decls_;
     let declaration_it = decls.length;
 
     let bindings_start = this.peek_position();
     /**
-     * 可以一次性声明多个变量
+     * 可以一次性声明多个变量 循环处理
      * let a = 1, b, c;
      */
     do {
-      // let fni_state = new State(this.fni_);
+      // FuncNameInferrerState fni_state(&fni_);
+      let top_ = this.fni_.names_stack_.length;
       this.fni_.scope_depth_++;
 
       let decl_pos = this.peek_position();
@@ -533,7 +647,7 @@ export default class ParserBase {
          */ 
         else {
           this.DeclareIdentifier(name, decl_pos);
-          pattern = this.NullExpression();
+          pattern = null;
         }
       }
       /**
@@ -547,7 +661,7 @@ export default class ParserBase {
       
       let variable_loc = new Location();
 
-      let value = this.NullExpression();
+      let value = null;
       let value_beg_pos = kNoSourcePosition;
       /**
        * 游标变动
@@ -603,12 +717,16 @@ export default class ParserBase {
       decl.value_beg_pos = value_beg_pos;
 
       parsing_result.declarations.push(decl);
-
-      this.fni_.names_stack_ = [];
-      this.fni_.scope_depth_--;
+      
+      // 析构
+      this.fni_.names_stack_.length = top_;
+      --this.fni_.scope_depth_;
     } while (this.Check('Token::COMMA'));
 
     parsing_result.bindings_loc = new Location(bindings_start, this.end_position());
+    // 析构
+    this.expression_scope_ = expression_scope_.parent_;
+    expression_scope_ = null;
   }
   /**
    * 跳到scanner实现
@@ -649,6 +767,8 @@ export default class ParserBase {
     let lhs_beg_pos = this.peek_position();
     if (this.peek() === 'Token:YIELD' && this.is_generator()) return this.ParseYieldExpression();
     // FuncNameInferrerState fni_state(&fni_);
+    let top_ = this.fni_.names_stack_.length;
+    this.fni_.scope_depth_++;
     /**
      * 解析条件表达式
      */
@@ -679,7 +799,11 @@ export default class ParserBase {
     if (op === 'Token::ASSIGN') {} 
     else {}
 
-    return this.ast_node_factory_.NewAssignment(op, expression, right, op_position);
+    let result = this.ast_node_factory_.NewAssignment(op, expression, right, op_position);
+    // 析构
+    this.fni_.names_stack_.length = top_;
+    --this.fni_.scope_depth_;
+    return result;
   }
   /**
    * Precedence = 3
@@ -904,6 +1028,8 @@ export default class ParserBase {
     let accumulation_scope = new AccumulationScope(this.expression_scope_);
     while(!this.Check('Token::RBRACE')) {
       // FuncNameInferrerState fni_state(&fni_);
+      let top_ = this.fni_.names_stack_.length;
+      this.fni_.scope_depth_++;
       let prop_info = new ParsePropertyInfo(this, accumulation_scope);
       prop_info.position = kObjectLiteral;
       /**
@@ -919,6 +1045,9 @@ export default class ParserBase {
       if (this.peek() !== 'Token::RBRACE') this.Expect('Token::COMMA');
 
       // this.fni_.Infer();
+      // 析构
+      this.fni_.names_stack_.length = top_;
+      --this.fni_.scope_depth_;
     }
     if (has_rest_property && properties.length > kMaxArguments) {
       this.expression_scope_.RecordPatternError(new Location(pos, this.position(), kTooManyArguments));
@@ -950,6 +1079,8 @@ export default class ParserBase {
         }
         this.Consume('Token::COLON');
         // AcceptINScope scope(this, true);
+        let previous_accept_IN_ = this.accept_IN_;
+        this.accept_IN_ = true;
         let value = this.ParsePossibleDestructuringSubPattern(prop_info.accumulation_scope);
         /**
          * 返回一个管理键值对的对象 标记了值的类型
@@ -957,6 +1088,8 @@ export default class ParserBase {
          */
         let result = this.ast_node_factory_.NewObjectLiteralProperty(name_expression, value, prop_info.is_computed_name);
         this.SetFunctionNameFromPropertyName(result, name);
+        // 析构
+        this.accept_IN_ = previous_accept_IN_;
         return result;
       }
       /**
@@ -992,7 +1125,7 @@ export default class ParserBase {
 
       case kClassField:
       case kNotSet:
-        return this.NullExpression();
+        return null;
     }
     this.UNREACHABLE();
   }
@@ -1118,12 +1251,15 @@ export default class ParserBase {
         prop_info.is_computed_name = true;
         this.Consume('Token::LBRACK');
         // AcceptINScope scope(this, true);
+        let previous_accept_IN_ = this.accept_IN_;
+        this.accept_IN_ = true;
         /**
          * 直接走了赋值解析 我靠
          */
         let expression = this.ParseAssignmentExpression();
         this.Expect('Token::RBRACK');
         if (prop_info.kind === kNotSet) prop_info.ParsePropertyKindFromToken(this.peek());
+        this.accept_IN_ = previous_accept_IN_;
         return expression;
       }
       /**
@@ -1134,6 +1270,8 @@ export default class ParserBase {
           prop_info.name = this.NullIdentifier();
           this.Consume('Token::ELLIPSIS');
           // AcceptINScope scope(this, true);
+          let previous_accept_IN_ = this.accept_IN_;
+          this.accept_IN_ = true;
           let start_pos = this.peek_position();
           /**
            * TODO 不晓得这个解析什么
@@ -1142,6 +1280,8 @@ export default class ParserBase {
           prop_info.kind = kSpread;
 
           if (this.peek() !== 'Token::RBRACE') throw new Error(kElementAfterRest);
+          // 析构
+          this.accept_IN_ = previous_accept_IN_;
           return expression;
         }
         this.UNREACHABLE();
@@ -1277,52 +1417,6 @@ export default class ParserBase {
   }
 
   FailureExpression() { throw new Error('UnexpectedExpression'); }
-}
-
-class FormalParametersBase {
-  constructor(scope) {
-    this.scope = scope;
-    this.has_rest = false;
-    this.is_simple = true;
-    this.function_length = 0;
-    this.arity = 0;
-  }
-  /**
-   * 返回形参数量 去除rest
-   * 与布尔值计算会自动转换 我就不用管了
-   */
-  num_parameters() {
-    return this.arity - this.has_rest;
-  }
-  /**
-   * 更新函数的参数数量与length属性
-   * 任何情况下arity都会增加
-   * 而function.length必须满足以下条件才会增加
-   * 1、该参数不存在默认值
-   * 2、不是rest参数
-   * 3、length、arity相等
-   * 那么length的意思就是 从第一个形参开始计数 直接碰到有默认值的参数或rest
-   * (a,b,c) => length => 3
-   * (a,b,c = 1) => length => 2
-   * (a=1,b,c) => length => 0
-   * @param {bool} is_optional 当前参数是否有默认值
-   * @param {bool} is_rest 是否是rest参数
-   */
-  UpdateArityAndFunctionLength(is_optional, is_rest) {
-    if (!is_optional && !is_rest && this.function_length === this.arity) ++this.function_length;
-    ++this.arity;
-  }
-}
-
-class ParserFormalParameters extends FormalParametersBase {
-  constructor(scope) {
-    super(scope);
-    this.params = [];
-    this.duplicate_loc = new Location().invalid();
-  }
-  has_duplicate() {
-    return this.duplicate_loc.IsValid();
-  }
 }
 
 class NextArrowFunctionInfo {}
