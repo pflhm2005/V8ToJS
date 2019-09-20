@@ -40,6 +40,10 @@ import {
   kLet,
   _kFunctionLiteral,
   kAnonymousExpression,
+  _kCall,
+  _kCallNew,
+  _kCountOperation,
+  _kUnaryOperation,
 } from "../enum";
 
 import {
@@ -60,6 +64,12 @@ import {
   IsConciseMethod,
   IsNewTargetField,
   LocationField,
+  IsParenthesizedField,
+  IsAssignedField,
+  MaybeAssignedFlagField,
+  IsPrefixField,
+  TypeField,
+  OperatorField,
 } from '../util';
 
 export class AstNodeFactory {
@@ -79,6 +89,9 @@ export class AstNodeFactory {
    * JS无法做到完美模拟 这里手动将对应类型的枚举传入构造函数
    * @returns {Literal} 字面量类
    */
+  NewUndefinedLiteral(pos) {
+    return new Literal(kUndefined, undefined, pos);
+  }
   NewNullLiteral(pos) {
     return new Literal(kNull, null, pos);
   }
@@ -92,8 +105,6 @@ export class AstNodeFactory {
   NewObjectLiteral(properties, boilerplate_properties, pos, has_rest_property) {
     return new ObjectLiteral(properties, boilerplate_properties, pos, has_rest_property);
   }
-  // TODO
-  // NewNumberLiteral() {}
   NewBigIntLiteral(bigint, pos) {
     return new Literal(kBigInt, bigint, pos);
   }
@@ -120,12 +131,18 @@ export class AstNodeFactory {
   NewExpressionStatement(expression, pos) {
     return new ExpressionStatement(expression, pos);
   }
+  NewCountOperation(op, is_prefix, expr, pos) {
+    return new CountOperation(op, is_prefix, expr, pos);
+  }
+  NewUnaryOperation(op, expression, pos) {
+    return new UnaryOperation(op, expression, pos);
+  }
   /**
    * 该方法有重载
    */
   NewBlock(ignore_completion_value, statements) {
     // 构造参数在这里基本上毫无意义
-    let result = new Block();
+    let result = new Block(null, null, 0, ignore_completion_value);
     result.InitializeStatements(statements, null);
     return result;
   }
@@ -141,6 +158,11 @@ class AstNode {
   IsClassLiteral() { return this.node_type() === _kClassLiteral; }
   IsFunctionLiteral() { return this.node_type() === _kClassLiteral; }
   IsLiteral() { return this.node_type() === _kFunctionLiteral; }
+  IsCall() { return this.node_type() === _kCall; }
+  IsCallNew() { return this.node_type() === _kCallNew; }
+  IsProperty() { return this.node_type() === _kProperty; }
+  IsPattern() { return this.node_type() === _kPattern; }
+
   node_type() { return NodeTypeField.decode(this.bit_field_); }
   AsMaterializedLiteral() {
     switch(this.node_type()) {
@@ -166,9 +188,6 @@ class ExpressionStatement extends Statement {
     super(pos, kExpressionStatement);
     this.expression_ = expression;
   }
-  set_expression(e) {
-    this.expression_ = e;
-  }
 }
 
 /**
@@ -187,7 +206,7 @@ class Block extends BreakableStatement {
     super(TARGET_FOR_NAMED_ONLY, kNoSourcePosition, _kBlock);
     this.statement_ = null;
     this.scope_ = null;
-    this.bit_field_ |= IgnoreCompletionField.encode(1) | IsLabeledField.encode(0);
+    this.bit_field_ |= IgnoreCompletionField.encode(Number(ignore_completion_value)) | IsLabeledField.encode(Number(labels !== null));
   }
   // 这里用的内存拷贝
   InitializeStatements(statements, zone = null) {
@@ -209,7 +228,6 @@ class Declaration extends AstNode {
     this.next_ = null;
     this.var_ = null;
   }
-  var() { return this.var_; }
   set_var(v) { this.var_ = v; }
 
   // Declarations list threaded through the declarations.
@@ -228,6 +246,8 @@ export class Expression extends AstNode {
   constructor(pos, type) {
     super(pos, type);
   }
+  UNIMPLEMENTED() { throw new Error('unimplemented code'); }
+  UNREACHABLE() { throw new Error('unreachable code'); }
   IsAnonymousFunctionDefinition() {
     return (this.IsFunctionLiteral() && this.IsAnonymousFunctionDefinition()) || 
     (this.IsClassLiteral() && this.IsAnonymousFunctionDefinition());
@@ -237,6 +257,36 @@ export class Expression extends AstNode {
   }
   IsAccessorFunctionDefinition() {
     return this.IsFunctionLiteral() && this.IsAccessorFunctionDefinition(this.kind());
+  }
+  is_parenthesized() {
+    return IsParenthesizedField.decode(this.bit_field_);
+  }
+  IsNumberLiteral() { return this.IsLiteral() && (this.type() === kHeapNumber || this.type() === kSmi); }
+
+  type() { return TypeField.decode(this.bit_field_); }
+  ToBooleanIsFalse() { return !this.ToBooleanIsTrue(); }
+  ToBooleanIsTrue() {
+    switch(this.type()) {
+      case kSmi:
+        return this.val() !== 0;
+      case kHeapNumber:
+        return this.DoubleToBoolean(this.val());
+      case kString:
+        return !this.val() === '';
+      case kNull:
+      case kUndefined:
+        return false;
+      case kBoolean:
+        return this.val();
+      case kBigInt:
+        // TODO
+        return false;
+      case kSymbol:
+        return true;
+      case kTheHole:
+        this.UNREACHABLE();
+    }
+    this.UNREACHABLE();
   }
 }
 
@@ -254,34 +304,6 @@ class CompoundAssignment extends Assignment {
     super(kCompoundAssignment, op, target, value, pos);
     // BinaryOperation* binary_operation_;
     this.binary_operation_ = binary_operation;
-  }
-}
-
-export class VariableProxy extends Expression {
-  constructor(name, variable_kind, start_position) {
-    super(start_position, _kVariableProxy);
-    this.raw_name_ = name;
-    this.next_unresolved_ = null;
-
-    this.var_ = null;
-
-    this.bit_field_ |= 0;
-  }
-  set_var(v) { this.var_ = v; }
-  set_is_resolved() { this.bit_field_ = NodeTypeField.update(this.bit_field_, true); }
-  is_assigned() { return NodeTypeField.decode(this.bit_field_); }
-
-  BindTo(variable) {
-    this.set_var(variable);
-    this.set_is_resolved();
-    variable.set_is_used();
-    if (this.is_assigned()) variable.set_maybe_assigned();
-  }
-  raw_name() {
-    return IsResolvedField.decode(this.bit_field_) ? this.var_.raw_name_ : this.raw_name_;
-  }
-  is_new_target() {
-    return IsNewTargetField.decode(this.bit_field_);
   }
 }
 
@@ -311,7 +333,7 @@ class Literal extends Expression{
      * 因此用一个数组来保存值 用val()来获取对应的值
      */
     this.val_ = new Array(6).fill(null);
-    this.val_[type] = val;
+    if(val !== null || val !== undefined) this.val_[type] = val;
     
     this.bit_field_ = NodeTypeField.update(this.bit_field_, type);
   }
@@ -334,6 +356,56 @@ class Literal extends Expression{
   ComputeLongHash() {}
   double_to_uint64() {}
   AsNumber() {}
+}
+
+export class VariableProxy extends Expression {
+  constructor(name, variable_kind, start_position) {
+    super(start_position, _kVariableProxy);
+    this.raw_name_ = name;
+    this.next_unresolved_ = null;
+
+    this.var_ = null;
+
+    this.bit_field_ |= 0;
+  }
+  set_var(v) { this.var_ = v; }
+  set_is_resolved() { this.bit_field_ = NodeTypeField.update(this.bit_field_, 1); }
+  set_is_assigned() {
+    this.bit_field_ = IsAssignedField.update(this.bit_field_, 1);
+    if(this.is_resolved()) this.var_.set_maybe_assigned();
+  }
+  set_maybe_assigned() { this.bit_field_ = MaybeAssignedFlagField.update(this.bit_field_, kMaybeAssigned); }
+  is_resolved() { return IsResolvedField.decode(this.bit_field_); }
+  is_assigned() { return NodeTypeField.decode(this.bit_field_); }
+
+  BindTo(variable) {
+    this.set_var(variable);
+    this.set_is_resolved();
+    variable.set_is_used();
+    if (this.is_assigned()) variable.set_maybe_assigned();
+  }
+  raw_name() {
+    return IsResolvedField.decode(this.bit_field_) ? this.var_.raw_name_ : this.raw_name_;
+  }
+  is_new_target() {
+    return IsNewTargetField.decode(this.bit_field_);
+  }
+}
+
+class CountOperation extends Expression {
+  constructor(op, is_prefix, expr, pos) {
+    super(pos, _kCountOperation);
+    this.expression_ = expr;
+    this.bit_field_ |= IsPrefixField.encode(is_prefix) | TokenField.encode(op);
+  }
+}
+
+class UnaryOperation extends Expression {
+  constructor(op, expression, pos) {
+    super(pos, _kUnaryOperation);
+    this.expression_ = expression;
+    this.bit_field_ |= OperatorField.encode(op);
+  }
 }
 
 class MaterializedLiteral extends Expression {

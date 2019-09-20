@@ -11,10 +11,10 @@ import {
 } from './ExpressionScope';
 import Scope, { FunctionDeclarationScope, ScriptDeclarationScope } from './Scope';
 
-import FunctionState from './FunctionState';
-import { FuncNameInferrer, State } from './FuncNameInferrer';
+import FunctionState from './function/FunctionState';
+import { FuncNameInferrer } from './FuncNameInferrer';
 
-import ParsePropertyInfo from './ParsePropertyInfo';
+import ParsePropertyInfo from './object/ParsePropertyInfo';
 
 import {
   kVar,
@@ -85,6 +85,7 @@ import {
   is_strict,
   IsValidIdentifier,
   IsGeneratorFunction,
+  IsUnaryOp,
 } from '../util';
 
 import {
@@ -94,6 +95,12 @@ import {
   kInvalidCoverInitializedName,
   kMissingFunctionName,
   kStrictEvalArguments,
+  kDeclarationMissingInitializer,
+  kInvalidDestructuringTarget,
+  kInvalidPropertyBindingPattern,
+  kInvalidLhsInAssignment,
+  kStrictDelete,
+  kUnexpectedTokenUnaryExponentiation,
 } from '../MessageTemplate';
 import ParserFormalParameters from './function/ParserFormalParameters';
 
@@ -159,8 +166,11 @@ export default class ParserBase {
    * 已经砍掉了很多
    */
   IsLet(identifier) { return identifier === 'let'; }
-  // TODO
-  IsAssignableIdentifier() {}
+  IsAssignableIdentifier(expression) {
+    if(!this.IsIdentifier(expression)) return false;
+    if(is_strict(this.language_mode()) && this.IsEvalOrArguments(expression)) return false;
+    return true;
+  }
   UNREACHABLE() {
     this.scanner_.UNREACHABLE();
   }
@@ -242,6 +252,7 @@ export default class ParserBase {
   /**
    * 一级解析
    * 优先处理了function、class、var、let、const、async声明式Token
+   * @returns {Statement}
    */
   ParseStatementListItem() {
     switch(this.peek()) {
@@ -479,7 +490,7 @@ export default class ParserBase {
     let declaration_end = decls.length;
     let initializer_end = this.end_position();
     for(; declaration_it < declaration_end; ++declaration_it) {
-      decls[declaration_it].var().initializer_position_ = initializer_end;
+      decls[declaration_it].var_.initializer_position_ = initializer_end;
     }
 
     this.AddFormalParameter(parameters, pattern, initializer, this.end_position(), parameters.has_rest);
@@ -528,6 +539,7 @@ export default class ParserBase {
    * 语句的形式应该是 (var | const | let) (Identifier) (=) (AssignmentExpression)
    * @param {VariableDeclarationContext} var_context kStatementListItem
    * @param {ZonePtrList<const AstRawString>*} names null
+   * @returns {Statement}
    */
   ParseVariableStatement(var_context, names) {
     let parsing_result = new DeclarationParsingResult();
@@ -596,7 +608,7 @@ export default class ParserBase {
       let name = null;
       // 变量的值 => Expression*
       let pattern = null;
-      // 检查下一个token是否是标识符
+      // 检查下一个token是否是标识符 V8_LIKELY
       if (IsAnyIdentifier(this.peek())) {
         /**
          * 解析变量名并返回一个字符串对象 总体流程如下
@@ -614,10 +626,14 @@ export default class ParserBase {
          * @returns {AstRawString}
          */
         name = this.ParseAndClassifyIdentifier(this.Next());
-        // 检查下一个token是否是赋值运算符
+        /**
+         * 1.下一个token是否是赋值运算符
+         * 2.for语句且下一个Token是in、of
+         * 3.let声明
+         */
         if (this.peek() === 'Token::ASSIGN' || 
         // 判断for in、for of语法 这个暂时不解析
-        // (var_context === kForStatement && this.PeekInOrOf()) ||
+        (var_context === kForStatement && this.PeekInOrOf()) ||
         parsing_result.descriptor.mode === kLet) {
           /**
            * 过程总结如下：
@@ -642,8 +658,9 @@ export default class ParserBase {
           pattern = this.ExpressionFromIdentifier(name, decl_pos);
         }
         /**
-         * 声明未定义的语句 let a;
+         * 其余声明未定义的语句var a;
          * 跳过了一些步骤 变量的很多属性都是未定义的状态
+         * 与赋值声明不同的是 这个不生成VariableProxy
          */ 
         else {
           this.DeclareIdentifier(name, decl_pos);
@@ -655,7 +672,7 @@ export default class ParserBase {
        * let [ a, b ] = [1, 2]也是合法的
        */ 
       else {
-        name = this.NullIdentifier();
+        name = null;
         pattern = this.ParseBindingPattern();
       }
       
@@ -670,6 +687,9 @@ export default class ParserBase {
       if (this.Check('Token::ASSIGN')) {
         {
           value_beg_pos = this.peek_position();
+          // AcceptINScope scope(this, var_context != kForStatement);
+          let previous_accept_IN_ = this.accept_IN_;
+          this.accept_IN_ = var_context !== kForStatement;
           /**
            * 这里处理赋值
            * 大部分情况下这是一个简单右值 源码使用了一个Precedence来进行渐进解析与优先级判定
@@ -692,25 +712,48 @@ export default class ParserBase {
            * @returns {Assignment}
            */
           value = this.ParseAssignmentExpression();
+          // 析构
+          this.accept_IN_ = previous_accept_IN_;
         }
         variable_loc.end_pos = this.end_position();
 
         /**
-         * 处理a = function(){};
-         * 下面的先不管
+         * 推断匿名函数表达式的名
+         * fni_维护一个函数名数组
          */
+        if(!parsing_result.first_initializer_loc.IsValid()) parsing_result.first_initializer_loc = variable_loc;
+        if(this.IsIdentifier(pattern)) {
+          if(!value.IsCall() && !value.IsCallNew()) this.fni_.Infer();
+          else this.fni_.RemoveLastFunction();
+        }
+
+        this.SetFunctionNameFromIdentifierRef(value, pattern);
+      } /** end of ASSIGN */
+      /**
+       * 处理声明未定义
+       */
+      else {
+        if(var_context !== kForStatement || !this.PeekInOrOf()) {
+          /**
+           * 这里的name为null不代表变量名是null 而是解构声明语句
+           * 即const a、const { a, b }不合法
+           */
+          if(parsing_result.descriptor.mode === kConst || name === null) {
+            throw new Error(kDeclarationMissingInitializer);
+          }
+          // let a 默认赋值为undefined
+          if(parsing_result.descriptor.mode === kLet) value = this.ast_node_factory_.NewUndefinedLiteral(this.position());
+        }
       }
-      // 处理for in、for of
-      else {}
 
       let initializer_position = this.end_position();
       /**
        * 当成简单的遍历
-       * 这里的逻辑JS极难模拟 做简化处理
+       * 这里的迭代器逻辑JS极难模拟 做简化处理
        */
       let declaration_end = decls.length;
       for(; declaration_it < declaration_end; declaration_it++) {
-        decls[declaration_it].var().initializer_position_ = initializer_position;
+        decls[declaration_it].var_.initializer_position_ = initializer_position;
       }
 
       let decl = new Declaration(pattern, value);
@@ -747,9 +790,16 @@ export default class ParserBase {
    * @returns {Assignment} 返回赋值右值
    */
   ParseAssignmentExpression() {
-    let expression_scope = new ExpressionParsingScope(this);
+    /**
+     * ExpressionParsingScope expression_scope(impl());
+     * 该scope类继承于ExpressionScope 需要做析构处理
+     */
+    let expression_scope_ = new ExpressionParsingScope(this);
     let result = this.ParseAssignmentExpressionCoverGrammar();
-    // expression_scope.ValidateExpression();
+    expression_scope.ValidateExpression();
+    // 析构
+    this.expression_scope_ = expression_scope_.parent_;
+    expression_scope_ = null;
     return result;
   }
   /**
@@ -758,7 +808,7 @@ export default class ParserBase {
    * (1)条件表达式 let a = true ? b : c
    * (2)箭头函数
    * (3)yield表达式
-   * (4)左值?表达式 let a = new f()
+   * (4)LeftHandSideExpression let a = new f()
    * (5)运算赋值 let a += b
    * (6)普通赋值表达式 let a = b
    * @returns {Assignment}
@@ -775,27 +825,48 @@ export default class ParserBase {
     let expression = this.ParseConditionalExpression();
 
     let op = this.peek();
-    if (!IsArrowOrAssignmentOp(op)) return expression;
+    /**
+     * 如果当前Token不是运算符
+     * 这里会判定不是多元运算表达式直接返回
+     */
+    if (!IsArrowOrAssignmentOp(op)) {
+      // 方法存在多处返回 必须同时加上这个析构操作
+      this.fni_.names_stack_.length = top_;
+      --this.fni_.scope_depth_;
+      return expression;
+    }
+    /**
+     * 多元表达式才会继续走
+     */
 
     // 箭头函数 V8_UNLIKELY
     if (op === 'Token::ARROW') {
-      let loc = new Location(lhs_beg_pos, this.end_position());
+      // let loc = new Location(lhs_beg_pos, this.end_position());
       // if (...) return this.FailureExpression();
       // TODO
     }
 
-    // TODO
+    // TODO V8_LIKELY
     if (this.IsAssignableIdentifier(expression)) {
-    } else if (expression.IsProperty()) {
+      if(expression.is_parenthesized()) throw new Error(kInvalidDestructuringTarget);
+      this.expression_scope_.MarkIdentifierAsAssigned();
+    } else if (expression.IsProperty()) throw new Error(kInvalidPropertyBindingPattern);
+    // 解构赋值
+    else if (expression.IsPattern() && op === 'Token::ASSIGN') {
+      if(expression.is_parenthesized()) {
+        let loc = new Location(lhs_beg_pos, this.end_position());
+        if(this.expression_scope_.IsCertainlyDeclaration()) throw new Error(kInvalidDestructuringTarget);
+        else throw new Error(kInvalidLhsInAssignment);
+      }
+      this.expression_scope_.ValidatePattern(expression, lhs_beg_pos, this.end_position());
+    } else {
+      throw new Error(kInvalidLhsInAssignment);
+    }
 
-    } else if (expression.IsPattern() && op === 'Token::ASSIGN') {
-
-    } else {}
-
-    this.Consume();
+    this.Consume(op);
     let op_position = this.position();
     let right = this.ParseAssignmentExpression();
-    // TODO
+    // TODO 连续赋值?
     if (op === 'Token::ASSIGN') {} 
     else {}
 
@@ -805,12 +876,18 @@ export default class ParserBase {
     --this.fni_.scope_depth_;
     return result;
   }
+  ParseYieldExpression() {}
+
   /**
    * Precedence = 3
-   * 条件表达式 源码示例只有三元表达式
+   * 条件表达式 即三元表达式
    */
   ParseConditionalExpression() {
     let pos = this.peek_position();
+    /**
+     * 二元表达式的优先级为4以上
+     * 这里只是单纯的想解析单个非三元表达式 所以传了一个最高优先级的值4
+     */
     let expression = this.ParseBinaryExpression(4);
     return this.peek() === 'Token::CONDITIONAL' ? this.ParseConditionalContinuation(expression, pos) : expression;
   }
@@ -821,11 +898,19 @@ export default class ParserBase {
    */
   ParseBinaryExpression(prec) {
     if (prec < 4) throw new Error('We start using the binary expression parser for prec >= 4 only!');
+    /**
+     * 虽然是解析二(多)元表达式 但不一定真的是
+     * 所以这里的逻辑很简单 先尝试解析一个一元表达式 然后根据下一个Token实际情况决定逻辑
+     * 1. 如果不是二元表达式 这里的prec1必定等于0 直接返回
+     * 2. 是二(多)元表达式 但是下一个运算符的优先级比当前的高 会优先继续走下一个
+     * 3. 下一个运算优先级较低 与上面相反 直接跳出 外部会处理
+     */
     let x = this.ParseUnaryExpression();
     let prec1 = Precedence(this.peek(), this.accept_IN_);
     if (prec1 >= prec) return this.ParseBinaryContinuation(x, prec, prec1);
     return x;
   }
+  ParseBinaryContinuation() {}
   /**
    * 处理一元表达式 分为下列情况
    * (1)PostfixExpression
@@ -842,13 +927,43 @@ export default class ParserBase {
    */
   ParseUnaryExpression() {
     let op = this.peek();
-    // 一元运算
+    // 一元运算或前置表达式 --a ++b
     if (IsUnaryOrCountOp(op)) return this.ParseUnaryOrPrefixExpression();
     // await语法
     if (this.is_async_function() && op === 'Token::AWAIT') return this.ParseAwaitExpression();
-    // 运算后置语法与左值 ++ --
+    // 后置表达式 a++ a-- a[b] a.b
     return this.ParsePostfixExpression();
   }
+  ParseUnaryOrPrefixExpression() {
+    let op = this.Next();
+    let pos = this.position();
+    // !function... 后面的函数会被立即执行
+    if(op === 'Token::NOT' && this.peek() === 'Token::FUNCTION') this.function_state_.set_next_function_is_likely_called();
+    
+    // this.CheckStackOverflow();
+    // let expression_position = this.peek_position();
+    let expression = this.ParseUnaryExpression();
+
+    if(IsUnaryOp(op)) {
+      if(op === 'Token::DELETE') {
+        // 'use strict' let a = 1;delete a;
+        if(this.IsIdentifier(expression) && is_strict(this.language_mode())) throw new Error(kStrictDelete);
+        // if(IsPropertyWithPrivateFieldKey()) 这个不知道怎么触发 #开头的被认定是私有属性
+      }
+      if(this.peek() === 'Token::EXP') throw new Error(kUnexpectedTokenUnaryExponentiation);
+      return this.BuildUnaryExpression(expression, op, pos);
+    }
+
+    // V8_LIKELY
+    if(this.IsValidReferenceExpression(expression)) {
+      if(this.IsIdentifier(expression)) this.expression_scope_.MarkIdentifierAsAssigned();
+    }
+    // else {
+    //   expression = this.RewriteInvalidReferenceExpression(expression, expression_position, this.end_position(), )
+    // }
+    return this.ast_node_factory_.NewCountOperation(op, true, expression, this.position());
+  }
+  ParseAwaitExpression() {}
   ParsePostfixExpression() {
     let lhs_beg_pos = this.peek_position();
     let expression = this.ParseLeftHandSideExpression();
@@ -856,10 +971,8 @@ export default class ParserBase {
     if (!IsCountOp(this.peek()) || this.scanner_.HasLineTerminatorBeforeNext()) return expression;
     return this.ParsePostfixContinuation(expression, lhs_beg_pos);
   }
-  ParseAwaitExpression(){}
   /**
    * LeftHandSideExpression
-   * 处理new与成员表达式
    */
   ParseLeftHandSideExpression() {
     let result = this.ParseMemberExpression();
@@ -937,6 +1050,7 @@ export default class ParserBase {
     }
     throw new Error('UnexpectedToken');
   }
+  ParseLeftHandSideContinuation() {}
   /**
    * 这里的所有方法都通过ast_node_factory工厂来生成literal类
    */
@@ -1247,7 +1361,7 @@ export default class ParserBase {
        * 这种键是需要计算的 因此给了一个is_computed_name标记
        */
       case 'Token::LBRACK': {
-        prop_info.name = this.NullIdentifier();
+        prop_info.name = null;
         prop_info.is_computed_name = true;
         this.Consume('Token::LBRACK');
         // AcceptINScope scope(this, true);
@@ -1267,7 +1381,7 @@ export default class ParserBase {
        */
       case 'Token::ELLIPSIS':
         if (prop_info.kind === kNotSet) {
-          prop_info.name = this.NullIdentifier();
+          prop_info.name = null;
           this.Consume('Token::ELLIPSIS');
           // AcceptINScope scope(this, true);
           let previous_accept_IN_ = this.accept_IN_;

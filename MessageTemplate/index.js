@@ -26,3 +26,11 @@ export const kStrictEvalArguments = 'Unexpected eval or arguments in strict mode
 export const kBadGetterArity = 'Getter must not have any formal parameters.';
 export const kBadSetterArity = 'Setter must have exactly one formal parameter.';
 export const kBadSetterRestParameter = 'Setter function argument must not be a rest parameter';
+
+export const kDeclarationMissingInitializer = 'Missing initializer in destructuring/const declaration';
+export const kInvalidDestructuringTarget = 'Invalid destructuring assignment target';
+export const kInvalidPropertyBindingPattern = 'Illegal property in declaration context';
+export const kInvalidLhsInAssignment = 'Invalid left-hand side in assignment';
+export const kStrictDelete = 'Delete of an unqualified identifier in strict mode.';
+export const kDeletePrivateField = 'Private fields can not be deleted';
+export const kUnexpectedTokenUnaryExponentiation = 'Unary operator used immediately before exponentiation expression.'

@@ -56,6 +56,7 @@ class ExpressionScope {
   }
   IsVarDeclaration() { return this.type_ === kVarDeclaration; }
   IsLexicalDeclaration() { return this.type_ === kLexicalDeclaration; }
+  IsCertainlyDeclaration() { return IsInRange(this.type_, kParameterDeclaration, kLexicalDeclaration); }
   /**
    * 下面三个方法 源码将类向下强转类型
    * JS做不到 不搞了
@@ -87,10 +88,11 @@ class ExpressionScope {
       /**
        * 源码变量名是var JS这里要改一下
        * 可以直接跳去看this.parser_.DeclareVariable
+       * 需要注意的是 这里优先调用子类的Declare方法
        * @returns {VariableDeclaration}
        */
       let variable = this.Declare(name, pos);
-      // var声明语句
+      // var声明语句且当前作用域不是函数作用域
       if (this.IsVarDeclaration() && !this.parser_.scope_.is_declaration_scope()) {
         this.parser_.scope_.AddUnresolved(result);
       } else {
@@ -100,9 +102,8 @@ class ExpressionScope {
     return result;
   }
   /**
-   * 当type_确定时 此时的向下强转不存在参数丢失问题
-   * 这里分为变量的赋值与声明赋值
-   * 即let a = 1、function fn(a = 1) {}
+   * 默认情况不会进这个方法
+   * 基本上都有确定的expression_scope_实例
    */
   Declare(name, pos = kNoSourcePosition) {
     if (this.type_ === kParameterDeclaration) {
@@ -115,20 +116,36 @@ class ExpressionScope {
 export class ExpressionParsingScope extends ExpressionScope {
   constructor(parser, type = kExpression) {
     super(parser, type);
-    this.variable_list_ = [];
+    this.variable_list_ = parser.variable_buffer_;
     this.messages_ = [null, null];
     this.locations_ = [null, null];
+    this.clear(kExpressionIndex);
+    this.clear(kPatternIndex);
+    this.verified_ = false;
   }
+  clear(index) {
+    this.messages_[index] = ''; // MessageTemplate::kNone 与已有名冲突 这里直接设置空字符串
+    this.locations_[index] = new Location().invalid();
+  }
+
   ValidateExpression() { this.Validate(kExpressionIndex); }
+  ValidatePattern() { this.Validate(kPatternIndex); }
   is_valid(index) { return !locations_[index].IsValid(); }
+
   Validate(index) {
-    if (!is_valid(index)) RTCStatsReport(index);
-    this.mark_verified();
+    if (!is_valid(index)) throw new Error('ExpressionParsingScope');
+    this.verified_ = true;
   }
   TrackVariable(variable) {
     if (!this.CanBeDeclaration()) {
       this.parser_.scope_.AddUnresolved(variable);
     }
+    variable_list_.push(variable);
+  }
+
+  MarkIdentifierAsAssigned() {
+    if(this.variable_list_.length === 0) return;
+    this.variable_list_[this.variable_list_.length - 1].set_is_assigned();
   }
 }
 
@@ -145,16 +162,15 @@ export class VariableDeclarationParsingScope extends ExpressionScope {
    */
   Declare(name, pos) {
     let kind = NORMAL_VARIABLE;
-    // 标记是否成功添加HashMap 即第一次声明该变量
-    let was_added = false;
-    let variable = this.parser_.DeclareVariable(name, kind, this.mode_, 
-      Variable.DefaultInitializationFlag(this.mode_), this.parser_.scope_, was_added, pos);
+    // was_added标记是否成功添加HashMap 即第一次声明该变量
+    let { was_added, variable } = this.parser_.DeclareVariable(name, kind, this.mode_, 
+      Variable.DefaultInitializationFlag(this.mode_), this.parser_.scope_, false, pos);
     if (this.names_) this.names_.push(name);
     /**
      * 一个作用域最多可声明2^23 - 1个变量
      * 下面的代码可以不用关心 全是错误处理
      */
-    if (this.was_added && this.parser_.scope_.num_var() > kMaxNumFunctionLocals) {
+    if (was_added && this.parser_.scope_.num_var() > kMaxNumFunctionLocals) {
       throw new Error(kTooManyVariables);
     }
     if (this.IsLexicalDeclaration()) {

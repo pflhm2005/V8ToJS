@@ -1,5 +1,5 @@
 import ParserBase from './ParserBase';
-import FunctionState from './FunctionState';
+import FunctionState from './function/FunctionState';
 
 import { 
   PARSE_EAGERLY, 
@@ -166,6 +166,39 @@ class Parser extends ParserBase {
   }
 
   /**
+   * 这个方法处理运算符+表达式的语句
+   * 比如说+1,!function(){return false}
+   * @param {Expression} expression 表达式
+   * @param {Token} op Token
+   * @param {int} pos 
+   */
+  BuildUnaryExpression(literal, op, pos) {
+    /**
+     * 这里C++做了一个强制转换
+     * const Literal* literal = expression->AsLiteral();
+     * 只是利用了bit_field_属性
+     * 把这些特殊方法直接放到公共父类expression上
+     */
+    if(literal !== null) {
+      if(op === 'Token::NOT') return this.ast_node_factory_.NewBooleanLiteral(literal.ToBooleanIsFalse(), pos);
+      // 处理数字字面量
+      else if(literal.IsNumberLiteral()) {
+        // double value = literal->AsNumber(); 又做了一次转换
+        switch(op) {
+          case 'case Token::ADD':
+            return literal;
+          case 'Token::SUB':
+            return this.ast_node_factory_.NewNumberLiteral(-value, pos);
+          case 'Token::BIT_NOT':
+            return this.ast_node_factory_.NewNumberLiteral(~this.DoubleToInt32(literal), pos);
+          default:
+            break;
+        }
+      }
+    }
+    return this.ast_node_factory_.NewUnaryOperation(op, expression, pos);
+  }
+  /**
    * 返回一个变量代理 继承于Expression类
    * @returns {VariableProxy}
    */
@@ -180,7 +213,7 @@ class Parser extends ParserBase {
   DeclareIdentifier(name, start_position) {
     return this.expression_scope_.Declare(name, start_position);
   }
-  DeclareVariable(name, kind, mode, init, scope, was_added, begin, end = kNoSourcePosition) {
+  DeclareVariable(name, kind, mode, init, scope, was_added_params, begin, end = kNoSourcePosition) {
     let declaration;
     // var声明的变量需要提升
     if (mode === kVar && !scope.is_declaration_scope()) {
@@ -194,16 +227,16 @@ class Parser extends ParserBase {
     else {
       declaration = this.ast_node_factory_.NewVariableDeclaration(begin);
     }
-    this.Declare(declaration, name, kind, mode, init, scope, was_added. begin, end);
-    return declaration.var();
+    let was_added = this.Declare(declaration, name, kind, mode, init, scope, was_added_params. begin, end);
+    return { variable: declaration.var_, was_added };
   }
-  Declare(declaration, name, variable_kind, mode, init, scope, was_added, var_begin_pos, var_end_pos) {
+  Declare(declaration, name, variable_kind, mode, init, scope, was_added_params, var_begin_pos, var_end_pos) {
     // 这两个参数作为引用传入方法 JS只能用这个操作了
     let local_ok = true;
     // bool sloppy_mode_block_scope_function_redefinition = false;
     // 普通模式下 在作用域内容重定义
-    let { sloppy_mode_block_scope_function_redefinition } = scope.DeclareVariable(
-      declaration, name, var_begin_pos, mode, variable_kind, init, was_added,
+    let { was_added, sloppy_mode_block_scope_function_redefinition } = scope.DeclareVariable(
+      declaration, name, var_begin_pos, mode, variable_kind, init, was_added_params,
       false, true);
     // 下面代码大部分情况不会走
     if (!local_ok) {
@@ -216,8 +249,13 @@ class Parser extends ParserBase {
     else if (sloppy_mode_block_scope_function_redefinition) {
       ++this.use_counts_[kSloppyModeBlockScopedFunctionRedefinition];
     }
+    return was_added;
   }
 
+  /**
+   * 返回初始化表达式 处理for in、for of、let、var、const
+   * @returns {Statement}
+   */
   BuildInitializationBlock(parsing_result) {
     /**
      * ScopedPtrList就是一个高级数组 先不实现了
@@ -225,9 +263,9 @@ class Parser extends ParserBase {
      */
     let len = this.pointer_buffer_.length;
     let statements = this.pointer_buffer_;
-    let vector = parsing_result.declarations;
-    for (const declaration of vector) {
-      // 这里的initializer是声明的初始值
+    let decls = parsing_result.declarations;
+    for (const declaration of decls) {
+      // 这里的initializer是声明的初始值 跳过所有声明未定义
       if (!declaration.initializer) continue;
       // 这里第二个参数是parsing_result.descriptor.kind 但是没有使用
       this.InitializeVariables(statements, declaration);
@@ -237,11 +275,11 @@ class Parser extends ParserBase {
     this.pointer_buffer_.length = len;
     return result;
   }
-  InitializeVariables(vector, declaration) {
+  InitializeVariables(statements, declaration) {
     let pos = declaration.value_beg_pos;
     if (pos === kNoSourcePosition) pos = declaration.initializer.position();
     let assignment = this.ast_node_factory_.NewAssignment('Token::INIT', declaration.pattern, declaration.initializer, pos);
-    vector.push(this.ast_node_factory_.NewExpressionStatement(assignment, pos));
+    statements.push(this.ast_node_factory_.NewExpressionStatement(assignment, pos));
   }
 
   /**

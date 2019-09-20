@@ -1,3 +1,5 @@
+import { FLAG_max_lazy } from '../../Compile/Flag';
+
 const kNoReason = 0;
 
 class BlockState {
@@ -25,5 +27,8 @@ export default class FunctionState extends BlockState {
   }
   kind() {
     return this.scope_.function_kind_;
+  }
+  set_next_function_is_likely_called() {
+    this.next_function_is_likely_called_ = !FLAG_max_lazy;
   }
 }

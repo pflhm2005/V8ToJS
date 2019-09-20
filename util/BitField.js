@@ -96,6 +96,13 @@ export const IsLabeledField = BitField(8, 1);
  */
 export const IsParenthesizedField = BitField(6, 1);
 
+export const IsPrefixField = BitField(7, 1);
+export const TokenField = BitField(8, 7);
+
+export const TypeField = BitField(7, 4);
+
+export const OperatorField = BitField(7, 7);
+
 /**
  * using IsAssignedField = Expression::NextBitField<bool, 1>;
  * using NextBitField = IsParenthesizedField::Next<T, size>;
