@@ -633,6 +633,29 @@ class Parser extends ParserBase {
  
   DeclareFunction() {
   }
+
+  /**
+   * 对象字面量工具函数
+   * @param {ObjectLiteralProperty*} property 
+   */
+  IsBoilerplateProperty(property) {
+    return !property.IsPrototype();
+  }
+  InitializeObjectLiteral(object_literal) {
+    object_literal.CalculateEmitStore();
+    return object_literal;
+  }
+  /**
+   * 判定该字符串是否是int32的纯数字 多位数不可以0开头
+   * @param {AstRawString} string 
+   * @param {Number} index 
+   */
+  IsArrayIndex(string, index) {
+    return string.AsArrayIndex(index);
+  }
+  PushLiteralName(id) {
+    this.fni_.PushLiteralName(id);
+  }
 }
 
 export default Parser;

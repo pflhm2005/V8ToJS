@@ -176,7 +176,7 @@ export default class ParserBase {
   }
   /**
    * 这里的DeclarationScope存在构造函数重载 并且初始化方式不一致
-   * 手动分成两个不同的子类
+   * 差距过大 手动分成两个不同的子类
    */
   NewFunctionScope(kind) {
     let result = new FunctionDeclarationScope(null, this.scope_, FUNCTION_SCOPE, kind);
@@ -206,6 +206,11 @@ export default class ParserBase {
   PeekAhead() {
     return this.scanner_.PeekAhead();
   }
+  /**
+   * 由于of不是关键词 没有对应Token
+   * 但是存在for ... of的新语法 这里就需要特殊处理一下
+   * for关键词会将语句类型设置为ForStatement 此时的of有特殊意义
+   */
   PeekInOrOf() {
     return this.peek() === 'Token::IN'
     //  || PeekContextualKeyword(ast_value_factory()->of_string());
@@ -704,7 +709,7 @@ export default class ParserBase {
            * (1)单值字面量 null、true、false、1、1.1、1n、'1'
            * (2)一元运算 +1、++a 形如+function(){}、!function(){}会被特殊处理
            * (3)二元运算 'a' + 'b'、1 + 2
-           * (4){}对象、[]数组、``模板字符串
+           * (4){}对象、[]数组、``模板字符串复杂字面量
            * 等等情况 实在太过繁琐
            * 除了上述情况 被赋值的可能也是一个左值 比如遇到如下的特殊Token
            * import、async、new、this、function、任意标识符等等
@@ -826,7 +831,7 @@ export default class ParserBase {
 
     let op = this.peek();
     /**
-     * 如果当前Token不是运算符
+     * 如果当前Token不是运算符或箭头
      * 这里会判定不是多元运算表达式直接返回
      */
     if (!IsArrowOrAssignmentOp(op)) {
@@ -835,9 +840,6 @@ export default class ParserBase {
       --this.fni_.scope_depth_;
       return expression;
     }
-    /**
-     * 多元表达式才会继续走
-     */
 
     // 箭头函数 V8_UNLIKELY
     if (op === 'Token::ARROW') {
@@ -845,8 +847,11 @@ export default class ParserBase {
       // if (...) return this.FailureExpression();
       // TODO
     }
-
-    // TODO V8_LIKELY
+    
+    /**
+     * V8_LIKELY
+     * 多元运算表达式才会继续走
+     */
     if (this.IsAssignableIdentifier(expression)) {
       if(expression.is_parenthesized()) throw new Error(kInvalidDestructuringTarget);
       this.expression_scope_.MarkIdentifierAsAssigned();
@@ -1036,15 +1041,15 @@ export default class ParserBase {
       return this.ExpressionFromIdentifier(name, beg_pos);
     }
     /**
-     * 普通字面量
+     * 简单字面量
      */
     if (IsLiteral(token)) return this.ExpressionFromLiteral(this.Next(), beg_pos);
     /**
-     * 处理各种特殊符号
-     * 比如new this [] {}
-     * [Token::ASSIGN, Token::LBRACE, null]
+     * 处理各种复杂字面量与特殊表达式
+     * 比如new、this、[]、{}、super
      */
     switch(token) {
+      // [Token::ASSIGN, Token::LBRACE, null]
       case 'Token::LBRACE':
         return this.ParseObjectLiteral();
     }
@@ -1115,23 +1120,28 @@ export default class ParserBase {
     return expression;
   }
   ParseTemplateLiteral() {}
+
   /**
    * 解析对象字面量
    * '{' (PropertyDefinition (',' PropertyDefinition)* ','? )? '}'
+   * {a:1} {a} {a,} {a, b: 1} 其中一个键值对就是一个PropertyDefinition
    */
   ParseObjectLiteral() {
     let pos = this.peek_position();
     /**
-     * 此处生成了一个ScopedPtrList 容器是pointer_buffer_
      * ObjectPropertyList = ScopedPtrList<v8::internal::ObjectLiteralProperty>
      * ObjectPropertyList properties(pointer_buffer());
+     * ScopedPtrList作为一个公共变量容器 在作用域结束时会进行还原
      */
+    let start_ = this.pointer_buffer_.length;
     let properties = this.pointer_buffer_;
     // 引用属性计数
     let number_of_boilerplate_properties = 0;
-
+    // 待计算的键值对
     let has_computed_names = false;
+    // 扩展运算符
     let has_rest_property = false;
+    // __proto__
     let has_seen_proto = false;
     // [Token::ASSIGN, Token::LBRACE, null] => [Token::LBRACE, xxx, null]
     this.Consume('Token::LBRACE');
@@ -1158,20 +1168,21 @@ export default class ParserBase {
 
       if (this.peek() !== 'Token::RBRACE') this.Expect('Token::COMMA');
 
-      // this.fni_.Infer();
+      this.fni_.Infer();
       // 析构
       this.fni_.names_stack_.length = top_;
       --this.fni_.scope_depth_;
     }
-    if (has_rest_property && properties.length > kMaxArguments) {
-      this.expression_scope_.RecordPatternError(new Location(pos, this.position(), kTooManyArguments));
-    }
-    return this.InitializeObjectLiteral(this.ast_node_factory_.NewObjectLiteral(properties, number_of_boilerplate_properties, pos, has_rest_property));
+    if (has_rest_property && properties.length > kMaxArguments) throw new Error(kTooManyArguments);
+    let result = this.InitializeObjectLiteral(this.ast_node_factory_.NewObjectLiteral(properties, number_of_boilerplate_properties, pos, has_rest_property));
+    // 析构
+    this.pointer_buffer_ = start_;
+    return result;
   }
   ParseObjectPropertyDefinition(prop_info, has_seen_proto) {
     let name_token = this.peek();
     let next_loc = this.scanner_.peek_location();
-
+    // key
     let name_expression = this.ParseProperty(prop_info);
 
     let { name, function_flags, kind } = prop_info;
@@ -1259,7 +1270,7 @@ export default class ParserBase {
       let token = this.peek();
       /**
        * 进入这个分支代表async被当成普通的变量名
-       * { async: 1 }
+       * { async: 1 }, { async, }等等
        */
       if ((token !== 'Token::MUL'
       && prop_info.ParsePropertyKindFromToken(token))
@@ -1335,6 +1346,7 @@ export default class ParserBase {
         this.Consume('Token::STRING');
         // 这两个方法一点卵区别都没有
         prop_info.name = this.peek() === 'Token::COLON' ? this.GetSymbol() : this.GetIdentifier();
+        // 判定能否转换成int32以内的数字 因为所有字符串都存在一个HashMap中 计算hash的方式跟字符串本身相关
         let result = this.IsArrayIndex(prop_info.name, index);
         is_array_index = result.is_array_index;
         index = result.index;
@@ -1386,13 +1398,13 @@ export default class ParserBase {
           // AcceptINScope scope(this, true);
           let previous_accept_IN_ = this.accept_IN_;
           this.accept_IN_ = true;
-          let start_pos = this.peek_position();
+          // let start_pos = this.peek_position();
           /**
-           * TODO 不晓得这个解析什么
+           * 对于...expr 直接当前简单右值解析expr
            */
           let expression = this.ParsePossibleDestructuringSubPattern(prop_info.accumulation_scope);
           prop_info.kind = kSpread;
-
+          // 这里有很多其他的错误判断 就不一一列举了
           if (this.peek() !== 'Token::RBRACE') throw new Error(kElementAfterRest);
           // 析构
           this.accept_IN_ = previous_accept_IN_;
@@ -1408,6 +1420,7 @@ export default class ParserBase {
         is_array_index = false;
         break;
     }
+    // 一般大部分简单键值对走到这里都是kNotSet
     if (prop_info.kind === kNotSet) prop_info.ParsePropertyKindFromToken(this.peek());
     this.PushLiteralName(prop_info.name);
     return is_array_index ? this.ast_node_factory_.NewNumberLiteral(index, pos) : this.ast_node_factory_.NewStringLiteral(prop_info.name, pos);
@@ -1479,30 +1492,12 @@ export default class ParserBase {
   SetFunctionName(value, name, prefix) {
     // TODO
   }
-  IsBoilerplateProperty(property) {
-    return !property.IsPrototype();
-  }
-  InitializeObjectLiteral(object_literal) {
-    object_literal.CalculateEmitStore();
-    return object_literal;
-  }
   Expect(token) {
     let next = this.Next();
     // V8_UNLIKELY
     if (next !== token) {
       throw new Error('UnexpectedToken');
     }
-  }
-  /**
-   * 判定该字符串是否是int32的纯数字 多位数不可以0开头
-   * @param {AstRawString} string 
-   * @param {Number} index 
-   */
-  IsArrayIndex(string, index) {
-    return string.AsArrayIndex(index);
-  }
-  PushLiteralName(id) {
-    this.fni_.PushLiteralName(id);
   }
 
   // TODO

@@ -51,7 +51,6 @@ import {
   BreakableTypeField,
   IgnoreCompletionField,
   IsLabeledField,
-  TokenField,
   HashMap,
   IsResolvedField,
   HasElementsField,
@@ -70,6 +69,8 @@ import {
   IsPrefixField,
   TypeField,
   OperatorField,
+  CountOperationTokenField,
+  AssignmentTokenField,
 } from '../util';
 
 export class AstNodeFactory {
@@ -89,8 +90,11 @@ export class AstNodeFactory {
    * JS无法做到完美模拟 这里手动将对应类型的枚举传入构造函数
    * @returns {Literal} 字面量类
    */
+  NewTheHoleLiteral() {
+    return new Literal(kTheHole, null, kNoSourcePosition);
+  }
   NewUndefinedLiteral(pos) {
-    return new Literal(kUndefined, undefined, pos);
+    return new Literal(kUndefined, null, pos);
   }
   NewNullLiteral(pos) {
     return new Literal(kNull, null, pos);
@@ -111,8 +115,30 @@ export class AstNodeFactory {
   NewStringLiteral(string, pos) {
     return new Literal(kString, string, pos);
   }
-  NewObjectLiteralProperty(key, value, is_computed_name) {
-    return new ObjectLiteralProperty(this.ast_value_factory_, key, value, is_computed_name);
+  /**
+   * 存在重载 在内部区分 工厂方法保持唯一
+   * 3参时 构造函数会添加ast_value_factory_作为第一个参数 最后总的还是4个
+   * 4参情况
+   * @param {Expression*} key 
+   * @param {Expression*} value 
+   * @param {ObjectLiteralProperty::Kind} kind
+   * @param {bool} is_computed_name
+   * new (zone_) ObjectLiteral::Property(key, value, kind, is_computed_name);
+   * 3参情况
+   * @param {Expression*} key 
+   * @param {Expression*} value 
+   * @param {bool} is_computed_name
+   * return new (zone_) ObjectLiteral::Property(ast_value_factory_, key, value, is_computed_name);
+   */
+  NewObjectLiteralProperty(...args) {
+    /**
+     * 两种情况下都有key、value、is_computed_name三个参数
+     * 所以这里调整一下构造参数顺序 根据kind来判断是哪一个
+     */
+    // [ast_value_factory_, key, value, is_computed_name]
+    if(args.length === 3) return new ObjectLiteralProperty(this.ast_value_factory_, ...args);
+    // 修正后[kind, key, value, is_computed_name]
+    return new ObjectLiteralProperty(args[2], args[0], args[1], args[3]);
   }
 
   /**
@@ -295,7 +321,7 @@ class Assignment extends Expression {
     super(pos, node_type);
     this.target_ = target;
     this.value_ = value;
-    this.bit_field_ |= TokenField.encode(op);
+    this.bit_field_ |= AssignmentTokenField.encode(op);
   }
 }
 
@@ -330,10 +356,10 @@ class Literal extends Expression{
     /**
      * JS既没有函数重载(参数不同可以模拟 类型实在无力) 也没有union数据结构
      * 连枚举也没有(实际上用ES6的Symbol模拟枚举是一个可行性方案 但是成本略高)
-     * 因此用一个数组来保存值 用val()来获取对应的值
+     * 因此用一个数组来保存各种类型的值 用val()来获取对应的值
      */
     this.val_ = new Array(6).fill(null);
-    if(val !== null || val !== undefined) this.val_[type] = val;
+    if(type !== kNull || val !== kUndefined || val !== kTheHole) this.val_[type] = val;
     
     this.bit_field_ = NodeTypeField.update(this.bit_field_, type);
   }
@@ -396,7 +422,7 @@ class CountOperation extends Expression {
   constructor(op, is_prefix, expr, pos) {
     super(pos, _kCountOperation);
     this.expression_ = expr;
-    this.bit_field_ |= IsPrefixField.encode(is_prefix) | TokenField.encode(op);
+    this.bit_field_ |= IsPrefixField.encode(is_prefix) | CountOperationTokenField.encode(op);
   }
 }
 
@@ -447,7 +473,8 @@ class ObjectLiteral extends AggregateLiteral {
       let hash = literal.Hash();
       /**
        * JS的HashMap只能支持简单类型的存储
-       * 干脆用数组算了 其中hash作为标记 TODO后续考虑hashmap
+       * 干脆用数组算了 其中hash作为标记 目前有歧义 无法分辨get是key还是getter
+       * TODO 后续考虑hashmap
        */
       // let entry = table.LookupOrInsert(literal, hash);
       let entry = table.find(v => v.hash === hash);
@@ -461,6 +488,7 @@ class ObjectLiteral extends AggregateLiteral {
       }
       /**
        * 如果有重复的key并不代表一定是重复定义
+       * 比如说 { get: 1, get a() {} } 两个get意义不一样
        */
       else {
         let later_kind = entry.value.kind_;
@@ -567,19 +595,30 @@ class LiteralProperty extends ZoneObject {
   }
 }
 
+/**
+ * 这个类有两个构造函数 实例化的过程差距过大 只能这样搞
+ * 好在父类的构造函数只有一个
+ */
 class ObjectLiteralProperty extends LiteralProperty {
-  constructor(ast_value_factory, key, value, is_computed_name) {
+  constructor(ast_value_factoryOrKind, key, value, is_computed_name) {
     super(key, value, is_computed_name);
-    this.emit_store_ = true;
-    if (!is_computed_name && key.IsString() &&
-    key.AsRawString().literal_bytes_ === ast_value_factory.proto_string()) {
-      this.kind_ = PROTOTYPE;
-    } else if (this.value_.AsMaterializedLiteral() !== null) {
-      this.kind_ = MATERIALIZED_LITERAL;
-    } else if (value.IsLiteral()) {
-      this.kind_ = CONSTANT;
-    } else {
-      this.kind_ = COMPUTED;
+    // [kind, key, value, is_computed_name]
+    if(typeof ast_value_factoryOrKind === 'number') {
+      this.kind_ = ast_value_factoryOrKind;
+      this.emit_store_ = true;
+    }
+    // [ast_value_factory_, key, value, is_computed_name]
+    else {
+      if (!is_computed_name && key.IsString() &&
+      key.AsRawString().literal_bytes_ === ast_value_factory.proto_string()) {
+        this.kind_ = PROTOTYPE;
+      } else if (this.value_.AsMaterializedLiteral() !== null) {
+        this.kind_ = MATERIALIZED_LITERAL;
+      } else if (value.IsLiteral()) {
+        this.kind_ = CONSTANT;
+      } else {
+        this.kind_ = COMPUTED;
+      }
     }
   }
   IsPrototype() {

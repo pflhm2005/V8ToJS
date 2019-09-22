@@ -75,7 +75,7 @@ export const NodeTypeField = BitField(0, 6);
 /**
  * using TokenField = Statement::NextBitField<Token::Value, 8>;
  */
-export const TokenField = BitField(6, 8);
+export const SloppyBlockFunctionStatementTokenField = BitField(6, 8);
 
 /**
  * using BreakableTypeField = Statement::NextBitField<BreakableType, 1>;
@@ -97,7 +97,9 @@ export const IsLabeledField = BitField(8, 1);
 export const IsParenthesizedField = BitField(6, 1);
 
 export const IsPrefixField = BitField(7, 1);
-export const TokenField = BitField(8, 7);
+export const CountOperationTokenField = BitField(8, 7);
+
+export const AssignmentTokenField = BitField(7, 7);
 
 export const TypeField = BitField(7, 4);
 

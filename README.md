@@ -15,7 +15,9 @@ npm install babel-cli -g
 npm install babel-preset-env -D
 ```
 
-启动解析 运行
+启动解析 运行对应的测试文件
 ```
-babel-node --presets env HelloWorld
+babel-node --presets env xxx
 ```
+
+目前仅有对Token的全解析 可以自行修改待编译字符串并查看打印结果
