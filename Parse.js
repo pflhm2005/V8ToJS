@@ -14,7 +14,7 @@ let parse_info = new ParseInfo(isolate);
 parse_info.CreateScript(isolate, source, new ScriptOriginOptions(), false);
 Parsing.ParseProgram(parse_info, isolate);
 
-// let AstBody = parse_info.literal_.body_;
-// for(let statement of AstBody) {
-//   console.log(statement);
-// }
+let AstBody = parse_info.literal_.body_;
+for(let statement of AstBody) {
+  console.log(statement);
+}
