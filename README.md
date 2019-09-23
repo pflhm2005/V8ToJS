@@ -24,6 +24,7 @@ babel-node --presets env xxx(Token.js/Parse.js)
 
 有一些特殊语法的模拟方式需要说明一下
 
+
 ### 析构
 V8很多时候会在栈上实例化类，作用域结束自动析构，JS不支持这种语法，如下:
 ```c++
@@ -106,6 +107,7 @@ function handle() {
 }
 ```
 
+
 ### 枚举
 
 ```c++
@@ -121,9 +123,11 @@ const kYes = 0;
 const kNo = 0;
 ```
 
+
 ### 宏
 
 > 直接展开
+
 
 ### 基本类型的引用传递
 
@@ -163,3 +167,50 @@ fuction fnc2(a, b) {
 let { a, b, result } = fnc2(1, false);
 // 如此不会影响后续逻辑
 ```
+
+
+### 重载
+
+这里的重载包括函数重载与函数的构造重载
+一般来说，简单的重载可以直接用默认参数来实现
+```c++
+void Scan() { Scan(Next()) }
+void Scan(TokenDesc* next) { /* ... */ }
+```
+```js
+function Scan(next = this.next_) {
+  /* ... */
+}
+```
+但是某些情况重载比较复杂，分为两种情况
+```c++
+// 参数数量不一致 构造参数也不一致
+ObjectLiteral::Property* NewObjectLiteralProperty(Expression* key, Expression* value, ObjectLiteralProperty::Kind kind,bool is_computed_name) {
+  return new (zone_) ObjectLiteral::Property(key, value, kind, is_computed_name);
+}
+ObjectLiteral::Property* NewObjectLiteralProperty(Expression* key, Expression* value, bool is_computed_name) {
+  return new (zone_) ObjectLiteral::Property(ast_value_factory_, key, value, is_computed_name);
+}
+```
+```js
+/**
+ * 存在重复的参数 根据参数数量 调整一下顺序
+ * 由于不清楚参数数量 直接用rest表示
+ * 这里实际上可以通过默认参数实现 => (key, value, is_computed_name, extra_paran = ast_value_factory_)
+ * 但是这样一来调用方法的参数顺序就需要修改 对于使用率较高的方法来说十分不妥
+ * 因此 外部调用保持与源码一致 差异化的逻辑处理放在工厂函数
+ */ 
+function NewObjectLiteralProperty(...args) {
+  if(args.length === 3) return new Property(ast_value_factory_, ...args);
+  else return new Property(args[2], args[0], args[1], args[3]);
+}
+// 类的构造函数也要进行修改
+class Property {
+  constructor(ast_value_factory_or_kind/*这是一个动态参数*/,key, value, is_computed_name) {
+    if(typeof ast_value_factory_or_kind === 'number') {/*做别的初始化*/}
+  }
+}
+```
+极端情况下，存在子类、父类均有多重构造函数(见DeclarationScope)，或者根据构造参数决定是否调用其余构造方法的逻辑，太过于复杂。
+
+目前将其拆分为多个类实现，后续考虑更优实现方法。
