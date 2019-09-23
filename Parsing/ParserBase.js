@@ -69,6 +69,9 @@ import {
   kSetterFunction,
   GETTER,
   SETTER,
+  kExpression,
+  kWrapped,
+  kLastLexicalVariableMode,
 } from '../enum';
 
 import {
@@ -92,6 +95,10 @@ import {
   IsValidIdentifier,
   IsGeneratorFunction,
   IsUnaryOp,
+  IsResumableFunction,
+  IsAsyncGeneratorFunction,
+  IsDerivedConstructor,
+  IsConciseMethod,
 } from '../util';
 
 import {
@@ -539,6 +546,115 @@ export default class ParserBase {
   }
   ClassifyParameter(parameters, begin, end) {
     if (this.IsEvalOrArguments(parameters)) throw new Error(kStrictEvalArguments);
+  }
+  /**
+   * 以下内容为解析函数体
+   * @param {StatementListT*} body pointer_buffer_
+   * @param {Identifier} function_name 函数名
+   * @param {int} pos 位置
+   * @param {FormalParameters} parameters 函数参数
+   * @param {FunctionKind} kind 函数类型 箭头函数、async等等
+   * @param {FunctionSyntaxKind} function_type 函数的语法类型 普通函数orIIFE
+   * @param {FunctionBodyType} body_type 表达式还是声明 即a => a or function a() {}
+   */
+  ParseFunctionBody(body, function_name, pos, parameters, kind, function_type, body_type) {
+    // FunctionBodyParsingScope body_parsing_scope(impl());
+    // 新的函数作用域
+    let expression_scope_ = this.expression_scope_;
+    this.expression_scope_ = null;
+
+    // 可恢复函数 => async、*function这种特殊函数
+    if(IsResumableFunction(kind)) this.PrepareGeneratorVariables();
+    let function_scope = parameters.scope;
+    let inner_scope = function_scope;
+    /**
+     * 复杂参数
+     * 1. 解构 => function fn({a}, [b]) {}
+     * 2. rest =>  function fn(...rest) {}
+     * V8_UNLIKELY
+     */
+    if(!parameters.is_simple) {
+      let init_block = this.BuildParameterInitializationBlock(parameters);
+      if(IsAsyncFunction(kind) && !IsAsyncGeneratorFunction(kind)) init_block = this.BuildRejectPromiseOnException(init_block);
+      body.push(init_block);
+
+      inner_scope = this.NewVarblockScope();
+      inner_scope.start_position_ = this.scanner_.location().beg_pos;
+    }
+    // StatementListT inner_body(pointer_buffer());
+    // 这里再次调用了ScopePtrList 需要从上一个list来做slice
+    let inner_body = this.body.slice();
+    {
+      // BlockState block_state(&scope_, inner_scope);
+      // 缓存当前作用域
+      let outer_scope_ = this.scope_;
+      this.scope_ = inner_scope;
+      if(body_type === kExpression) {
+        let expression = this.ParseAssignmentExpression();
+        if(IsAsyncFunction(kind)) {
+          let block = this.ast_node_factory_.NewBlock(1, true);
+          this.RewriteAsyncFunctionBody(inner_body, block, expression);
+        } else {
+          inner_body.push(this.BuildReturnStatement(expression, expression.position_));
+        }
+      } else {
+        // kWrapped是针对整个作用域的 一般情况是右大括号代表函数结束
+        let closing_token = function_type === kWrapped ? 'Token::EOS' : 'Token::RBRACE';
+        if(IsAsyncGeneratorFunction(kind)) this.ParseAndRewriteAsyncGeneratorFunctionBody(pos, kind, inner_body);
+        else if(IsGeneratorFunction(kind)) this.ParseAndRewriteGeneratorFunctionBody(pos, kind, inner_body);
+        else if(IsAsyncFunction(kind)) this.ParseAsyncFunctionBody(inner_scope, inner_body);
+        // 正常的函数走原始解析 只是会带入新的body
+        else this.ParseStatementList(inner_body, closing_token);
+
+        if(IsDerivedConstructor(kind)) {
+          // ExpressionParsingScope expression_scope(impl());
+          let expression_scope_ = new ExpressionParsingScope(this);
+          inner_body.push(this.ast_node_factory_.NewReturnStatement(this.ThisExpression(), kNoSourcePosition));
+          expression_scope_.ValidateExpression();
+          // 析构
+          this.expression_scope_ = expression_scope_.parent_;
+          expression_scope_ = null;
+        }
+        this.Expect(closing_token);
+      }
+      // 析构
+      this.scope_ = outer_scope_;
+    }
+
+    this.scope_.end_position_ = this.end_position();
+    let allow_duplicate_parameters = false;
+    // CheckConflictingVarDeclarations(inner_scope);
+    
+    // V8_LIKELY
+    if(parameters.is_simple) {
+      if(is_sloppy(function_scope.language_mode())) this.InsertSloppyBlockFunctionVarBindings(function_scope);
+      allow_duplicate_parameters = is_sloppy(function_scope.language_mode()) && !IsConciseMethod(kind);
+    } else {
+      this.SetLanguageMode(function_scope, inner_scope.language_mode());
+      if(is_sloppy(inner_scope.language_mode())) this.InsertSloppyBlockFunctionVarBindings(inner_scope);
+
+      inner_scope.end_position_ = this.end_position();
+      if(inner_scope.FinalizeBlockScope() !== null) {
+        let inner_block = this.ast_node_factory_.NewBlock(true, inner_body);
+        inner_body.Rewind();
+        inner_body.push(inner_block);
+        inner_block.scope_ = inner_scope;
+        if(!this.HasCheckedSyntax()) {
+          let conflict = inner_scope.FindVariableDeclaredIn(function_scope, kLastLexicalVariableMode);
+          if(conflict !== null) this.ReportVarRedeclarationIn(conflict, inner_scope);
+        }
+        this.InsertShadowingVarBindingInitializers(inner_block);
+      }
+    }
+
+    this.ValidateFormalParameters(this.language_mode(), parameters, allow_duplicate_parameters);
+    // 箭头函数没有argument
+    if(!IsArrowFunction(kind)) function_scope.DeclareArguments(this.ast_value_factory_);
+    this.DeclareFunctionNameVar(function_name, function_type, function_scope);
+    inner_body.MergeInto(body);
+
+    // 析构
+    this.expression_scope_ = expression_scope_;
   }
 
   ParseClassDeclaration() {}

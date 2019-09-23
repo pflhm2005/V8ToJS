@@ -47,3 +47,6 @@ export const kHasDuplicateParameters = 0;
 
 const kArgumentsBits = 16;
 export const kMaxArguments = (1 << kArgumentsBits) - 2;
+
+export const kExpression = 0;
+export const kBlock = 0;

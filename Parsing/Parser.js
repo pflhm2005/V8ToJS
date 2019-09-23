@@ -16,6 +16,7 @@ import {
   kStrictMode,
   kIncludingVariables,
   kYes,
+  kBlock,
 } from '../enum';
 
 import { 
@@ -532,7 +533,7 @@ class Parser extends ParserBase {
     /**
      * 解析函数体
      */
-    this.ParseFunctionBody(body, function_name, pos, formals, kind, function_type, _kBlock);
+    this.ParseFunctionBody(body, function_name, pos, formals, kind, function_type, kBlock);
     has_duplicate_parameters = formals.has_duplicate();
     expected_property_count = function_state.expected_property_count_;
     suspend_count = function_state.suspend_count_;
@@ -626,20 +627,6 @@ class Parser extends ParserBase {
         is_optional, parameter.is_rest_, this.ast_value_factory_, parameter.position
       );
     }
-  }
-
-  /**
-   * 以下内容为解析函数体
-   * @param {StatementListT*} body 
-   * @param {Identifier} function_name 
-   * @param {int} pos 
-   * @param {FormalParameters} parameters 
-   * @param {FunctionKind} kind 
-   * @param {FunctionSyntaxKind} function_type 
-   * @param {FunctionBodyType} body_type 
-   */
-  ParseFunctionBody(body, function_name, pos, parameters, kind, function_type, body_type) {
-
   }
  
   DeclareFunction() {

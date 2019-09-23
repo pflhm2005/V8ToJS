@@ -13,7 +13,8 @@ import {
   kSetterFunction,
   kDefaultDerivedConstructor, 
   kSloppy,
-  kStrict
+  kStrict,
+  kModule
 } from "../enum";
 import { TokenIsInRange, IsInRange } from './Identifier';
 
@@ -32,8 +33,12 @@ export const IsLexicalVariableMode = (mode) =>{
  */
 export const IsAutoSemicolon = (token) => TokenIsInRange(token, 'SEMICOLON', 'EOS');
 export const IsAsyncFunction = (kind) => IsInRange(kind, kAsyncArrowFunction, kAsyncGeneratorFunction);
+export const IsModule = (kind) => kind === kModule;
 export const IsArrowFunction = (kind) => IsInRange(kind, kArrowFunction, kAsyncArrowFunction);
 export const IsGeneratorFunction = (kind) => IsInRange(kind, kAsyncConciseGeneratorMethod, kConciseGeneratorMethod);
+export const IsAsyncGeneratorFunction = kind => IsInRange(kind, kAsyncConciseGeneratorMethod, kAsyncGeneratorFunction);
+export const IsResumableFunction = kind => IsGeneratorFunction(kind) || IsAsyncFunction(kind) || IsModule(kind);
+
 export const IsConciseMethod = (kind) => IsInRange(kind, kAsyncConciseMethod, kAsyncConciseGeneratorMethod) || IsInRange(kind, kConciseGeneratorMethod, kClassMembersInitializerFunction);
 export const IsClassConstructor = (kind) => IsInRange(kind, kBaseConstructor, kDerivedConstructor);
 export const IsAccessorFunction = (kind) => IsInRange(kind, kGetterFunction, kSetterFunction);
