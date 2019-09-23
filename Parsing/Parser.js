@@ -368,8 +368,7 @@ class Parser extends ParserBase {
      * pointer_buffer_默认是vector<void*> 万能指针容器 大小为0
      * 目前不需要关注start_、end_ 直接缓存当前长度 结束后重置即可
      */
-    let len = this.pointer_buffer_.length;
-    let body = this.pointer_buffer_;
+    let body = this.pointer_buffer_.slice();
     /**
      * 下面的变量作为引用传到ParseFunction里去了
      */
@@ -429,7 +428,7 @@ class Parser extends ParserBase {
     if (should_infer_name) this.fni_.AddFunction(function_literal);
 
     // 析构
-    this.pointer_buffer_.length = len;
+    // this.pointer_buffer_.length = len;
     return function_literal;
   }
   parse_lazily() {
@@ -640,6 +639,7 @@ class Parser extends ParserBase {
    * @param {FunctionBodyType} body_type 
    */
   ParseFunctionBody(body, function_name, pos, parameters, kind, function_type, body_type) {
+
   }
  
   DeclareFunction() {

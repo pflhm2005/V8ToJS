@@ -1138,8 +1138,8 @@ export default class ParserBase {
      * ObjectPropertyList properties(pointer_buffer());
      * ScopedPtrList作为一个公共变量容器 在作用域结束时会进行还原
      */
-    let start_ = this.pointer_buffer_.length;
-    let properties = this.pointer_buffer_;
+    // let start_ = this.pointer_buffer_.length;
+    let properties = this.pointer_buffer_.slice();
     // 引用属性计数
     let number_of_boilerplate_properties = 0;
     // 是否存在待计算的键 { ['a' + 'b']: 1, ...object } 都是需要计算的
@@ -1181,7 +1181,7 @@ export default class ParserBase {
     if (has_rest_property && properties.length > kMaxArguments) throw new Error(kTooManyArguments);
     let result = this.InitializeObjectLiteral(this.ast_node_factory_.NewObjectLiteral(properties, number_of_boilerplate_properties, pos, has_rest_property));
     // 析构
-    this.pointer_buffer_ = start_;
+    // this.pointer_buffer_ = start_;
     return result;
   }
   ParseObjectPropertyDefinition(prop_info, has_seen_proto) {
