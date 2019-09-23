@@ -8,6 +8,7 @@ import Location from './scanner/Location';
 import { 
   VariableDeclarationParsingScope,
   AccumulationScope,
+  ExpressionParsingScope,
 } from './ExpressionScope';
 import Scope, { FunctionDeclarationScope, ScriptDeclarationScope } from './Scope';
 
@@ -63,6 +64,11 @@ import {
   FUNCTION_SCOPE,
   kParameterDeclaration,
   kAllowLabelledFunctionStatement,
+  kAccessorOrMethod,
+  kGetterFunction,
+  kSetterFunction,
+  GETTER,
+  SETTER,
 } from '../enum';
 
 import {
@@ -130,7 +136,7 @@ export default class ParserBase {
     this.function_state_ = new FunctionState(null, this.scope_, null);
     this.extension_ = extension;
 
-    this.fni = new FuncNameInferrer(ast_value_factory);
+    this.fni_ = new FuncNameInferrer(ast_value_factory);
     this.ast_value_factory_ = ast_value_factory;
     this.ast_node_factory_ = new AstNodeFactory(ast_value_factory, null);
     this.runtime_call_stats_ = runtime_call_stats;
@@ -245,7 +251,6 @@ export default class ParserBase {
     while(this.peek() === 'Token::STRING') {
       // TODO;
     }
-    console.log(this.scanner_);
 
     while(this.peek() !== end_token) {
       let stat = this.ParseStatementListItem();
@@ -284,6 +289,35 @@ export default class ParserBase {
         break;
     }
     return this.ParseStatement(null, null, kAllowLabelledFunctionStatement);
+  }
+  IsNextLetKeyword() {
+    /**
+     * 这里调用了PeekAhead后赋值了next_next_ 会影响Next方法
+     * 调用后cur、next_、next_next_的值变化如下
+     * [null, LET, null] => [null, LET, IDENTIFIER];
+     */
+    let next_next = this.PeekAhead();
+    /**
+     * let后面跟{、[、标识符、static、let、yield、await、get、set、async是合法的(实际上let let不合法)
+     * 保留关键词合法性根据严格模式决定
+     */
+    switch(next_next) {
+      case 'Token::LBRACE':
+      case 'Token::LBRACK':
+      case 'Token::IDENTIFIER':
+      case 'Token::STATIC':
+      case 'Token::LET':
+      case 'Token::YIELD':
+      case 'Token::AWAIT':
+      case 'Token::GET':
+      case 'Token::SET':
+      case 'Token::ASYNC':
+        return true;
+      case 'Token::FUTURE_STRICT_RESERVED_WORD':
+        return is_sloppy(this.language_mode());
+      default:
+        return false;
+    }
   }
   ParseStatement() {}
 
@@ -510,35 +544,6 @@ export default class ParserBase {
   ParseClassDeclaration() {}
   ParseAsyncFunctionDeclaration() {}
 
-  IsNextLetKeyword() {
-    /**
-     * 这里调用了PeekAhead后赋值了next_next_ 会影响Next方法
-     * 调用后cur、next_、next_next_的值变化如下
-     * [null, LET, null] => [null, LET, IDENTIFIER];
-     */
-    let next_next = this.PeekAhead();
-    /**
-     * let后面跟{、[、标识符、static、let、yield、await、get、set、async是合法的(实际上let let不合法)
-     * 保留关键词合法性根据严格模式决定
-     */
-    switch(next_next) {
-      case 'Token::LBRACE':
-      case 'Token::LBRACK':
-      case 'Token::IDENTIFIER':
-      case 'Token::STATIC':
-      case 'Token::LET':
-      case 'Token::YIELD':
-      case 'Token::AWAIT':
-      case 'Token::GET':
-      case 'Token::SET':
-      case 'Token::ASYNC':
-        return true;
-      case 'Token::FUTURE_STRICT_RESERVED_WORD':
-        return is_sloppy(this.language_mode());
-      default:
-        return false;
-    }
-  }
   /**
    * 处理var、let、const声明语句
    * 语句的形式应该是 (var | const | let) (Identifier) (=) (AssignmentExpression)
@@ -801,7 +806,7 @@ export default class ParserBase {
      */
     let expression_scope_ = new ExpressionParsingScope(this);
     let result = this.ParseAssignmentExpressionCoverGrammar();
-    expression_scope.ValidateExpression();
+    expression_scope_.ValidateExpression();
     // 析构
     this.expression_scope_ = expression_scope_.parent_;
     expression_scope_ = null;
@@ -1137,7 +1142,7 @@ export default class ParserBase {
     let properties = this.pointer_buffer_;
     // 引用属性计数
     let number_of_boilerplate_properties = 0;
-    // 待计算的键值对
+    // 是否存在待计算的键 { ['a' + 'b']: 1, ...object } 都是需要计算的
     let has_computed_names = false;
     // 扩展运算符
     let has_rest_property = false;
@@ -1182,7 +1187,7 @@ export default class ParserBase {
   ParseObjectPropertyDefinition(prop_info, has_seen_proto) {
     let name_token = this.peek();
     let next_loc = this.scanner_.peek_location();
-    // key
+    // 解析key
     let name_expression = this.ParseProperty(prop_info);
 
     let { name, function_flags, kind } = prop_info;
@@ -1195,7 +1200,7 @@ export default class ParserBase {
         prop_info.is_rest = true;
         return this.ast_node_factory_.NewObjectLiteralProperty(this.ast_node_factory_.NewTheHoleLiteral(), name_expression, SPREAD, true);
       /**
-       * 最常见的键值对形式 { a: 1 }
+       * 最常见的键值对形式 { a: 1 }、{ a: function(){} }
        */
       case kValue: {
         if (!prop_info.is_computed_name && this.scanner_.CurrentLiteralEquals('__proto__')) {
@@ -1224,15 +1229,24 @@ export default class ParserBase {
       case kAssign:
       case kShorthandOrClassField:
       case kShorthand: {
-        // TODO
-        // if (IsValidIdentifier(...))
-        // if (name_token === 'Token::AWAIT') {}
+        // 前面都是错误处理
         let lhs = this.ExpressionFromIdentifier(name, next_loc.beg_pos);
-        // if (!this.IsAssignableIdentifier()) {}
+        if (!this.IsAssignableIdentifier()) throw new Error(kStrictEvalArguments);
 
         let value;
+        // 处理{ a=1, }这种结构 虽然会被正常解析 但还是会抛出错误 所以注释算了
         if (this.peek() === 'Token::ASSIGN') {
-          // TODO
+          // this.Consume('Token::ASSIGN');
+          // {
+          //   // AcceptINScope scope(this, true);
+          //   let previous_accept_IN_ = this.accept_IN_;
+          //   this.accept_IN_ = true;
+          //   let rhs = this.ParseAssignmentExpression();
+          //   value = this.ast_node_factory_.NewAssignment('Token::ASSIGN', lhs, rhs, kNoSourcePosition);
+          //   this.SetFunctionNameFromIdentifierRef(rhs, lhs);
+          //   // 析构
+          //   this.accept_IN_ = previous_accept_IN_;
+          // }
           throw new Error(kInvalidCoverInitializedName);
         } else {
           value = lhs;
@@ -1242,15 +1256,35 @@ export default class ParserBase {
         this.SetFunctionNameFromPropertyName(result, name);
         return result;
       }
-
-      case kMethod:
+      // { a(){}, a*(){} }对象方法的简写模式解析
+      case kMethod: {
+        // RecordPatternError
+        let kind = MethodKindFor(function_flags);
+        // 解析函数 跳过函数名检测
+        let value = this.ParseFunctionLiteral(name, this.scanner_.location(), kSkipFunctionNameCheck, kind,
+        next_loc.beg_pos, kAccessorOrMethod, this.language_mode(), null);
+        let result = this.ast_node_factory_.NewObjectLiteralProperty(name_expression, value, COMPUTED, prop_info.is_computed_name);
+        return result;
+      }
 
       case kAccessorGetter:
-      case kAccessorSetter:
+      case kAccessorSetter: {
+        let is_get = kind === kAccessorGetter;
+        if(!prop_info.is_computed_name) name_expression = this.ast_node_factory_.NewStringLiteral(name, name_expression.position_);
+        let kind = is_get ? kGetterFunction : kSetterFunction;
+        let value = this.ParseFunctionLiteral(name, this.scanner_.location(), kSkipFunctionNameCheck, kind,
+        next_loc.beg_pos, kAccessorOrMethod, this.language_mode(), null);
+        
+        let result = this.ast_node_factory_.NewObjectLiteralProperty(name_expression, value, is_get ? GETTER : SETTER, prop_info.is_computed_name);
+        
+        let prefix = is_get ? this.ast_value_factory_.get_space_string() : this.ast_value_factory_.set_space_string();
+        this.SetFunctionNameFromPropertyName(result, name, prefix);
+        return result;
+      }
 
       case kClassField:
       case kNotSet:
-        return null;
+        throw new Error('ReportUnexpectedToken');
     }
     this.UNREACHABLE();
   }

@@ -1,4 +1,4 @@
-import Script from './ScriptCompiler';
+import Script from './Script';
 import { kEmptyFixedArray, SCRIPT_TYPE, TYPE_NORMAL } from "../enum";
 
 export default class Factory {

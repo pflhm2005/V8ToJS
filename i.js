@@ -4,7 +4,7 @@
  */
 const source_code = "let a = 1;";
 
-import Isolate, { CreateParams } from './Compile/Isolate';
+import { Isolate, CreateParams } from './Compile/Isolate';
 import Context from './Compile/Context';
 import Script from './Compile/Script';
 

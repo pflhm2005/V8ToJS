@@ -100,7 +100,7 @@ function CompileToplevel(parse_info, isolate, is_compiled_scope) {
 }
 
 /**
- * 编译顶层作用域
+ * 生成顶层作用域
  * @param {Isolate*} isolate 
  * @param {ParseInfo*} parse_info 
  * @param {AccountingAllocator*} allocator 内存相关的东西全部弄成null

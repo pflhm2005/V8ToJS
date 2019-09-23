@@ -61,7 +61,7 @@ class ExpressionScope {
    * 下面三个方法 源码将类向下强转类型
    * JS做不到 不搞了
    */
-  AsExpressionParsingScope() { return new ExpressionParsingScope(this.parser_, this.type_).TrackVariable(); }
+  AsExpressionParsingScope() { return new ExpressionParsingScope(this.parser_, this.type_); }
   AsParameterDeclarationParsingScope(parser) { return new ParameterDeclarationParsingScope(parser); }
   AsVariableDeclarationParsingScope(parser, mode, names) { return new VariableDeclarationParsingScope(parser, mode, names); }
 
@@ -130,17 +130,17 @@ export class ExpressionParsingScope extends ExpressionScope {
 
   ValidateExpression() { this.Validate(kExpressionIndex); }
   ValidatePattern() { this.Validate(kPatternIndex); }
-  is_valid(index) { return !locations_[index].IsValid(); }
+  is_valid(index) { return !this.locations_[index].IsValid(); }
 
   Validate(index) {
-    if (!is_valid(index)) throw new Error('ExpressionParsingScope');
+    if (!this.is_valid(index)) throw new Error('ExpressionParsingScope');
     this.verified_ = true;
   }
   TrackVariable(variable) {
     if (!this.CanBeDeclaration()) {
       this.parser_.scope_.AddUnresolved(variable);
     }
-    variable_list_.push(variable);
+    this.variable_list_.push(variable);
   }
 
   MarkIdentifierAsAssigned() {

@@ -161,6 +161,17 @@ class Parser extends ParserBase {
     const result = this.scanner_.CurrentSymbol(this.ast_value_factory_);
     return result;
   }
+  /**
+   * 这个方法的实现太复杂 简化处理
+   */
+  GetNumberAsSymbol() {
+    // 进行数字解析 非数字返回NaN(大整数))
+    let double_value = this.scanner_.DoubleValue();
+    // let array = [];
+    // 调用了系统API对返回的数字进行处理 => FPCLASSIFY_NAMESPACE::fpclassify
+    let string = DoubleToCString(double_value);
+    return this.ast_value_factory_.GetOneByteString(string);
+  }
   PushEnclosingName(name) {
     this.fni_.PushEnclosingName(name);
   }
@@ -261,8 +272,8 @@ class Parser extends ParserBase {
      * ScopedPtrList就是一个高级数组 先不实现了
      * ScopedPtrList<Statement> statements(pointer_buffer());
      */
-    let len = this.pointer_buffer_.length;
-    let statements = this.pointer_buffer_;
+    // let len = this.pointer_buffer_.length;
+    let statements = [];
     let decls = parsing_result.declarations;
     for (const declaration of decls) {
       // 这里的initializer是声明的初始值 跳过所有声明未定义
@@ -272,7 +283,7 @@ class Parser extends ParserBase {
     }
     let result = this.ast_node_factory_.NewBlock(true, statements);
     // 析构
-    this.pointer_buffer_.length = len;
+    // this.pointer_buffer_.length = len;
     return result;
   }
   InitializeVariables(statements, declaration) {

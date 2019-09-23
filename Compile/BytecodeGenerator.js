@@ -10,7 +10,7 @@ const kStoreGlobalSloppy = 1;
 const kStoreNamedSloppy = 2;
 const kStoreKeyedSloppy = 3;
 const kLastSloppyKind = kStoreKeyedSloppy;
-const
+
 // Strict and language mode unaware kinds.
 const  kCall = 4;
 const  kLoadProperty = 5;

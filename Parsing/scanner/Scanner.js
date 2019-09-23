@@ -7,6 +7,10 @@ import {
   kMaxAscii, 
   kIdentifierNeedsSlowPath,
   kEndOfInput,
+  ALLOW_HEX,
+  ALLOW_OCTAL,
+  ALLOW_IMPLICIT_OCTAL,
+  ALLOW_BINARY,
 } from '../../enum';
 
 import {
@@ -27,6 +31,7 @@ import {
   IsDecimalNumberKind,
   IsValidBigIntKind,
   IsWhiteSpaceOrLineTerminator,
+  StringToDouble,
 } from '../../util';
 
 import {
@@ -737,9 +742,21 @@ export default class Scanner {
       return ast_value_factory.GetOneByteString(this.literal_one_byte_string());
     }
   }
+  /**
+   * 太麻烦 不实现了
+   * 返回一个doubleValue
+   * 如果是NaN 则是一个大整数
+   */
+  DoubleValue() {
+    return Number(this.literal_one_byte_string()) || (0xfff << 51);
+    // return StringToDouble(this.literal_one_byte_string(), ALLOW_HEX | ALLOW_OCTAL | ALLOW_IMPLICIT_OCTAL | ALLOW_BINARY);
+  }
   is_literal_one_byte() {
     return this.current().literal_chars.is_one_byte();
   }
+  /**
+   * @returns {String} 当前Token的字符串
+   */
   literal_one_byte_string() {
     return this.current().literal_chars.one_byte_literal();
   }

@@ -27,6 +27,8 @@ export default class AstValueFactory {
   this_function_string() { return '.this_function'; }
   default_string() { return 'default'; }
   dot_default_string() { return '.default'; }
+  get_space_string() { return 'get'; }
+  set_space_string() { return 'set'; }
 
   empty_cons_string() { return this.empty_cons_string_; }
   NewConsString() {

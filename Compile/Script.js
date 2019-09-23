@@ -54,7 +54,7 @@ class ScriptData {
   }
 }
 
-class ScriptDetails {
+export class ScriptDetails {
   constructor() {
     this.line_offset = 0;
     this.column_offset = 0;
@@ -79,7 +79,7 @@ class Source {
   }
 }
 
-class ScriptOriginOptions {
+export class ScriptOriginOptions {
   constructor(is_shared_cross_origin = false, is_opaque = false, is_wasm = false, is_module = false) {
     this.flags_ = (is_shared_cross_origin ? kIsSharedCrossOrigin : 0) | 
     (is_wasm ? kIsWasm : 0) | (is_opaque ? kIsOpaque : 0) | (is_module ? kIsModule : 0);

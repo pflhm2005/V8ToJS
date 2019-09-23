@@ -44,6 +44,9 @@ import {
   _kCallNew,
   _kCountOperation,
   _kUnaryOperation,
+  kNoDuplicateParameters,
+  kShouldLazyCompile,
+  kFunctionLiteralIdTopLevel,
 } from "../enum";
 
 import {
@@ -169,8 +172,16 @@ export class AstNodeFactory {
   NewBlock(ignore_completion_value, statements) {
     // 构造参数在这里基本上毫无意义
     let result = new Block(null, null, 0, ignore_completion_value);
-    result.InitializeStatements(statements, null);
+    // result.InitializeStatements(statements, null);
+    result.statement_ = statements;
     return result;
+  }
+  
+  // 返回一个函数字面量 整个JS的顶层是一个函数
+  NewScriptOrEvalFunctionLiteral(scope, body, expected_property_count, parameter_count) {
+    return new FunctionLiteral(null, this.ast_value_factory_.empty_string(), this.ast_value_factory_, scope,
+    body, expected_property_count, parameter_count, parameter_count, kAnonymousExpression,
+    kNoDuplicateParameters, kShouldLazyCompile, 0, false, kFunctionLiteralIdTopLevel);
   }
 }
 
@@ -235,11 +246,12 @@ class Block extends BreakableStatement {
     this.bit_field_ |= IgnoreCompletionField.encode(Number(ignore_completion_value)) | IsLabeledField.encode(Number(labels !== null));
   }
   // 这里用的内存拷贝
-  InitializeStatements(statements, zone = null) {
-    this.statement_ = statements;
-  }
+  // InitializeStatements(statements, zone = null) {
+  //   this.statement_ = statements;
+  // }
 }
 
+// goto语法的block
 class LabeledBlock extends Block {
   // 这里构造函数重载了 capacity参数后移了一位 去掉了zone参数
   constructor(labels, ignore_completion_value, capacity = 0) {
@@ -521,6 +533,7 @@ class FunctionLiteral extends Expression {
     this.scope_ = scope;
     this.raw_name_ = null;
     this.suspend_count_ = 0;
+    this.body_ = body;
   }
   kind() { return this.scope_.function_kind_; }
   is_anonymous_expression() {

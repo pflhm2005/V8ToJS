@@ -3,7 +3,7 @@ import { PERFORMANCE_ANIMATION, kNone } from "../enum";
 
 let isolate_counter = 0;
 
-export default class Isolate {
+export class Isolate {
   constructor() {
     this.isolate_allocator_ = null; // 内存地址
     this.id_ = ++isolate_counter;
@@ -130,3 +130,5 @@ class CodeEventDispatcher {
 
 class CancelableTaskManager {}
 class ThreadManager {}
+
+export default Isolate.New(new CreateParams());

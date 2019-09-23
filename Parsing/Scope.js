@@ -72,6 +72,7 @@ class VariableMap {
       variable: p.value
     };
   }
+  occupancy() { return this.variables_.length; }
 }
 
 export default class Scope extends ZoneObject {
@@ -100,6 +101,8 @@ export default class Scope extends ZoneObject {
     // map above in order of addition.
     // base::ThreadedList<Variable> locals_;
     this.locals_ = [];
+
+    this.unresolved_list_ = [];
 
     this.SetDefaults();
   }
@@ -259,6 +262,11 @@ export default class Scope extends ZoneObject {
    */
   LookupLocal(name) {
     return this.variables_.Lookup(name);
+  }
+  num_var() { return this.variables_.occupancy(); }
+
+  AddUnresolved(proxy) {
+    this.unresolved_list_.push(proxy);
   }
 
   SetDefaults() {

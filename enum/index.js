@@ -10,3 +10,4 @@ export * from './name';
 export * from './Compile';
 export * from './Roots';
 export * from './ParseInfo';
+export * from './Number';

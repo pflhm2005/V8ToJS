@@ -36,13 +36,13 @@ const BitField = (shift, size) => {
   return {
     kNext: shift + size,
     encode(value) {
-      return value << kShift;
+      return (value << kShift) >>> 0;
     },
     update(previous, value) {
-      return (previous & ~kMask) | this.encode(value);
+      return ((previous & ~kMask) | this.encode(value)) >>> 0;
     },
     decode(value) {
-      return (value & kMask) >> kShift;
+      return ((value & kMask) >> kShift) >>> 0;
     }
   };
 }
