@@ -165,7 +165,7 @@ class Parser extends ParserBase {
    * 这个方法的实现太复杂 简化处理
    */
   GetNumberAsSymbol() {
-    // 进行数字解析 非数字返回NaN(大整数))
+    // 进行数字解析 非数字返回NaN(内部表现是大整数 可被系统api识别为特殊宏名)
     let double_value = this.scanner_.DoubleValue();
     // let array = [];
     // 调用了系统API对返回的数字进行处理 => FPCLASSIFY_NAMESPACE::fpclassify
