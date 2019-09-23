@@ -24,8 +24,8 @@ babel-node --presets env xxx(Token.js/Parse.js)
 
 有一些特殊语法的模拟方式需要说明一下
 
-
 ### 析构
+
 V8很多时候会在栈上实例化类，作用域结束自动析构，JS不支持这种语法，如下:
 ```c++
 // 示例代码
@@ -107,7 +107,6 @@ function handle() {
 }
 ```
 
-
 ### 枚举
 
 ```c++
@@ -123,11 +122,9 @@ const kYes = 0;
 const kNo = 0;
 ```
 
-
 ### 宏
 
 > 直接展开
-
 
 ### 基本类型的引用传递
 
@@ -168,7 +165,6 @@ let { a, b, result } = fnc2(1, false);
 // 如此不会影响后续逻辑
 ```
 
-
 ### 重载
 
 这里的重载包括函数重载与函数的构造重载
@@ -182,7 +178,7 @@ function Scan(next = this.next_) {
   /* ... */
 }
 ```
-但是某些情况重载比较复杂，分为两种情况
+但是某些情况重载比较复杂 如下
 ```c++
 // 参数数量不一致 构造参数也不一致
 ObjectLiteral::Property* NewObjectLiteralProperty(Expression* key, Expression* value, ObjectLiteralProperty::Kind kind,bool is_computed_name) {
@@ -214,3 +210,7 @@ class Property {
 极端情况下，存在子类、父类均有多重构造函数(见DeclarationScope)，或者根据构造参数决定是否调用其余构造方法的逻辑，太过于复杂。
 
 目前将其拆分为多个类实现，后续考虑更优实现方法。
+
+### 泛型
+
+实话说，这个语法无法模拟，但是JS的弱类型帮了不少忙，这一块目前没有碰到问题。
