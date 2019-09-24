@@ -119,7 +119,7 @@ enum class InferName { kYes, kNo };
 但是JS复杂类型的使用成本较高 非常影响执行速度 直接采用声明const变量来模拟枚举
 ```js
 const kYes = 0;
-const kNo = 0;
+const kNo = 1;
 ```
 
 ### 宏
