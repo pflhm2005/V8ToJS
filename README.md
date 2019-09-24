@@ -18,7 +18,9 @@ npm install babel-preset-env -D
 babel-node --presets env xxx(Token.js/Parse.js)
 ```
 
-支持对Token、简单语句的的全解析 可以自行修改待编译字符串并查看打印结果 更多功能待完善 这个引擎实在是太复杂了
+支持对Token、简单语句的的全解析，可以自行修改待编译字符串并查看打印结果
+
+更多功能待完善，这个引擎实在是太复杂了
 
 ---
 
