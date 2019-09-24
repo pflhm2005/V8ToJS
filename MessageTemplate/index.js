@@ -33,4 +33,5 @@ export const kInvalidPropertyBindingPattern = 'Illegal property in declaration c
 export const kInvalidLhsInAssignment = 'Invalid left-hand side in assignment';
 export const kStrictDelete = 'Delete of an unqualified identifier in strict mode.';
 export const kDeletePrivateField = 'Private fields can not be deleted';
-export const kUnexpectedTokenUnaryExponentiation = 'Unary operator used immediately before exponentiation expression.'
+export const kUnexpectedTokenUnaryExponentiation = 'Unary operator used immediately before exponentiation expression.';
+export const kParamDupe = 'Duplicate parameter name not allowed in this context';

@@ -21,6 +21,9 @@ import {
   kNoSourcePosition,
   kMappedArguments,
   kUnmappedArguments,
+  SLOPPY_FUNCTION_NAME_VARIABLE,
+  CONTEXT,
+  TokenEnumList,
 } from "../enum";
 import { Variable } from "../ast/AST";
 import { 
@@ -28,7 +31,9 @@ import {
   IsClassConstructor, 
   IsAccessorFunction, 
   IsDerivedConstructor, 
-  IsClassMembersInitializerFunction
+  IsClassMembersInitializerFunction,
+  IsLexicalVariableMode,
+  is_sloppy
 } from "../util";
 // import ThreadedList from '../base/ThreadedList';
 
@@ -87,8 +92,10 @@ export default class Scope extends ZoneObject {
     // an inner scope) with no intervening with statements or eval calls.
     this.variables_ = new VariableMap();
     this.scope_type_ = scope_type;
+    this.scope_info_ = null;
 
     this.is_strict_ = kSloppy;
+    this.scope_calls_eval_ = false;
     /**
      * ThreadedList<Declaration> decls
      * 这是一个类似于链表的数据结构
@@ -129,17 +136,14 @@ export default class Scope extends ZoneObject {
   zone() { return this.zone_; }
   set_start_position(statement_pos) { this.start_position_ = statement_pos; }
 
-  is_eval_scope() { return this.scope_type_ == EVAL_SCOPE; }
-  is_function_scope() { return this.scope_type_ == FUNCTION_SCOPE; }
-  is_module_scope() { return this.scope_type_ == MODULE_SCOPE; }
-  is_declaration_scope() { return this.is_declaration_scope_; }
-  is_script_scope() { return this.scope_type_ == SCRIPT_SCOPE; }
-  is_catch_scope() { return this.scope_type_ == CATCH_SCOPE; }
-  is_block_scope() {
-    return this.scope_type_ == BLOCK_SCOPE || this.scope_type_ == CLASS_SCOPE;
-  }
-  is_with_scope() { return this.scope_type_ == WITH_SCOPE; }
-  is_class_scope() { return this.scope_type_ == CLASS_SCOPE; }
+  is_eval_scope() { return this.scope_type_ === EVAL_SCOPE; }
+  is_function_scope() { return this.scope_type_ === FUNCTION_SCOPE; }
+  is_module_scope() { return this.scope_type_ === MODULE_SCOPE; }
+  is_script_scope() { return this.scope_type_ === SCRIPT_SCOPE; }
+  is_catch_scope() { return this.scope_type_ === CATCH_SCOPE; }
+  is_block_scope() { return this.scope_type_ === BLOCK_SCOPE || this.scope_type_ === CLASS_SCOPE; }
+  is_with_scope() { return this.scope_type_ === WITH_SCOPE; }
+  is_class_scope() { return this.scope_type_ === CLASS_SCOPE; }
 
   SetLanguageMode(language_mode) { this.is_strict_ = this.is_strict(language_mode); }
   language_mode() { return this.is_strict_ ? kStrict : kSloppy; }
@@ -182,11 +186,37 @@ export default class Scope extends ZoneObject {
   // 这里形成一个作用域链
   GetDeclarationScope() {
     let scope = this;
-    while (!scope.is_declaration_scope()) {
+    while (!scope.is_declaration_scope_) {
       scope = scope.outer_scope();
     }
     return scope;
   }
+  // 从内到外获取第一个函数作用域
+  GetClosureScope() {
+    let scope = this;
+    while(!scope.is_declaration_scope_ || scope.is_block_scope()) scope = scope.outer_scope_;
+    return scope;
+  }
+  HasSimpleParameters() {
+    let scope = this.GetClosureScope();
+    return !scope.is_function_scope() || scope.has_simple_parameters_;
+  }
+  LookupInScopeOrScopeInfo(name) {
+    let variable = this.variables_.Lookup(name);
+    if(variable !== null || this.scope_info_) return variable;
+    // 这里逻辑太复杂 先简化处理
+    return null;
+    // return LookupInScopeInfo(name, this);
+  }
+  // LookupInScopeInfo() {
+  //   let name_handle = name.literal_bytes_;
+  //   let found = false;
+  //   let location = CONTEXT;
+  //   let index = 0;
+  //   {
+  //     index = ScopeInfo.ContextSlotIndex(this.scope_info_, name_handle, mode, )
+  //   }
+  // }
   /**
    * 根据name生成一个Variable实例 绑定到Declaration上面
    * @param {Declaration} declaration 声明表达式
@@ -201,7 +231,7 @@ export default class Scope extends ZoneObject {
    */
   DeclareVariable(declaration, name, pos, mode, kind, init, was_added, sloppy_mode_block_scope_function_redefinition, ok) {
     // 变量提升 往上搜索第一个有效作用域
-    if (mode === kVar && !this.is_declaration_scope()) {
+    if (mode === kVar && !this.is_declaration_scope_) {
       return this.GetDeclarationScope().DeclareVariable(declaration, name, pos, mode, kind, init, was_added, sloppy_mode_block_scope_function_redefinition, ok);
     }
     let variable = this.LookupLocal(name);
@@ -254,7 +284,7 @@ export default class Scope extends ZoneObject {
   Declare(zone = null, name, mode, kind, initialization_flag, maybe_assigned_flag, was_added_param) {
     let { was_added, variable } = this.variables_.Declare(zone, this, name, mode, kind, initialization_flag, maybe_assigned_flag, was_added_param);
     if (was_added) this.locals_.push(variable);
-    return variable;
+    return { was_added, variable };
   }
   /**
    * JS新出的Map类 has仅仅返回true、false
@@ -269,34 +299,13 @@ export default class Scope extends ZoneObject {
     this.unresolved_list_.push(proxy);
   }
 
-  SetDefaults() {
-    this.is_declaration_scope_ = true;
-    this.has_simple_parameters_ = true;
-    this.is_asm_module_ = false;
-    this.force_eager_compilation_ = false;
-    this.has_arguments_parameter_ = false;
-    this.scope_uses_super_property_ = false;
-    this.has_checked_syntax_ = false;
-    this.has_this_reference_ = false;
-    this.has_this_declaration_ = (this.is_function_scope() && !this.is_arrow_scope()) || this.is_module_scope();
-    this.has_rest_ = false;
-    this.receiver_ = null;
-    this.new_target_ = null;
-    this.function_ = null;
-    this.arguments_ = null;
-    this.rare_data_ = null;
-    this.should_eager_compile_ = false;
-    this.was_lazily_parsed_ = false;
-    this.is_skipped_function_ = false;
-    this.preparse_data_builder_ = null;
-  }
   DeclareDefaultFunctionVariables(ast_value_factory) {
     // 生成this变量
     this.DeclareThis(ast_value_factory);
     // 生成.new.target变量
-    this.new_target_ = this.Declare(null, ast_value_factory.GetOneByteStringInternal(ast_value_factory.new_target_string()), kConst, NORMAL_VARIABLE, kCreatedInitialized, kNotAssigned, false);
+    this.new_target_ = this.Declare(null, ast_value_factory.GetOneByteStringInternal(ast_value_factory.new_target_string()), kConst, NORMAL_VARIABLE, kCreatedInitialized, kNotAssigned, false).variable;
     if (IsConciseMethod(this.function_kind_) || IsClassConstructor(this.function_kind_) || IsAccessorFunction(this.function_kind_)) {
-      this.EnsureRareData().this._function = this.Declare(null, ast_value_factory.GetOneByteStringInternal(ast_value_factory.this_function_string()), kConst, NORMAL_VARIABLE, kCreatedInitialized, kNotAssigned, false);
+      this.EnsureRareData().this_function = this.Declare(null, ast_value_factory.GetOneByteStringInternal(ast_value_factory.this_function_string()), kConst, NORMAL_VARIABLE, kCreatedInitialized, kNotAssigned, false).variable;
     }
   }
   DeclareThis(ast_value_factory) {
@@ -348,7 +357,116 @@ export default class Scope extends ZoneObject {
   }
 }
 
-export class FunctionDeclarationScope extends Scope {
+/**
+ * 保留该类 但是不作为实例化对象
+ */
+class DeclarationScope extends Scope {
+  constructor(zone, outer_scope = null, scope_type = SCRIPT_SCOPE) {
+    super(zone, outer_scope, scope_type);
+    this.sloppy_block_functions_ = [];
+  }
+  SetDefaults() {
+    this.is_declaration_scope_ = true;
+    this.has_simple_parameters_ = true;
+    this.is_asm_module_ = false;
+    this.force_eager_compilation_ = false;
+    this.has_arguments_parameter_ = false;
+    this.scope_uses_super_property_ = false;
+    this.has_checked_syntax_ = false;
+    this.has_this_reference_ = false;
+    this.has_this_declaration_ = (this.is_function_scope() && !this.is_arrow_scope()) || this.is_module_scope();
+    this.has_rest_ = false;
+    this.receiver_ = null;
+    this.new_target_ = null;
+    this.function_ = null;
+    this.arguments_ = null;
+    this.rare_data_ = null;
+    this.should_eager_compile_ = false;
+    this.was_lazily_parsed_ = false;
+    this.is_skipped_function_ = false;
+    this.preparse_data_builder_ = null;
+  }
+  DeclareDynamicGlobal(name, kind, cache) {
+    return cache.variables_.Declare(null, this, name, kDynamicGlobal, kind, kCreatedInitialized, kNotAssigned, false);
+  }
+  calls_sloppy_eval() {
+    return !this.is_script_scope() && this.scope_calls_eval_ && is_sloppy(this.language_mode());
+  }
+  DeclareFunctionVar(name, cache = null) {
+    if(cache === null) cache = this;
+    let kind = is_sloppy(this.language_mode()) ? SLOPPY_FUNCTION_NAME_VARIABLE : NORMAL_VARIABLE;
+    this.function_ = new Variable(this, name, kConst, kind, kCreatedInitialized);
+    if(this.calls_sloppy_eval()) cache.NonLocal(name, kDynamic);
+    else cache.variables_.push(this.function_);
+    return this.function_;
+  }
+  /**
+   * 这个提升说白了就是函数名查重
+   * @param {AstNodeFactory*} factory 工厂方法
+   */
+  HoistSloppyBlockFunctions(factory) {
+    if(!this.sloppy_block_functions_.length) return;
+    let parameter_scope = this.HasSimpleParameters() ? this : this.outer_scope_;
+    let decl_scope = this;
+    while(decl_scope.is_eval_scope()) decl_scope = decl_scope.outer_scope_.GetDeclarationScope();
+
+    let outer_scope = decl_scope.outer_scope_;
+    for(let sloppy_block_function of this.sloppy_block_functions_) {
+      let name = sloppy_block_function.name();
+      /**
+       * 检测函数名是否与参数名冲突
+       * function a(a) {console.log(a)}; a(1); 此时会优先形参，函数名会被过滤掉
+       */
+      let maybe_parameter = parameter_scope.LookupLocal(name);
+      if(maybe_parameter !== null && maybe_parameter.is_parameter()) continue;
+
+      /**
+       * 检测函数名是否与某个let、const声明的变量名冲突
+       * function a() { let a = 1; } 此时在函数内部 函数名会被锁死无法获取
+       */
+      let query_scope = sloppy_block_function.scope().outer_scope_;
+      let variable = null;
+      let should_hoist = true;
+      do {
+        variable = query_scope.LookupInScopeOrScopeInfo(name);
+        /**
+         * 当作用域出现一个var声明类型的变量时 提升取消
+         * var a = 1与var a = function(){}均会覆盖后面的function a(){}
+         * 函数a会被解析 但是不会进入外部作用域变量池
+         */
+        if(variable !== null && IsLexicalVariableMode(variable.mode())) {
+          should_hoist = false;
+          break;
+        }
+        query_scope = query_scope.outer_scope_;
+      } while(query_scope !== outer_scope);
+
+      if(!should_hoist) continue;
+      /**
+       * @description 
+       * 以下是函数声明提升的核心原理
+       * 将当前函数名作为变量 插入到外部作用域的变量池中
+       * 走一套完整的赋值流程 function fn(){}等于var fn = function() {}
+       */
+      if(factory) {
+        let pos = sloppy_block_function.position_;
+        let declaration = factory.NewVariableDeclaration(pos);
+        let variable = this.DeclareVariable(declaration, name, pos, kVar, NORMAL_VARIABLE,
+          Variable.DefaultInitializationFlag(kVar), false/* &was_added */, null, true/* &ok */);
+        let source = factory.NewVariableProxy(sloppy_block_function.var_);
+        let target = factory.NewVariableProxy(variable);
+        let assignment = factory.NewAssignment(sloppy_block_function.init(), target, source, pos);
+        let statement = factory.NewExpressionStatement(assignment, pos);
+        sloppy_block_function.statement_ = statement;
+      } else {
+        let variable = this.DeclareVariableName(name, kVar, false);
+        if(sloppy_block_function.init() === TokenEnumList.indexOf('Token::ASSIGN')) variable.set_maybe_assigned();
+      }
+    }
+  }
+}
+
+export class FunctionDeclarationScope extends DeclarationScope {
   constructor(zone = null, outer_scope, scope_type, function_kind) {
     super(zone, outer_scope, scope_type);
     this.function_kind_ = function_kind;
@@ -356,18 +474,28 @@ export class FunctionDeclarationScope extends Scope {
     this.params_ = [];
     this.SetDefaults();
   }
+  /**
+   * 由于arguments参数仅出现在function中
+   * 所以这个方法可以不用放到Scope上
+   */
+  DeclareArguments(ast_value_factory) {
+    let { was_added, variable: arguments_ } = this.Declare(null, ast_value_factory.arguments_string(), kVar,
+    NORMAL_VARIABLE, kCreatedInitialized, kNotAssigned, false);
+    /**
+     * 若arguments变量已经被定义 且是通过let、const声明 此时默认的arguments变量为null => function fn(){let arguments = 1;}
+     * 但是如果是通过var定义arguments 此时会依然生成该变量
+     */
+    if(!was_added && IsLexicalVariableMode(arguments_.mode())) arguments_ = null;
+  }
 }
 
-export class ScriptDeclarationScope extends Scope {
+export class ScriptDeclarationScope extends DeclarationScope {
   constructor(zone, ast_value_factory) {
     super(zone);
     this.function_kind_ = kNormalFunction;
     this.params_ = [];
     this.SetDefaults();
     this.receiver_ = this.DeclareDynamicGlobal(ast_value_factory.GetOneByteStringInternal(ast_value_factory.this_string()), THIS_VARIABLE, this);
-  }
-  DeclareDynamicGlobal(name, kind, cache) {
-    return cache.variables_.Declare(null, this, name, kDynamicGlobal, kind, kCreatedInitialized, kNotAssigned, false);
   }
 }
 

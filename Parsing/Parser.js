@@ -17,6 +17,7 @@ import {
   kIncludingVariables,
   kYes,
   kBlock,
+  kNamedExpression,
 } from '../enum';
 
 import { 
@@ -552,6 +553,16 @@ class Parser extends ParserBase {
   }
   HasCheckedSyntax() {
     return this.scope_.GetDeclarationScope().has_checked_syntax_;
+  }
+  InsertSloppyBlockFunctionVarBindings(scope) {
+    // 最外层的eval作用域不需要做提升
+    if(scope.is_eval_scope() && scope.outer_scope_ === this.original_scope_) return;
+    scope.HoistSloppyBlockFunctions(this.ast_node_factory_);
+  }
+  DeclareFunctionNameVar(function_name, function_type, function_scope) {
+    if(function_type === kNamedExpression && function_scope.LookupLocal(function_name) === null) {
+      function_scope.DeclareFunctionVar(function_name);
+    }
   }
 
   /**

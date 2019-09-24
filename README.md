@@ -18,15 +18,15 @@ npm install babel-preset-env -D
 babel-node --presets env xxx(Token.js/Parse.js)
 ```
 
-支持对Token、简单语句的的全解析 可以自行修改待编译字符串并查看打印结果 更多语法待完善
+支持对Token、简单语句的的全解析 可以自行修改待编译字符串并查看打印结果 更多功能待完善 这个引擎实在是太复杂了
 
 ---
 
-有一些特殊语法的模拟方式需要说明一下
+有一些特殊语法的模拟方式需要说明一下(得益于es6 块级作用域的问题完美解决 不然完蛋了)
 
 ### 析构
 
-V8很多时候会在栈上实例化类，作用域结束自动析构，JS不支持这种语法，如下:
+除去通过zone内部管理内存，V8很多时候也会在栈上实例化类，作用域结束自动析构，JS不支持这种语法，如下:
 ```c++
 // 示例代码
 template <typename T>
@@ -63,7 +63,7 @@ function handle() {
   pointer_buffer_.length = start_; // never run
 }
 ```
-该逻辑场景如下
+源码应用中其中一个场景如下
 ```js
 // 假设这里是顶层作用域 pointer_buffer_ = []
 function topLevelFunction() {
@@ -114,9 +114,9 @@ enum class InferName { kYes, kNo };
 ```
 直接声明 特殊情况特殊处理
 
-虽然说最佳实践是将枚举类型作为对象名，枚举值作为key，这样容易分辨并且可以保证不重复
+虽然说最佳实践是将枚举类型作为对象名，枚举值作为key，这样容易分辨且可以保证枚举名不重复
 
-但是JS复杂类型的使用成本较高 非常影响执行速度 直接采用声明const变量来模拟枚举
+但是JS复杂类型的使用成本较高 非常影响执行速度(枚举值数量极其多) 直接采用声明const变量来模拟枚举
 ```js
 const kYes = 0;
 const kNo = 1;
@@ -124,7 +124,7 @@ const kNo = 1;
 
 ### 宏
 
-直接硬核展开
+简单的直接硬核展开 复杂的诸如调用栈追踪暂时不考虑实现
 
 ### 基本类型的引用传递
 
@@ -133,7 +133,7 @@ void fnc(int* a, bool* b) {
   *b = true;
   // ...
 }
-// C++很多时候会将一些基本类型(从JS的角度来看)的地址作为参数传入方法 值会在函数内部改变
+// C++很多时候会将一些基本类型变量的地址作为参数传入方法 值会在函数内部通过解指针操作改变
 int a = 1;
 bool b = false;
 fnc(&a, &b);
@@ -192,9 +192,9 @@ ObjectLiteral::Property* NewObjectLiteralProperty(Expression* key, Expression* v
 /**
  * 存在重复的参数 根据参数数量 调整一下顺序
  * 由于不清楚参数数量 直接用rest表示
- * 这里实际上可以通过默认参数实现 => (key, value, is_computed_name, extra_paran = ast_value_factory_)
- * 但是这样一来调用方法的参数顺序就需要修改 对于使用率较高的方法来说十分不妥
- * 因此 外部调用保持与源码一致 差异化的逻辑处理放在工厂函数
+ * 实际上可以通过默认参数实现 => (key, value, is_computed_name, extra_paran = ast_value_factory_)
+ * 但是这样一来外部调用方法参数顺序就需要修改 对于使用率较高的方法来说十分不妥
+ * 因此 外部调用保持与源码一致 差异化的逻辑处理放在工厂函数内部
  */ 
 function NewObjectLiteralProperty(...args) {
   if(args.length === 3) return new Property(ast_value_factory_, ...args);
@@ -209,7 +209,28 @@ class Property {
 ```
 极端情况下，存在子类、父类均有多重构造函数(见DeclarationScope)，或者根据构造参数决定是否调用其余构造方法的逻辑，太过于复杂。
 
-目前将其拆分为多个类实现，后续考虑更优实现方法。
+目前会将实例化的类进行拆分，保留原始类，但是仅挂载一些方法，不作为new的对象，后续考虑更优实现方法。
+```js
+// 原有的多重载构造函数类 不作为new的对象 方法可以放上面
+class DeclarationScope extends Scope {
+  constructor(...args) {
+    super(...args);
+  }
+  allMethod() {}
+}
+
+// 拆分出来额外的实例化类 构造函数参数重新设定 仅仅差异化构造过程 所有方法放原有类上
+class FunctionDeclarationScope extends DeclarationScope{
+  constructor() {
+    // ...
+  }
+}
+class ScriptDeclarationScope extends DeclarationScope{
+  constructor() {
+    // ...
+  }
+}
+```
 
 ### 泛型
 

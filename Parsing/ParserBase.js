@@ -549,12 +549,13 @@ export default class ParserBase {
   }
   /**
    * 以下内容为解析函数体
+   * function fnc() {}
    * @param {StatementListT*} body pointer_buffer_
    * @param {Identifier} function_name 函数名
    * @param {int} pos 位置
    * @param {FormalParameters} parameters 函数参数
    * @param {FunctionKind} kind 函数类型 箭头函数、async等等
-   * @param {FunctionSyntaxKind} function_type 函数的语法类型 普通函数orIIFE
+   * @param {FunctionSyntaxKind} function_type 函数的语法类型
    * @param {FunctionBodyType} body_type 表达式还是声明 即a => a or function a() {}
    */
   ParseFunctionBody(body, function_name, pos, parameters, kind, function_type, body_type) {
@@ -603,7 +604,7 @@ export default class ParserBase {
         if(IsAsyncGeneratorFunction(kind)) this.ParseAndRewriteAsyncGeneratorFunctionBody(pos, kind, inner_body);
         else if(IsGeneratorFunction(kind)) this.ParseAndRewriteGeneratorFunctionBody(pos, kind, inner_body);
         else if(IsAsyncFunction(kind)) this.ParseAsyncFunctionBody(inner_scope, inner_body);
-        // 正常的函数走原始解析 只是会带入新的body
+        // 正常的函数走原始解析 只是会带入新的body 结束标记也变成了右大括号
         else this.ParseStatementList(inner_body, closing_token);
 
         if(IsDerivedConstructor(kind)) {
@@ -626,8 +627,14 @@ export default class ParserBase {
     // CheckConflictingVarDeclarations(inner_scope);
     
     // V8_LIKELY
+    /**
+     * 分为简单参数与复杂参数两种情况
+     * 简单参数处理十分简单 仅仅进行变量提升
+     * 变量提升的实际上是将函数名作为变量插入到外部作用域的变量池中
+     */
     if(parameters.is_simple) {
       if(is_sloppy(function_scope.language_mode())) this.InsertSloppyBlockFunctionVarBindings(function_scope);
+      // 严格模式下不支持重复形参
       allow_duplicate_parameters = is_sloppy(function_scope.language_mode()) && !IsConciseMethod(kind);
     } else {
       this.SetLanguageMode(function_scope, inner_scope.language_mode());
@@ -636,7 +643,7 @@ export default class ParserBase {
       inner_scope.end_position_ = this.end_position();
       if(inner_scope.FinalizeBlockScope() !== null) {
         let inner_block = this.ast_node_factory_.NewBlock(true, inner_body);
-        inner_body.Rewind();
+        // inner_body.Rewind();
         inner_body.push(inner_block);
         inner_block.scope_ = inner_scope;
         if(!this.HasCheckedSyntax()) {
@@ -646,15 +653,20 @@ export default class ParserBase {
         this.InsertShadowingVarBindingInitializers(inner_block);
       }
     }
-
+    // 检测形参重复 => function fn(a, a){'use strict'}会报错
     this.ValidateFormalParameters(this.language_mode(), parameters, allow_duplicate_parameters);
     // 箭头函数没有argument
     if(!IsArrowFunction(kind)) function_scope.DeclareArguments(this.ast_value_factory_);
     this.DeclareFunctionNameVar(function_name, function_type, function_scope);
-    inner_body.MergeInto(body);
+    // 合并作用域
+    // inner_body.MergeInto(body);
 
     // 析构
     this.expression_scope_ = expression_scope_;
+  }
+  ValidateFormalParameters(language_mode, parameters, allow_duplicates) {
+    if(!allow_duplicates) parameters.ValidateDuplicate(this);
+    // if(is_strict(language_mode)) parameters.ValidateStrictMode(this);
   }
 
   ParseClassDeclaration() {}

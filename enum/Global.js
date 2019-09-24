@@ -172,3 +172,11 @@ export const kScopesOnly = 0;
 export const kMappedArguments = 0;
 export const kUnmappedArguments = 0;
 export const kRestParameter = 0;
+
+export const UNALLOCATED = 0;
+export const PARAMETER = 1;
+export const LOCAL = 2;
+export const CONTEXT = 3;
+export const LOOKUP = 4;
+export const MODULE = 5;
+export const kLastVariableLocation = MODULE;

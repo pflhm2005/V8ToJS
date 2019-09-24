@@ -47,6 +47,7 @@ import {
   kNoDuplicateParameters,
   kShouldLazyCompile,
   kFunctionLiteralIdTopLevel,
+  _kSloppyBlockFunctionStatement,
 } from "../enum";
 
 import {
@@ -74,6 +75,7 @@ import {
   OperatorField,
   CountOperationTokenField,
   AssignmentTokenField,
+  SloppyBlockFunctionStatementTokenField,
 } from '../util';
 
 export class AstNodeFactory {
@@ -249,6 +251,19 @@ class Block extends BreakableStatement {
   // InitializeStatements(statements, zone = null) {
   //   this.statement_ = statements;
   // }
+}
+
+class SloppyBlockFunctionStatement extends Statement {
+  constructor(pos, variable, init, statement) {
+    super(pos, _kSloppyBlockFunctionStatement);
+    this.var_ = variable;
+    this.statement_ = statement;
+    this.next_ = null;
+    this.bit_field_ = SloppyBlockFunctionStatementTokenField.update(this.bit_field_, init);
+  }
+  name() { return this.var_.raw_name(); }
+  scope() { return this.var_.scope_; }
+  init() { return SloppyBlockFunctionStatementTokenField.decode(this.bit_field_); }
 }
 
 // goto语法的block

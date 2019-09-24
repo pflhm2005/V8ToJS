@@ -1,4 +1,5 @@
 import Location from "../scanner/Location";
+import { kParamDupe } from "../../MessageTemplate";
 
 class FormalParametersBase {
   constructor(scope) {
@@ -40,8 +41,15 @@ export default class ParserFormalParameters extends FormalParametersBase {
     super(scope);
     this.params = [];
     this.duplicate_loc = new Location().invalid();
+    // this.strict_error_loc = new Location().invalid();
   }
   has_duplicate() {
     return this.duplicate_loc.IsValid();
   }
+  ValidateDuplicate(parser) {
+    if(this.has_duplicate()) throw new Error(kParamDupe);
+  }
+  // ValidateStrictMode(parser) {
+  //   if()
+  // }
 }
