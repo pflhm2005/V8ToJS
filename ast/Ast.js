@@ -48,6 +48,9 @@ import {
   kShouldLazyCompile,
   kFunctionLiteralIdTopLevel,
   _kSloppyBlockFunctionStatement,
+  _kCompareOperation,
+  TokenEnumList,
+  _kConditional,
 } from "../enum";
 
 import {
@@ -89,6 +92,9 @@ export class AstNodeFactory {
     return new VariableDeclaration(pos);
   }
 
+  NewConditional(condition, then_expression, else_expression, position) {
+    return new Conditional(condition, then_expression, else_expression, position);
+  }
   /**
    * 生成字面量对象
    * 源码这里用的是函数重载 由于有严格的类型形参 所以很舒适
@@ -167,6 +173,9 @@ export class AstNodeFactory {
   }
   NewUnaryOperation(op, expression, pos) {
     return new UnaryOperation(op, expression, pos);
+  }
+  NewCompareOperation(op, left, right, pos) {
+    return new CompareOperation(op, left, right, pos);
   }
   /**
    * 该方法有重载
@@ -348,6 +357,7 @@ class Assignment extends Expression {
     super(pos, node_type);
     this.target_ = target;
     this.value_ = value;
+    op = TokenEnumList.indexOf(op);
     this.bit_field_ |= AssignmentTokenField.encode(op);
   }
 }
@@ -445,10 +455,20 @@ export class VariableProxy extends Expression {
   }
 }
 
+class Conditional extends Expression {
+  constructor(condition, then_expression, else_expression, position) {
+    super(position, _kConditional);
+    this.condition_ = condition;
+    this.then_expression_ = then_expression;
+    this.else_expression_ = else_expression;
+  }
+}
+
 class CountOperation extends Expression {
   constructor(op, is_prefix, expr, pos) {
     super(pos, _kCountOperation);
     this.expression_ = expr;
+    op = TokenEnumList.indexOf(op);
     this.bit_field_ |= IsPrefixField.encode(is_prefix) | CountOperationTokenField.encode(op);
   }
 }
@@ -457,7 +477,18 @@ class UnaryOperation extends Expression {
   constructor(op, expression, pos) {
     super(pos, _kUnaryOperation);
     this.expression_ = expression;
+    op = TokenEnumList.indexOf(op);
     this.bit_field_ |= OperatorField.encode(op);
+  }
+}
+
+class CompareOperation extends Expression {
+  constructor(op, left, right, pos) {
+    super(pos, _kCompareOperation);
+    this.left_ = left;
+    this.right_ = right;
+    op = TokenEnumList.indexOf(op);
+    this.bit_field_ = OperatorField.encode(op);
   }
 }
 

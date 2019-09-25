@@ -24,6 +24,7 @@ import {
   SLOPPY_FUNCTION_NAME_VARIABLE,
   CONTEXT,
   TokenEnumList,
+  kMaybeAssigned,
 } from "../enum";
 import { Variable } from "../ast/AST";
 import { 
@@ -355,6 +356,13 @@ export default class Scope extends ZoneObject {
   GetArgumentsType() {
     return this.is_sloppy(this.language_mode()) && this.has_simple_parameters_ ? kMappedArguments : kUnmappedArguments;
   }
+  NewTemporary(name, maybe_assigned = kMaybeAssigned) {
+    let scope = this.GetClosureScope();
+    let variable = new Variable(scope, name, kTemporary, NORMAL_VARIABLE, kCreatedInitialized);
+    scope.AddLocal(variable);
+    if(maybe_assigned === kMaybeAssigned) variable.set_maybe_assigned();
+    return variable;
+  }
 }
 
 /**
@@ -385,6 +393,17 @@ class DeclarationScope extends Scope {
     this.was_lazily_parsed_ = false;
     this.is_skipped_function_ = false;
     this.preparse_data_builder_ = null;
+  }
+  AddLocal(variable) {
+    this.locals_.push(variable);
+  }
+  parameter(index) {
+    return this.params_[index];
+  }
+  DeclareGeneratorObjectVar(name) {
+    let result = this.NewTemporary(name, kNotAssigned);
+    this.EnsureRareData().generator_object = result;
+    return result; 
   }
   DeclareDynamicGlobal(name, kind, cache) {
     return cache.variables_.Declare(null, this, name, kDynamicGlobal, kind, kCreatedInitialized, kNotAssigned, false);

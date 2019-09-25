@@ -32,6 +32,7 @@ import { is_strict } from '../util';
 import ParserFormalParameters from './function/ParserFormalParameters';
 import { ParameterDeclarationParsingScope } from './ExpressionScope';
 import Parameter from './function/Parameter';
+import { Declaration } from './DeclarationParsingResult';
 
 
 /**
@@ -462,7 +463,7 @@ class Parser extends ParserBase {
    * @param {AstRawString*} function_name 函数名 匿名函数是空字符串
    * @param {int} pos 当前位置
    * @param {FunctionKind} kind 函数类型 见FunctionKindForImpl
-   * @param {FunctionSyntaxKind} function_type 普通函数orIIFE
+   * @param {FunctionSyntaxKind} function_type 表达式、声明、IIFE
    * @param {DeclarationScope} function_scope 函数的作用域
    * @param {int*} num_parameters 参数数量
    * @param {int*} function_length 函数长度
@@ -486,7 +487,7 @@ class Parser extends ParserBase {
 
     /**
      * ParserFormalParameters formals(function_scope);
-     * 这里是栈上实例化 但是没看到析构函数 默认是不用额外操作
+     * 这里是栈上实例化 但是没看到析构函数 应该是不用额外操作
      */
     let formals = new ParserFormalParameters(function_scope);
     {
@@ -507,7 +508,14 @@ class Parser extends ParserBase {
        * 正常声明的函数
        */
       else {
-        // 解析参数
+        /**
+         * 解析函数参数 主要就是以逗号作为分割 处理每一个形参
+         * 形参类型主要有以下几种
+         * 1. 单标识符 => (a, b) => 标记为简单参数
+         * 2. 解构对象、数组 => ({a}, [b]) => 标记为复杂参数
+         * 3. rest参数 => (...args) => 标记为复杂参数
+         * 4. 有默认值的形参 => (a = 1) => 标记为复杂参数
+         */
         this.ParseFormalParameterList(formals);
         if (expected_parameters_end_pos !== kNoSourcePosition) {
           let position = this.peek_position();
@@ -532,7 +540,20 @@ class Parser extends ParserBase {
     let previous_accept_IN_ = this.accept_IN_;
     this.accept_IN_ = true;
     /**
-     * 解析函数体
+     * 解析函数体 主要步骤如下
+     * 1. 根据函数类型是否是generator这种需要保留状态的 进行特殊处理
+     * 2. 检查函数参数是否是复杂类型(带有解构、...rest) 
+     * 注: 复杂类型存在变量的赋值操作 需要一个额外的作用域
+     * 3. 函数表达式先走赋值逻辑 函数声明直接重新走最外层的语句解析逻辑
+     * 4. 解析完函数体后 如果参数是简单类型 直接走变量提升逻辑
+     * 注: 变量提升的实质是在外部作用域的变量表中声明一个新变量 变量名是函数名 值是函数
+     * 有两种情况在变量提升中处理
+     * (1) 形参与函数名相同 function fn(fn) { console.log(fn) }; 此时形参覆盖函数名
+     * (2) 存在var类型的声明(实际上也包括let、const 不过会报错) var fn = 1;function fn(){} 此时函数声明无效
+     * 5. 复杂形参
+     * 6. 检查是否有重复形参 严格模式会报错
+     * 7. 非箭头函数会在变量表声明一个名为arguments变量 如果该变量已经被声明 则跳过这步
+     * 8. 合并内外作用域的变量表
      */
     this.ParseFunctionBody(body, function_name, pos, formals, kind, function_type, kBlock);
     has_duplicate_parameters = formals.has_duplicate();
@@ -553,6 +574,55 @@ class Parser extends ParserBase {
   }
   HasCheckedSyntax() {
     return this.scope_.GetDeclarationScope().has_checked_syntax_;
+  }
+  // 生成一个临时generator对象 服务于yield表达式
+  PrepareGeneratorVariables() {
+    this.function_state_.scope_.DeclareGeneratorObjectVar(this.ast_value_factory_.dot_generator_object_string());
+  }
+  RewriteAsyncFunctionBody(body, block, return_value) {
+    block.statements_.push(this.ast_node_factory_.NewAsyncReturnStatement(return_value, return_value.position_));
+    block = this.BuildRejectPromiseOnException(block);
+    body.push(block);
+  }
+  BuildRejectPromiseOnException(inner_block) {
+    let result = this.ast_node_factory_.NewBlock(1, true);
+    // TODO
+    return result;
+  }
+  // 为形参注入一个作用域
+  BuildParameterInitializationBlock(parameters) {
+    // ScopedPtrList<Statement> init_statements(pointer_buffer());
+    let init_statements = this.pointer_buffer_.slice();
+    let index = 0;
+    for(let parameter of parameters.params) {
+      /**
+       * parameters保存了所有的形参
+       * 这里判断设置的默认值是否是undefined 过滤掉
+       */
+      let initial_value = this.ast_node_factory_.NewVariableProxy(parameters.scope.parameter(index));
+      if(parameter.initializer_ !== null) {
+        let condition = this.ast_node_factory_.NewCompareOperation(
+          'Token::EQ_STRICT',
+          this.ast_node_factory_.NewVariableProxy(parameters.scope.parameter(index)),
+          this.ast_node_factory_.NewUndefinedLiteral(kNoSourcePosition), kNoSourcePosition);
+        initial_value = this.ast_node_factory_.NewConditional(condition, parameter.initializer_, initial_value, kNoSourcePosition);
+      }
+
+      // 处理eval 跳过 一般也不会用
+      // let param_scope = this.scope_;
+      // if()...
+
+      // BlockState block_state(&scope_, param_scope);
+      let outer_scope_ = this.scope_;
+      this.scope_ = param_scope;
+      let decl = new Declaration(parameter.pattern, initial_value);
+      this.InitializeVariables(init_statements, decl);
+
+      ++index;
+      // 析构
+      this.scope_ = outer_scope_;
+    }
+    return this.ast_node_factory_.NewBlock(true, init_statements);
   }
   InsertSloppyBlockFunctionVarBindings(scope) {
     // 最外层的eval作用域不需要做提升

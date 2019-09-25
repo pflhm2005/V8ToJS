@@ -549,7 +549,6 @@ export default class ParserBase {
   }
   /**
    * 以下内容为解析函数体
-   * function fnc() {}
    * @param {StatementListT*} body pointer_buffer_
    * @param {Identifier} function_name 函数名
    * @param {int} pos 位置
@@ -565,6 +564,7 @@ export default class ParserBase {
     this.expression_scope_ = null;
 
     // 可恢复函数 => async、*function这种特殊函数
+    // 只是生成一个特殊的临时变量
     if(IsResumableFunction(kind)) this.PrepareGeneratorVariables();
     let function_scope = parameters.scope;
     let inner_scope = function_scope;
@@ -572,10 +572,12 @@ export default class ParserBase {
      * 复杂参数
      * 1. 解构 => function fn({a}, [b]) {}
      * 2. rest =>  function fn(...rest) {}
+     * 3. 默认参数 => function(a = 1) {}
      * V8_UNLIKELY
      */
     if(!parameters.is_simple) {
       let init_block = this.BuildParameterInitializationBlock(parameters);
+      // async
       if(IsAsyncFunction(kind) && !IsAsyncGeneratorFunction(kind)) init_block = this.BuildRejectPromiseOnException(init_block);
       body.push(init_block);
 
@@ -604,7 +606,7 @@ export default class ParserBase {
         if(IsAsyncGeneratorFunction(kind)) this.ParseAndRewriteAsyncGeneratorFunctionBody(pos, kind, inner_body);
         else if(IsGeneratorFunction(kind)) this.ParseAndRewriteGeneratorFunctionBody(pos, kind, inner_body);
         else if(IsAsyncFunction(kind)) this.ParseAsyncFunctionBody(inner_scope, inner_body);
-        // 正常的函数走原始解析 只是会带入新的body 结束标记也变成了右大括号
+        // 正常的函数走原始解析 只是会带入新的body 结束标记变成了右大括号
         else this.ParseStatementList(inner_body, closing_token);
 
         if(IsDerivedConstructor(kind)) {
@@ -657,12 +659,16 @@ export default class ParserBase {
     this.ValidateFormalParameters(this.language_mode(), parameters, allow_duplicate_parameters);
     // 箭头函数没有argument
     if(!IsArrowFunction(kind)) function_scope.DeclareArguments(this.ast_value_factory_);
+    // 函数表达式才会进
     this.DeclareFunctionNameVar(function_name, function_type, function_scope);
     // 合并作用域
     // inner_body.MergeInto(body);
 
     // 析构
     this.expression_scope_ = expression_scope_;
+  }
+  BuildReturnStatement(expr, pos, end_pos = kNoSourcePosition) {
+    if(expr === null) {}
   }
   ValidateFormalParameters(language_mode, parameters, allow_duplicates) {
     if(!allow_duplicates) parameters.ValidateDuplicate(this);
