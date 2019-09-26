@@ -5,7 +5,31 @@ import {
 } from "../enum";
 
 /**
- * 这个类是一个模板类
+ * 这是bitmap的扩展 传统bitmap只能接受0或者1两种值
+ * bitFiled扩展了bitmap的用法
+ * 简单解释如下
+ * shift => bit值偏移数
+ * size => 当前field需要的空间
+ * @example 假设目前有2个bitField代表统计班上的不同性别的成绩概况
+ * // 1. 性别分为男、女 => 即只要一个bit位 => 男0女1
+ * // 2. 成绩从1 - 100分 => 由于bit位是以2的幂递增 所以最少需要1 << 7的bit位
+ * // 那么两个bitField的声明如下
+ * let sexBitField = BitField(0, 1); // 偏移量为0 需要的size为1
+ * let scoreBitField = BitField(1, 7) // 偏移量为1 需要的size为7
+ * // 接下来根据BitField初始化bit值
+ * // 1. 小a => 性别男 80分
+ * let a = sexBitField.encode(0) | scoreBitField.encode(80); // 1010000 0
+ * // 得到的值就保存了该同学的性别与成绩 其中第一位表示性别 其余7位代表成绩
+ * // 获取bit中的性别值
+ * sexBitField.decode(a);
+ * // 更改bit中的成绩
+ * scoreBitField.update(a, 90);
+ * 
+ * @end 整体用法与概念如上所示
+ */
+
+/**
+ * 模板类
  * template <class T, int shift, int size, class U = int>
  * class BitField {}
  * @param {Number} shift 偏移位数
@@ -14,18 +38,6 @@ import {
  * @example
  * BitField(0, 6)
  * @description 相当于bitmap 总数量为 (1 << 6) - 1
- * 
- * @example
- * let IsKeywordBits = BitField(0, 1);
- * let IsPropertyNameBits = BitField(1, 1);
- * let bit_field = 0;
- * bit_field |= IsKeywordBits.encode(true) | IsPropertyNameBits.encode(false); // 01
- * // ~kMask => ~(100 - 10) => ~10 => 01
- * // 使用&重置自己bitField区域的值 然后重新进行|运算
- * bit_field = IsPropertyNameBits.update(bit_field, 1);
- * @description
- * 表示在这个BitField内 有两种不同的参数 每种参数的枚举数量为2
- * 可能值分别为 00 01 10 11
  */
 const BitField = (shift, size) => {
   let kShift = shift;
@@ -56,7 +68,6 @@ export const NodeTypeField = BitField(0, 6);
  * 2.using xxxBitField = xxx::Next<T, size>
  * Next指向根类BitField的方法 => BitField<T, xxxkShift + xxxSize, size>
  * 转换成JS方法就是BitField(xxxkShift + xxxSize, size)
- * @example
  * using TokenField = Statement::NextBitField<Token::Value, 8>;
  * @description
  * 1.Statement继承于AstNode
@@ -164,3 +175,7 @@ export const IsUsedField = BitField(11, 1);
 export const InitializationFlagField = BitField(12, 1);
 export const ForceHoleInitializationField = BitField(13, 1);
 export const MaybeAssignedFlagField = BitField(14, 1);
+
+export const OnAbruptResumeField = BitField(7, 1);
+
+export const ReturnStatementTypeField = BitField(6, 1);
