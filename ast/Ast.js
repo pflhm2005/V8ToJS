@@ -51,6 +51,8 @@ import {
   _kCompareOperation,
   TokenEnumList,
   _kConditional,
+  _kAwait,
+  _kReturnStatement,
 } from "../enum";
 
 import {
@@ -79,7 +81,13 @@ import {
   CountOperationTokenField,
   AssignmentTokenField,
   SloppyBlockFunctionStatementTokenField,
+  OnAbruptResumeField,
+  ReturnStatementTypeField,
 } from '../util';
+
+// 返回语句 因为被工厂方法引用同时为了规避暂时性死区 放前面
+const kNormal = 0;
+const kAsyncReturn = 0;
 
 export class AstNodeFactory {
   constructor(ast_value_factory) {
@@ -187,7 +195,18 @@ export class AstNodeFactory {
     result.statement_ = statements;
     return result;
   }
-  
+
+  NewAwait(expression, pos) {
+    if(!expression) expression = this.NewUndefinedLiteral(pos);
+    return new Await(expression, pos);
+  }
+  // 返回语句
+  NewReturnStatement(expression, pos, end_position = kNoSourcePosition) {
+    return new ReturnStatement(expression, kNormal, pos, end_position);
+  }
+  NewAsyncReturnStatement(expression, pos, end_position = kNoSourcePosition) {
+    return new ReturnStatement(expression, kAsyncReturn, pos, end_position);
+  }
   // 返回一个函数字面量 整个JS的顶层是一个函数
   NewScriptOrEvalFunctionLiteral(scope, body, expected_property_count, parameter_count) {
     return new FunctionLiteral(null, this.ast_value_factory_.empty_string(), this.ast_value_factory_, scope,
@@ -561,6 +580,11 @@ class ObjectLiteral extends AggregateLiteral {
   }
 }
 
+export const _METHOD = 0;
+export const _GETTER = 0;
+export const _SETTER = 0;
+export const _FIELD = 0;
+
 class ClassLiteral extends Expression {
   constructor() {
     super();
@@ -596,6 +620,40 @@ class FunctionLiteral extends Expression {
   }
   CanSuspend() {
     return this.suspend_count_ > 0;
+  }
+}
+
+// 延迟执行的字面量类型
+const kOnExceptionThrow = 0;
+const kNoControl = 1;
+
+class Suspend extends Expression {
+  constructor(node_type, expression, pos, on_abrupt_resume) {
+    super(pos, node_type);
+    this.expression_ = expression;
+    this.bit_field_ |= OnAbruptResumeField.encode(on_abrupt_resume);
+  }
+}
+
+class Await extends Suspend {
+  constructor(expression, pos) {
+    super(_kAwait, expression, pos, kOnExceptionThrow);
+  }
+}
+
+// 返回语句
+class JumpStatement extends Statement {
+  constructor(pos, type) {
+    super(pos, type);
+  }
+}
+
+class ReturnStatement extends JumpStatement {
+  constructor(expression, type, pos, end_position) {
+    super(pos, _kReturnStatement);
+    this.expression_ = expression;
+    this.end_position_ = end_position;
+    this.bit_field_ |= ReturnStatementTypeField.encode(type);
   }
 }
 

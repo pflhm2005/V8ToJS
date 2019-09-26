@@ -28,7 +28,7 @@ import {
   kTooManyParameters, 
   kParamAfterRest 
 } from '../MessageTemplate';
-import { is_strict } from '../util';
+import { is_strict, is_sloppy } from '../util';
 import ParserFormalParameters from './function/ParserFormalParameters';
 import { ParameterDeclarationParsingScope } from './ExpressionScope';
 import Parameter from './function/Parameter';
@@ -164,6 +164,14 @@ class Parser extends ParserBase {
     const result = this.scanner_.CurrentSymbol(this.ast_value_factory_);
     return result;
   }
+  SetLanguageMode(scope, mode) {
+    let feature;
+    if(is_sloppy(mode)) feature = kSloppyMode;
+    else if(is_strict) feature = kStrictMode;
+    else this.UNREACHABLE();
+    ++this.use_counts_[feature];
+    this.scope_.SetLanguageMode(mode);
+  }
   /**
    * 这个方法的实现太复杂 简化处理
    */
@@ -175,6 +183,11 @@ class Parser extends ParserBase {
     let string = DoubleToCString(double_value);
     return this.ast_value_factory_.GetOneByteString(string);
   }
+  // GetDefaultStrings(default_string, dot_default_string) {
+  //   default_string = this.ast_value_factory_.default_string();
+  //   dot_default_string = this.ast_value_factory_.dot_default_string();
+  // }
+
   PushEnclosingName(name) {
     this.fni_.PushEnclosingName(name);
   }
@@ -541,7 +554,8 @@ class Parser extends ParserBase {
     this.accept_IN_ = true;
     /**
      * 解析函数体 主要步骤如下
-     * 1. 根据函数类型是否是generator这种需要保留状态的 进行特殊处理
+     * 1. 判断函数类型是否是function*这种需要保留状态的
+     * 注: 内部生成了一个名为.generator_object特殊对象来处理函数状态变更
      * 2. 检查函数参数是否是复杂类型(带有解构、...rest) 
      * 注: 复杂类型存在变量的赋值操作 需要一个额外的作用域
      * 3. 函数表达式先走赋值逻辑 函数声明直接重新走最外层的语句解析逻辑
@@ -634,6 +648,10 @@ class Parser extends ParserBase {
       function_scope.DeclareFunctionVar(function_name);
     }
   }
+
+  ParseAndRewriteAsyncGeneratorFunctionBody() {}
+  ParseAndRewriteGeneratorFunctionBody() {}
+  ParseAsyncFunctionBody() {}
 
   /**
    * 给函数设名字

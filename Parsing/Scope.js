@@ -184,6 +184,34 @@ export default class Scope extends ZoneObject {
     }
     return true;
   }
+  FinalizeBlockScope() {
+    if(this.variables_.occupancy() > 0 || (this.is_declaration_scope_ && calls_sloppy_eval())){
+      return this;
+    }
+    this.outer_scope.RemoveInnerScope(this);
+    // 重新设置作用域关系
+    if(this.inner_scope_ !== null) {
+      let scope = this.inner_scope_;
+      scope.outer_scope_ = this.outer_scope_;
+      while(scope.sibling_ !== null) {
+        scope = scope.sibling_;
+        scope.outer_scope_ = this.outer_scope_;
+      }
+      scope.sibling_ = this.outer_scope_.inner_scope_;
+      this.outer_scope_.inner_scope_ = this.inner_scope_;
+      this.inner_scope_ = null;
+    }
+    // 移动待处理变量
+    if(this.unresolved_list_.length) {
+      this.outer_scope_.unresolved_list_ = this.unresolved_list_;
+      this.unresolved_list_.length = 0;
+    }
+
+    if(this.inner_scope_calls_eval_) this.outer_scope_.inner_scope_calls_eval_ = true;
+    this.num_heap_slots_ = 0;
+    
+    return null;
+  }
   // 这里形成一个作用域链
   GetDeclarationScope() {
     let scope = this;
@@ -486,7 +514,7 @@ class DeclarationScope extends Scope {
 }
 
 export class FunctionDeclarationScope extends DeclarationScope {
-  constructor(zone = null, outer_scope, scope_type, function_kind) {
+  constructor(zone = null, outer_scope, scope_type, function_kind = kNormalFunction) {
     super(zone, outer_scope, scope_type);
     this.function_kind_ = function_kind;
     this.num_parameters_ = 0;
