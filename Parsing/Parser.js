@@ -18,6 +18,10 @@ import {
   kYes,
   kBlock,
   kNamedExpression,
+  kConst,
+  NORMAL_VARIABLE,
+  kCreatedInitialized,
+  SLOPPY_BLOCK_FUNCTION_VARIABLE,
 } from '../enum';
 
 import { 
@@ -33,6 +37,7 @@ import ParserFormalParameters from './function/ParserFormalParameters';
 import { ParameterDeclarationParsingScope } from './ExpressionScope';
 import Parameter from './function/Parameter';
 import { Declaration } from './DeclarationParsingResult';
+import { Variable } from '../ast/Ast';
 
 
 /**
@@ -239,6 +244,13 @@ class Parser extends ParserBase {
   }
   DeclareIdentifier(name, start_position) {
     return this.expression_scope_.Declare(name, start_position);
+  }
+  DeclareBoundVariable(name, mode, pos) {
+    let proxy = this.ast_node_factory_.NewVariableProxy(name, NORMAL_VARIABLE, this.position());
+    let { variable } = this.DeclareVariable(name, NORMAL_VARIABLE, mode, Variable.DefaultInitializationFlag(mode),
+    this.scope_, false /* was_added */, pos, this.end_position());
+    proxy.BindTo(variable);
+    return proxy;
   }
   DeclareVariable(name, kind, mode, init, scope, was_added_params, begin, end = kNoSourcePosition) {
     let declaration;
@@ -727,8 +739,28 @@ class Parser extends ParserBase {
       );
     }
   }
- 
-  DeclareFunction() {
+  RewriteClassLiteral() {
+    
+  }
+
+  DeclareClassVariable(name, class_info, class_token_pos) {
+    if(name !== null) {
+      let proxy = this.DeclareBoundVariable(name, kConst, class_token_pos);
+      class_info.variable = proxy.var_;
+    }
+  }
+  DeclareFunction(variable_name, fnc, mode, kind, beg_pos, end_pos, names) {
+    let declaration = this.ast_node_factory_.NewFunctionDeclaration(fnc, beg_pos);
+    this.Declare(declaration, variable_name, kind, mode, kCreatedInitialized, this.scope_, false, beg_pos);
+    if(this.info_.coverage_enabled()) declaration.var_.set_is_used();
+    if(names) names.push(variable_name);
+    if(kind === SLOPPY_BLOCK_FUNCTION_VARIABLE) {
+      let init = this.function_state_.loop_nesting_depth_ > 0 ? 'Token::ASSIGN' : 'Token::INIT';
+      let statement = this.ast_node_factory_.NewSloppyBlockFunctionStatement(end_pos, declaration.var_, init);
+      this.GetDeclarationScope().DeclareSloppyBlockFunction(statement);
+      return statement;
+    }
+    return this.ast_node_factory_.EmptyStatement();
   }
 
   /**

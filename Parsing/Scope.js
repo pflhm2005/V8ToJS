@@ -25,6 +25,7 @@ import {
   CONTEXT,
   TokenEnumList,
   kMaybeAssigned,
+  CLASS_SCOPE,
 } from "../enum";
 import { Variable } from "../ast/AST";
 import { 
@@ -146,7 +147,7 @@ export default class Scope extends ZoneObject {
   is_with_scope() { return this.scope_type_ === WITH_SCOPE; }
   is_class_scope() { return this.scope_type_ === CLASS_SCOPE; }
 
-  SetLanguageMode(language_mode) { this.is_strict_ = this.is_strict(language_mode); }
+  set_language_mode(language_mode) { this.is_strict_ = this.is_strict(language_mode); }
   language_mode() { return this.is_strict_ ? kStrict : kSloppy; }
   is_sloppy(language_mode) { return language_mode === kSloppy; }
   is_strict(language_mode) { return language_mode !== kSloppy; }
@@ -447,6 +448,9 @@ class DeclarationScope extends Scope {
     else cache.variables_.push(this.function_);
     return this.function_;
   }
+  DeclareSloppyBlockFunction(sloppy_block_function) {
+    this.sloppy_block_functions_.push(sloppy_block_function);
+  }
   /**
    * 这个提升说白了就是函数名查重
    * @param {AstNodeFactory*} factory 工厂方法
@@ -543,6 +547,19 @@ export class ScriptDeclarationScope extends DeclarationScope {
     this.params_ = [];
     this.SetDefaults();
     this.receiver_ = this.DeclareDynamicGlobal(ast_value_factory.GetOneByteStringInternal(ast_value_factory.this_string()), THIS_VARIABLE, this);
+  }
+}
+
+export class ClassScope extends Scope {
+  constructor(zone = null, outer_scope) {
+    super(zone, outer_scope, CLASS_SCOPE);
+    this.set_language_mode(kStrict);
+  }
+  ResolvePrivateNamesPartially() {
+
+  }
+  DeclareBrandVariable() {
+    
   }
 }
 

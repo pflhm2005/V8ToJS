@@ -213,6 +213,9 @@ export default class ParserBase {
   NewScriptScope() {
     return new ScriptDeclarationScope(null, this.ast_value_factory_);
   }
+  NewClassScope(parent) {
+    return new ClassScope(null, parent);
+  }
   // TODO
   NewEvalScope() {
     return null;
@@ -773,6 +776,21 @@ export default class ParserBase {
     no_expression_scope = null;
     return result;
   }
+  /**
+   * 进行class字面量解析
+   * 1、判断类名是否合法
+   * 2、将作用域提升为严格模式
+   * 3、生成一个class描述类 将类名作为变量插入作用域变量池
+   * 4、检查extends关键词 处理继承
+   * 注: class声明不存在变量提升 可以直接从变量池中找到extends后面的标识符 然后挂到class_info上
+   * 5、以左右大括号为界 解析class体
+   * 注: 解析方式参考对象字面量 class的原型方法与对象简写一致
+   * 6、处理私有变量(此处存疑 #开头的标识符代表私有变量 但是目前浏览器上似乎不支持)
+   * @param {IdentifierT} name 类名 如果是匿名class 该值为null
+   * @param {Location} class_name_location 类名位置 用来报错的
+   * @param {bool} name_is_strict_reserved 类名是否是严格模式下的保留词
+   * @param {int} class_token_pos 整个class开始的位置
+   */
   ParseClassLiteral(name, class_name_location, name_is_strict_reserved, class_token_pos) {
     // 匿名class export default class {}
     let is_anonymous = name === null;
@@ -788,7 +806,7 @@ export default class ParserBase {
     this.scope_ = inner_scope;
     this.RaiseLanguageMode(kStrict);
 
-    let class_info = new ClassInfo(this);
+    let class_info = new ClassInfo();
     class_info.is_anonymous = is_anonymous;
     this.DeclareClassVariable(name, class_info, class_token_pos);
 
@@ -799,6 +817,10 @@ export default class ParserBase {
       this.fni_.scope_depth_++;
       // ExpressionParsingScope scope(impl());
       let scope = new ExpressionParsingScope(this);
+      /**
+       * 由于class声明不存在变量提升 所以这里直接开始左值表达式解析
+       * 下一个Token必定是标识符 然后从变量池中找对应的值 如果没有会直接报错
+       */
       class_info.extends = this.ParseLeftHandSideExpression();
       // scope.ValidateExpression();
 
@@ -811,6 +833,10 @@ export default class ParserBase {
     this.Expect('Token::LBRACE');
 
     let has_extends = !class_info.extends;
+    /**
+     * 解析class内部结构
+     * identifier () {}
+     */
     while(this.peek() !== 'Token::RBRACE') {
       // 由此看来 class内部加分号确实没什么卵用 白糟蹋一轮循环
       if(this.Check('Token::SEMICOLON')) continue;
@@ -818,7 +844,7 @@ export default class ParserBase {
       let top_ = this.fni_.names_stack_.length;
       this.fni_.scope_depth_++;
       // If we haven't seen the constructor yet, it potentially is the next property.
-      // 这个注释也太有意思了
+      // 如果没看到构造函数 那么下一个可能就是(这个注释也太有意思了)
       let is_constructor = !class_info.has_seen_constructor;
       // 这个属性同样应用于对象字面量
       let prop_info = new ParsePropertyInfo(this);
@@ -868,6 +894,9 @@ export default class ParserBase {
     // 析构
     this.scope_ = outer_scope_;
     return result;
+  }
+  ParseClassPropertyDefinition() {
+
   }
 
   /**

@@ -53,6 +53,10 @@ import {
   _kConditional,
   _kAwait,
   _kReturnStatement,
+  _kFunctionDeclaration,
+  kNotAssigned,
+  kNeedsInitialization,
+  kCreatedInitialized,
 } from "../enum";
 
 import {
@@ -98,6 +102,9 @@ export class AstNodeFactory {
   }
   NewVariableDeclaration(pos) {
     return new VariableDeclaration(pos);
+  }
+  NewFunctionDeclaration(fun, pos) {
+    return new FunctionDeclaration(fun, pos);
   }
 
   NewConditional(condition, then_expression, else_expression, position) {
@@ -176,6 +183,9 @@ export class AstNodeFactory {
   NewExpressionStatement(expression, pos) {
     return new ExpressionStatement(expression, pos);
   }
+  NewSloppyBlockFunctionStatement(pos, variable, init) {
+    return new SloppyBlockFunctionStatement(pos, variable, init, this.empty_statement_);
+  }
   NewCountOperation(op, is_prefix, expr, pos) {
     return new CountOperation(op, is_prefix, expr, pos);
   }
@@ -219,6 +229,7 @@ class AstNode {
   constructor(position, type) {
     this.position_ = position;
     this.bit_field_ = NodeTypeField.encode(type);
+    this.empty_statement_ = new EmptyStatement();
   }
   IsVariableProxy() { return this.node_type() === _kVariableProxy; }
   IsEmptyStatement() { return this.node_type() === _kEmptyStatement; }
@@ -250,10 +261,27 @@ class Statement extends AstNode {
   }
 }
 
+class EmptyStatement extends Statement {
+  constructor() {
+    super(kNoSourcePosition, _kEmptyStatement);
+  }
+}
+
 class ExpressionStatement extends Statement {
   constructor(expression, pos) {
     super(pos, kExpressionStatement);
     this.expression_ = expression;
+  }
+}
+
+class SloppyBlockFunctionStatement extends Statement {
+  constructor(pos, variable, init, statement) {
+    super(pos, _kSloppyBlockFunctionStatement);
+    this.var_ = variable;
+    this.statement_ = statement;
+    this.next_ = null;
+    init = TokenEnumList.indexOf(init);
+    this.bit_field_ = SloppyBlockFunctionStatementTokenField.update(this.bit_field_, init);
   }
 }
 
@@ -320,6 +348,13 @@ class VariableDeclaration extends Declaration {
   constructor(pos, is_nested = false) {
     super(pos, kVariableDeclaration);
     this.bit_field_ = NodeTypeField.update(this.bit_field_, is_nested);
+  }
+}
+
+class FunctionDeclaration extends Declaration {
+  constructor(fun, pos) {
+    super(pos, _kFunctionDeclaration);
+    this.fun_ = fun;
   }
 }
 
@@ -664,11 +699,6 @@ class ReturnStatement extends JumpStatement {
 // variables. Variables themselves are never directly referred to from the AST,
 // they are maintained by scopes, and referred to from VariableProxies and Slots
 // after binding and variable allocation.
-const kNotAssigned = 0;
-const kMaybeAssigned = 1;
-
-const kNeedsInitialization = 0;
-const kCreatedInitialized = 1;
 export class ZoneObject {}
 export class Variable extends ZoneObject {
   constructor(scope, name, mode, kind, initialization_flag, maybe_assigned_flag = kNotAssigned) {
