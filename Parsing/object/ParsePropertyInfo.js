@@ -12,7 +12,7 @@ import {
 } from '../../enum';
 
 export default class ParsePropertyInfo {
-  constructor(parser, accumulation_scope = null) {
+  constructor(accumulation_scope = null) {
     this.accumulation_scope = accumulation_scope;
     this.name = null;
     this.position = kClassLiteral;

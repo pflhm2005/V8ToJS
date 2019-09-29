@@ -142,15 +142,11 @@ class Parser extends ParserBase {
   }
   ParseWrapped() {}
 
-  IsEval(identifier) {
-    return identifier.literal_bytes_ === this.ast_value_factory_.eval_string();
-  }
-  IsArguments(identifier) {
-    return identifier.literal_bytes_ === this.ast_value_factory_.arguments_string();
-  }
-  IsEvalOrArguments(identifier) {
-    return this.IsEval(identifier) || this.IsArguments(identifier);
-  }
+  IsName(identifier) { return identifier.literal_bytes_ === this.ast_value_factory_.name_string(); }
+  IsEval(identifier) { return identifier.literal_bytes_ === this.ast_value_factory_.eval_string(); }
+  IsConstructor(identifier) { return identifier.literal_bytes_ === this.ast_value_factory_.constructor_string(); }
+  IsArguments(identifier) { return identifier.literal_bytes_ === this.ast_value_factory_.arguments_string(); }
+  IsEvalOrArguments(identifier) { return this.IsEval(identifier) || this.IsArguments(identifier); }
   /**
    * 判断当前的expression是不是通过let const var声明的标识符
    * @param {Expression}} expression 
@@ -322,14 +318,14 @@ class Parser extends ParserBase {
   }
 
   /**
-   * 解析函数参数与函数体 分为三种情况
+   * 解析函数参数与函数体 分为三种结构
    * 1、普通函数 '(' FormalParameterList? ')' '{' FunctionBody '}'
    * 2、Getter函数 '(' ')' '{' FunctionBody '}'
    * 3、Setter函数 '(' PropertySetParameterList ')' '{' FunctionBody '}'
    * @param {AstRawString*} function_name 函数名
    * @param {Location} function_name_location 函数位置 这是一个对象
    * @param {FunctionNameValidity} function_name_validity 函数名是否是保留字
-   * @param {FunctionKind} kind 函数类型 通过一个映射表得到
+   * @param {FunctionKind} kind 函数类型 分为普通函数、对象简写方法、class的函数属性
    * @param {int} function_token_pos 当前位置点
    * @param {FunctionType} function_type 声明类型(kDeclaration)
    * @param {LanguageMode} language_mode 当前作用域是否是严格模式
@@ -685,7 +681,7 @@ class Parser extends ParserBase {
     // 这里调用了AsFunctionLiteral方法进行了强转
     let f = value;
     // 如果是class 这里同样会调用AsClassLiteral强转
-    if (value.IsClassLiteral()) f = v._constructor();
+    if (value.IsClassLiteral()) f = v.constructor_;
     /**
      * 到这里最终会变成一个函数字面量
      * 只有FunctionLiteral类才有set_raw_name方法

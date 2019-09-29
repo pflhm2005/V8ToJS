@@ -17,6 +17,8 @@ export default class AstValueFactory {
 
   dot_string() { return '.'; }
   eval_string() { return 'eval'; }
+  name_string() { return 'name'; }
+  constructor_string() { return 'constructor'; }
   arguments_string() { return 'arguments'; }
   dot_result_string() { return '.result'; }
   dot_generator_object_string() { return '.generator_object'; }
@@ -32,10 +34,10 @@ export default class AstValueFactory {
   set_space_string() { return 'set'; }
 
   empty_cons_string() { return this.empty_cons_string_; }
-  NewConsString() {
+  NewConsString(str1 = null, str2 = null) {
     let new_string = new AstConsString();
     this.AddConsString(new_string);
-    return new_string;
+    return new_string.AddString(str1).AddString(str2);
   }
   AddConsString(string) {
     /**
@@ -131,12 +133,26 @@ class AstConsString extends ZoneObject {
   constructor() {
     super();
     this.next_ = null;
-    this.segment_ = [];
+    // 链表
+    this.segment_ = {
+      string: null, 
+      next: null,
+    };
   }
   IsEmpty() {
-    return !this.segment_.length;
+    return this.segment_.string === null;
   }
+  // 没有指针 实现起来有点变扭。。。
   AddString(s) {
-    this.segment_.push(s);   
+    if(s === null) return this;
+    if(!this.IsEmpty()) {
+      let tmp = {
+        string: s, 
+        next: this.segment_,
+      };
+      this.segment_ = tmp;
+    }
+    this.segment_.string = s;
+    return this;
   }
 }

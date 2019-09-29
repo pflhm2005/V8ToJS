@@ -57,6 +57,7 @@ import {
   kNotAssigned,
   kNeedsInitialization,
   kCreatedInitialized,
+  _kThisExpression,
 } from "../enum";
 
 import {
@@ -96,6 +97,8 @@ const kAsyncReturn = 0;
 export class AstNodeFactory {
   constructor(ast_value_factory) {
     this.ast_value_factory_ = ast_value_factory;
+    this.empty_statement_ = new EmptyStatement();
+    this.this_expression_ = new ThisExpression();
   }
   NewVariableProxy(name, variable_kind, start_position = kNoSourcePosition) {
     return new VariableProxy(name, variable_kind, start_position);
@@ -217,11 +220,20 @@ export class AstNodeFactory {
   NewAsyncReturnStatement(expression, pos, end_position = kNoSourcePosition) {
     return new ReturnStatement(expression, kAsyncReturn, pos, end_position);
   }
+  NewClassLiteralProperty(key, value, kind, is_static, is_computed_name, is_private) {
+    return new ClassLiteralProperty(key, value, kind, is_static, is_computed_name, is_private);
+  }
   // 返回一个函数字面量 整个JS的顶层是一个函数
   NewScriptOrEvalFunctionLiteral(scope, body, expected_property_count, parameter_count) {
     return new FunctionLiteral(null, this.ast_value_factory_.empty_string(), this.ast_value_factory_, scope,
     body, expected_property_count, parameter_count, parameter_count, kAnonymousExpression,
     kNoDuplicateParameters, kShouldLazyCompile, 0, false, kFunctionLiteralIdTopLevel);
+  }
+
+  // 比较特殊 处理this
+  ThisExpression() {
+    this.this_expression_.clear_parenthesized();
+    return this.this_expression_;
   }
 }
 
@@ -229,7 +241,6 @@ class AstNode {
   constructor(position, type) {
     this.position_ = position;
     this.bit_field_ = NodeTypeField.encode(type);
-    this.empty_statement_ = new EmptyStatement();
   }
   IsVariableProxy() { return this.node_type() === _kVariableProxy; }
   IsEmptyStatement() { return this.node_type() === _kEmptyStatement; }
@@ -377,6 +388,12 @@ export class Expression extends AstNode {
   is_parenthesized() {
     return IsParenthesizedField.decode(this.bit_field_);
   }
+  mark_parenthesized() {
+    this.bit_field_ = IsParenthesizedField.update(this.bit_field_, true);
+  }
+  clear_parenthesized() {
+    this.bit_field_ = IsParenthesizedField.update(this.bit_field_, false);
+  }
   IsNumberLiteral() { return this.IsLiteral() && (this.type() === kHeapNumber || this.type() === kSmi); }
 
   type() { return TypeField.decode(this.bit_field_); }
@@ -403,6 +420,12 @@ export class Expression extends AstNode {
         this.UNREACHABLE();
     }
     this.UNREACHABLE();
+  }
+}
+
+class ThisExpression extends Expression {
+  constructor() {
+    super(kNoSourcePosition, _kThisExpression);
   }
 }
 
@@ -615,18 +638,19 @@ class ObjectLiteral extends AggregateLiteral {
   }
 }
 
-export const _METHOD = 0;
-export const _GETTER = 0;
-export const _SETTER = 0;
-export const _FIELD = 0;
+/**
+ * class内部属性的四种形态
+ * class { content... }
+ */
+export const _METHOD = 0; // fn() {}
+export const _GETTER = 0; // get fn() {}
+export const _SETTER = 0; // set fn() {}
+export const _FIELD = 0;  // fn = 1;
 
 class ClassLiteral extends Expression {
   constructor() {
     super();
     this.constructor_ = null;
-  }
-  _constructor() {
-    return this.constructor_;
   }
 }
 
@@ -742,10 +766,16 @@ class LiteralProperty extends ZoneObject {
   }
 }
 
-/**
- * 这个类有两个构造函数 实例化的过程差距过大 只能这样搞
- * 好在父类的构造函数只有一个
- */
+class ClassLiteralProperty extends LiteralProperty {
+  constructor(key, value, kind, is_static, is_computed_name, is_private) {
+    super(key, value, is_computed_name);
+    this.kind_ = kind;
+    this.is_static_ = is_static;
+    this.is_private_ = is_private;
+    this.private_or_computed_name_var_ = null;
+  }
+}
+
 class ObjectLiteralProperty extends LiteralProperty {
   constructor(ast_value_factoryOrKind, key, value, is_computed_name) {
     super(key, value, is_computed_name);

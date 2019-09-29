@@ -1,4 +1,4 @@
-import { Expression, AstNodeFactory, _FIELD } from '../ast/Ast';
+import { Expression, AstNodeFactory, _FIELD, _METHOD, _GETTER } from '../ast/Ast';
 import { DeclarationParsingResult, Declaration } from './DeclarationParsingResult';
 import AstValueFactory from '../ast/AstValueFactory';
 import Location from './scanner/Location';
@@ -73,6 +73,9 @@ import {
   BLOCK_SCOPE,
   kStrict,
   kClassLiteral,
+  kClassField,
+  kDerivedConstructor,
+  kBaseConstructor,
 } from '../enum';
 
 import {
@@ -168,10 +171,15 @@ export default class ParserBase {
     this.next_arrow_function_info_ = new NextArrowFunctionInfo();
     this.accept_IN_ = true;
     
+    /**
+     * 下面4个都是实验属性 分别是
+     * native code、动态import、new import xxx、class内部使用#开头的属性(被认定是private method)
+     */
     this.allow_natives_ = false;
     this.allow_harmony_dynamic_import_ = false;
     this.allow_harmony_import_meta_ = false;
     this.allow_harmony_private_methods_ = false;
+
     this.allow_eval_cache_ = true;
 
     this.pointer_buffer_ = []; // 32
@@ -652,7 +660,7 @@ export default class ParserBase {
         else if(IsAsyncFunction(kind)) this.ParseAsyncFunctionBody(inner_scope, inner_body);
         // 正常的函数走原始解析 只是会带入新的body 结束标记变成了右大括号
         else this.ParseStatementList(inner_body, closing_token);
-
+        // 处理构造函数 
         if(IsDerivedConstructor(kind)) {
           // ExpressionParsingScope expression_scope(impl());
           let expression_scope_ = new ExpressionParsingScope(this);
@@ -730,6 +738,26 @@ export default class ParserBase {
   ValidateFormalParameters(language_mode, parameters, allow_duplicates) {
     if(!allow_duplicates) parameters.ValidateDuplicate(this);
     // if(is_strict(language_mode)) parameters.ValidateStrictMode(this);
+  }
+  /**
+   * @returns {ThisExpression*}
+   */
+  ThisExpression() {
+    this.UseThis();
+    return this.ast_node_factory_.ThisExpression();
+  }
+  // TODO
+  UseThis() {
+    let closure_scope = this.scope_.GetClosureScope();
+    let receiver_scope = closure_scope.GetReceiverScope();
+    let variable = receiver_scope.receiver();
+    variable.set_is_used();
+    if(closure_scope === receiver_scope) this.expression_scope_.RecordThisUse();
+    else {
+      closure_scope.set_has_this_reference();
+      variable.ForceContextAllocation();
+    }
+    return variable;
   }
   
   /**
@@ -818,7 +846,7 @@ export default class ParserBase {
       // ExpressionParsingScope scope(impl());
       let scope = new ExpressionParsingScope(this);
       /**
-       * 由于class声明不存在变量提升 所以这里直接开始左值表达式解析
+       * 由于class声明不存在变量提升 所以这里直接开始左值解析
        * 下一个Token必定是标识符 然后从变量池中找对应的值 如果没有会直接报错
        */
       class_info.extends = this.ParseLeftHandSideExpression();
@@ -835,7 +863,7 @@ export default class ParserBase {
     let has_extends = !class_info.extends;
     /**
      * 解析class内部结构
-     * identifier () {}
+     * static? identifier () {}
      */
     while(this.peek() !== 'Token::RBRACE') {
       // 由此看来 class内部加分号确实没什么卵用 白糟蹋一轮循环
@@ -846,9 +874,10 @@ export default class ParserBase {
       // If we haven't seen the constructor yet, it potentially is the next property.
       // 如果没看到构造函数 那么下一个可能就是(这个注释也太有意思了)
       let is_constructor = !class_info.has_seen_constructor;
-      // 这个属性同样应用于对象字面量
-      let prop_info = new ParsePropertyInfo(this);
+      // 这个属性同样应用于对象字面量(倒不如说这里借用了对象字面量的方法?)
+      let prop_info = new ParsePropertyInfo();
       prop_info.position = kClassLiteral;
+      // 解析class内部的每一个属性定义
       let property = this.ParseClassPropertyDefinition(class_info, prop_info, has_extends);
       let property_kind = this.ClassPropertyKindFor(prop_info.kind);
       if(!class_info.has_static_computed_names && prop_info.is_static && prop_info.is_computed_name) {
@@ -895,8 +924,131 @@ export default class ParserBase {
     this.scope_ = outer_scope_;
     return result;
   }
-  ParseClassPropertyDefinition() {
+  /**
+   * 该方法解析类内部的方法 过程如下
+   * 1. 判断static关键词
+   * 注: 
+   * 2. 按照对象简写方法的模式解析class的原型方法
+   * @param {*} class_info 类描述
+   * @param {*} prop_info 属性描述 class、object通用
+   * @param {*} has_extends 继承标记
+   */
+  ParseClassPropertyDefinition(class_info, prop_info, has_extends) {
+    let name_token = this.peek();
+    // 这里的两个pos是为了分辨static属性与普通属性
+    let property_beg_pos = this.scanner_.peek_location().beg_pos;
+    // 这个是属性名Token的位置 默认与name_expression一致 如果碰到static会改变
+    let name_token_position = property_beg_pos;
+    let name_expression = null;
+    // 静态属性
+    if(name_token === 'Token::STATIC') {
+      this.Consume('Token::STATIC');
+      name_token_position = this.scanner_.peek_location().beg_pos;
+      // { static (a) {} } 一个毫无意义的括号
+      if(this.peek() === 'Token::LPAREN') {
+        prop_info.kind = kMethod;
+        prop_info.name = this.GetIdentifier();
+        name_expression = this.ast_node_factory_.NewStringLiteral(prop_info.name, this.position());
+      }
+      /**
+       * 这里的三个Token分别是=、;、} 但是static =、static ;、static }都不可能是正常语法
+       * 如果进到这里是什么奇怪情况？？？？这他妈不直接报错
+       * 我错了 一定要用最新的node版本测试代码 V8在某个版本新增了ClassField语法 上述情况分别对应于
+       * { static = 1; }、{ static; }、{ static }
+       * 都是比较无意义的情况 static此刻作为标识符 但是确实合法
+       */
+      else if(this.peek() === 'Token::ASSIGN' || this.peek() === 'Token::SEMICOLON' || this.peek() === 'Token::RBRACE') {
+        prop_info.name = this.GetIdentifier();
+        name_expression = this.ast_node_factory_.NewStringLiteral(prop_info.name, this.position());
+      }
+      // 这里是最常见的static声明 
+      else {
+        prop_info.is_static = true;
+        name_expression = this.ParseProperty(prop_info);
+      }
+    }
+    // 普通属性
+    else {
+      name_expression = this.ParseProperty(prop_info);
+    }
 
+    if(!class_info.has_name_static_property && prop_info.is_static && this.IsName(prop_info.name)) class_info.has_name_static_property = true;
+
+    switch(prop_info.kind) {
+      /**
+       * 处理类域
+       * 即a = 1;这种声明
+       */
+      case kAssign:
+      case kClassField:
+      case kShorthandOrClassField:
+      case kNotSet: {
+        prop_info.kind = kClassField;
+        if(!prop_info.is_computed_name) this.CheckClassFieldName(prop_info.name, prop_info.is_static);
+        let initializer = this.ParseMemberInitializer(class_info, property_beg_pos, prop_info.is_static);
+        this.ExpectSemicolon();
+
+        let result = this.ast_node_factory_.NewClassLiteralProperty(name_expression, initializer, _FIELD, 
+          prop_info.is_static, prop_info.is_computed_name, prop_info.is_private);
+        this.SetFunctionNameFromPropertyName(result, prop_info.name);
+        return result;
+      }
+      // 普通方法
+      case kMethod: {
+        if(!prop_info.is_computed_name) this.CheckClassMethodName(prop_info.name, kMethod, 
+          prop_info.function_flags, prop_info.is_static, prop_info.has_seen_constructor);
+        let kind = this.MethodKindFor(prop_info.function_flags);
+        // static constructor属于普通的静态属性声明
+        if(!prop_info.is_static && this.IsConstructor(prop_info.name)) {
+          class_info.has_seen_constructor = true;
+          kind = has_extends ? kDerivedConstructor : kBaseConstructor;
+        }
+        let value = this.ParseFunctionLiteral(prop_info.name, this.scanner_.location(), kSkipFunctionNameCheck, kind, 
+        name_token_position, kAccessorOrMethod, this.language_mode(), null);
+        let result = this.ast_node_factory_.NewClassLiteralProperty(name_expression, value, _METHOD, 
+          prop_info.is_static, prop_info.is_computed_name, prop_info.is_private);
+        this.SetFunctionNameFromPropertyName(result, prop_info.name);
+        return result;
+      }
+      case kAccessorGetter:
+      case kAccessorSetter: {
+        let is_get = prop_info.kind === kAccessorGetter;
+        if(!prop_info.is_computed_name) {
+          this.CheckClassMethodName(prop_info.name, prop_info.kind, kIsNormal, prop_info.is_static, class_info.has_seen_constructor);
+          name_expression = this.ast_node_factory_.NewStringLiteral(prop_info.name, name_expression.position_);
+        }
+        let kind = is_get ? kGetterFunction : kSetterFunction;
+        let value = this.ParseFunctionLiteral(prop_info.name, this.scanner_.location(), kSkipFunctionNameCheck, kind, 
+        name_token_position, kAccessorOrMethod, this.language_mode(), null);
+        let property_kind = is_get ? GETTER : SETTER;
+        let result = this.ast_node_factory_.NewClassLiteralProperty(name_expression, value, property_kind, prop_info.is_static, 
+          prop_info.is_computed_name, prop_info.is_private);
+        
+        let prefix = is_get ? this.ast_value_factory_.get_space_string() : this.ast_value_factory_.set_space_string();
+        this.SetFunctionNameFromPropertyName(result, prop_info.name, prefix);
+        return result;
+      }
+      // class内部不支持对象简写和...展开
+      case kValue:
+      case kShorthand:
+      case kSpread: 
+        throw new Error('UnexpectedToken');
+    }
+    this.UNREACHABLE();
+  }
+  ClassPropertyKindFor(kind) {
+    switch(kind) {
+      case kAccessorGetter:
+        return _GETTER;
+      case kAccessorSetter:
+        return _SETTER;
+      case kMethod:
+        return _METHOD;
+      case kClassField:
+        return _FIELD;
+      default:
+        this.UNREACHABLE();
+    }
   }
 
   /**
@@ -1516,7 +1668,7 @@ export default class ParserBase {
       // FuncNameInferrerState fni_state(&fni_);
       let top_ = this.fni_.names_stack_.length;
       this.fni_.scope_depth_++;
-      let prop_info = new ParsePropertyInfo(this, accumulation_scope);
+      let prop_info = new ParsePropertyInfo(accumulation_scope);
       prop_info.position = kObjectLiteral;
       /**
        * @returns {ObjectLiteralProperty}
@@ -1646,7 +1798,7 @@ export default class ParserBase {
     this.UNREACHABLE();
   }
   /**
-   * 这个方法负责解析对象键值对的key
+   * 这个方法负责解析对象键值对的key或class的属性
    * [Token::LBRACE, xxx, null]
    * @returns {Expression}
    */
@@ -1791,7 +1943,7 @@ export default class ParserBase {
           this.accept_IN_ = true;
           // let start_pos = this.peek_position();
           /**
-           * 对于...expr 直接当前简单右值解析expr
+           * 对于...expr 直接当成简单expr解析
            */
           let expression = this.ParsePossibleDestructuringSubPattern(prop_info.accumulation_scope);
           prop_info.kind = kSpread;
@@ -1860,10 +2012,10 @@ export default class ParserBase {
     return result;
   }
   /**
-   * 这里重载了 JS不管
+   * 这里重载了 差异只有一个子类强转 不管
    * @param {ObjectLiteralProperty} property 键值对对象
    * @param {AstRawString*} name 键值
-   * @param {AstRawString*} prefix 
+   * @param {AstRawString*} prefix 如果是getter/setter则会有prefix标记传进来
    */
   SetFunctionNameFromPropertyName(property, name, prefix = null) {
     // 设置prototype不做处理
@@ -1874,15 +2026,12 @@ export default class ParserBase {
     if (property.NeedsSetFunctionName()) {
       name = null;
       prefix = null;
-    } else {
-      // TODO
     }
     let value = property.value_;
     this.SetFunctionName(value, name, prefix);
   }
-  SetFunctionName(value, name, prefix) {
-    // TODO
-  }
+
+  // 一般用于处理成对Token的闭合推断
   Expect(token) {
     let next = this.Next();
     // V8_UNLIKELY
