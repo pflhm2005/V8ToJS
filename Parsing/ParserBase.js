@@ -746,7 +746,7 @@ export default class ParserBase {
     this.UseThis();
     return this.ast_node_factory_.ThisExpression();
   }
-  // TODO
+  // 标记了作用域有this
   UseThis() {
     let closure_scope = this.scope_.GetClosureScope();
     let receiver_scope = closure_scope.GetReceiverScope();
@@ -754,7 +754,7 @@ export default class ParserBase {
     variable.set_is_used();
     if(closure_scope === receiver_scope) this.expression_scope_.RecordThisUse();
     else {
-      closure_scope.set_has_this_reference();
+      closure_scope.has_this_reference_ = true;
       variable.ForceContextAllocation();
     }
     return variable;
@@ -1302,7 +1302,15 @@ export default class ParserBase {
   }
   // NewRawVariable(name, pos) { return this.ast_node_factory_.NewVariableProxy(name, NORMAL_VARIABLE, pos); }
 
-  ParseAsyncFunctionDeclaration() {}
+  /**
+   * 处理async函数
+   */
+  ParseAsyncFunctionDeclaration(names, default_export) {
+    let pos = this.position();
+    this.Consume('Token::FUNCTION');
+    let flags = kIsAsync;
+    return this.ParseHoistableDeclaration(pos, flags, names, default_export);
+  }
 
   /**
    * 处理赋值表达式

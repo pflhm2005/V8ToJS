@@ -88,6 +88,7 @@ import {
   SloppyBlockFunctionStatementTokenField,
   OnAbruptResumeField,
   ReturnStatementTypeField,
+  ForceContextAllocationField,
 } from '../util';
 
 // 返回语句 因为被工厂方法引用同时为了规避暂时性死区 放前面
@@ -741,6 +742,9 @@ export class Variable extends ZoneObject {
   set_maybe_assigned() { this.bit_field_ = NodeTypeField.update(this.bit_field_, kMaybeAssigned); }
   is_parameter() { return VariableKindField.decode(this.bit_field_) === PARAMETER_VARIABLE; }
 
+  ForceContextAllocation() {
+    this.bit_field_ = ForceContextAllocationField.update(this.bit_field_, true);
+  }
   MakeParameterNonSimple() {
     this.bit_field_ = VariableModeField.update(this.bit_field_, kLet);
     this.bit_field_ = InitializationFlagField.update(this.bit_field_, kNeedsInitialization);

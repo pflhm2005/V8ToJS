@@ -227,6 +227,12 @@ export default class Scope extends ZoneObject {
     while(!scope.is_declaration_scope_ || scope.is_block_scope()) scope = scope.outer_scope_;
     return scope;
   }
+  // 返回第一个有this的作用域
+  GetReceiverScope() {
+    let scope = this;
+    while(!scope.is_declaration_scope_ || (!scope.is_script_scope() && !scope.has_this_declaration_)) scope = scope.outer_scope_;
+    return scope;
+  }
   HasSimpleParameters() {
     let scope = this.GetClosureScope();
     return !scope.is_function_scope() || scope.has_simple_parameters_;

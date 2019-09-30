@@ -44,6 +44,8 @@ class ExpressionScope {
     this.parent_ = parser.expression_scope_;
     this.type_ = type;
     parser.expression_scope_ = this;
+    // 这个属性属于一个特殊子类 后续处理
+    this.uses_this_ = false;
   }
   CanBeParameterDeclaration() {
     return IsInRange(this.type_, kMaybeArrowParameterDeclaration, kParameterDeclaration);
@@ -57,6 +59,7 @@ class ExpressionScope {
   IsVarDeclaration() { return this.type_ === kVarDeclaration; }
   IsLexicalDeclaration() { return this.type_ === kLexicalDeclaration; }
   IsCertainlyDeclaration() { return IsInRange(this.type_, kParameterDeclaration, kLexicalDeclaration); }
+  IsArrowHeadParsingScope() { return IsInRange(this.type_, kMaybeArrowParameterDeclaration, kMaybeAsyncArrowParameterDeclaration); }
   /**
    * 下面三个方法 源码将类向下强转类型
    * JS做不到 不搞了
@@ -64,6 +67,15 @@ class ExpressionScope {
   AsExpressionParsingScope() { return new ExpressionParsingScope(this.parser_, this.type_); }
   AsParameterDeclarationParsingScope(parser) { return new ParameterDeclarationParsingScope(parser); }
   AsVariableDeclarationParsingScope(parser, mode, names) { return new VariableDeclarationParsingScope(parser, mode, names); }
+
+  // 这里有方法重写 比较麻烦
+  RecordThisUse() {
+    let scope = this;
+    do {
+      if(scope.IsArrowHeadParsingScope()) scope.uses_this_ = true;
+      scope = scope.parent_;
+    } while(scope !== null);
+  }
 
   /**
    * 生成一个VariableProxy与一个Variable并进行绑定
