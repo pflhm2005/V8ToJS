@@ -76,6 +76,8 @@ import {
   kClassField,
   kDerivedConstructor,
   kBaseConstructor,
+  kSloppy,
+  kNo,
 } from '../enum';
 
 import {
@@ -120,8 +122,11 @@ import {
   kUnexpectedTokenUnaryExponentiation,
   kUnexpectedStrictReserved,
   kInvalidPrivateFieldResolution,
+  kIllegalLanguageModeDirective,
+  kMalformedArrowFunParamList,
 } from '../MessageTemplate';
 import ParserFormalParameters from './function/ParserFormalParameters';
+import NextArrowFunctionInfo from './function/NextArrowFunctionInfo';
 
 const kStatementListItem = 0;
 const kStatement = 1;
@@ -199,15 +204,10 @@ export default class ParserBase {
     if(is_strict(this.language_mode()) && this.IsEvalOrArguments(expression)) return false;
     return true;
   }
-  is_async_generator() {
-    return IsAsyncGeneratorFunction(this.function_state_.kind());
-  }
-  is_async_function() {
-    return IsAsyncFunction(this.function_state_.kind());
-  }
-  UNREACHABLE() {
-    this.scanner_.UNREACHABLE();
-  }
+  is_async_generator() { return IsAsyncGeneratorFunction(this.function_state_.kind()); }
+  is_async_function() { return IsAsyncFunction(this.function_state_.kind()); }
+  is_generator() { return IsGeneratorFunction(this.function_state_.kind()); }
+  UNREACHABLE() { this.scanner_.UNREACHABLE(); }
   /**
    * 这里的DeclarationScope存在构造函数重载 并且初始化方式不一致
    * 差距过大 手动分成两个不同的子类
@@ -275,20 +275,50 @@ export default class ParserBase {
   }
 
   /**
-   * 省去了use strict、use asm的解析
-   * 直接进入了正常语法树parse
+   * 包含use strict、use asm的解析
+   * 没有的话进入语法树parse
    */
   ParseStatementList(body, end_token) {
     while(this.peek() === 'Token::STRING') {
-      // TODO;
+      let use_strict = false;
+      let use_asm = false;
+
+      if(this.scanner_.NextLiteralExactlyEquals('use strict')) {
+        use_strict = true;
+      } else if(this.scanner_.NextLiteralExactlyEquals('use asm')) {
+        use_asm = true;
+      }
+      // 解析对应的'use'标记
+      let stat = this.ParseStatementListItem();
+      if(stat === null) return;
+
+      body.push(stat);
+      // 一般不会进这里吧 毕竟前面严格校验了
+      if(!this.IsStringLiteral(stat)) break;
+
+      if(use_strict) {
+        this.RaiseLanguageMode(kStrict);
+        // 非简单参数的函数不允许手动注明为严格模式
+        // function fn(a=1) {'use strict'}
+        if(!this.scope_.HasSimpleParameters()) throw new Error(kIllegalLanguageModeDirective);
+      } else if (use_asm) {
+        this.SetAsmModule();
+      } else {
+        this.RaiseLanguageMode(kSloppy);
+      }
     }
 
+    // TargetScopeT target_scope(this);
+    let previous_ = this.target_stack_;
+    this.target_stack_ = null;
     while(this.peek() !== end_token) {
       let stat = this.ParseStatementListItem();
       if (stat === null) return;
       if (stat.IsEmptyStatement()) continue;
       body.push(stat);
     }
+    // 析构
+    this.target_stack_ = previous_;
   }
   /**
    * 一级解析
@@ -1363,11 +1393,29 @@ export default class ParserBase {
       return expression;
     }
 
-    // 箭头函数 V8_UNLIKELY
+    /**
+     * V8_UNLIKELY
+     * @example 很奇怪 这个写法被标记为V8_UNLIKELY
+     * let fn = a => a;
+     */
     if (op === 'Token::ARROW') {
-      // let loc = new Location(lhs_beg_pos, this.end_position());
-      // if (...) return this.FailureExpression();
-      // TODO
+      let loc = new Location(lhs_beg_pos, this.end_position());
+      if (!this.IsIdentifier(expression) && !expression.is_parenthesized()) {
+        throw new Error(kMalformedArrowFunParamList);
+      }
+
+      let scope = this.next_arrow_function_info_.scope;
+      scope.set_start_position(lhs_beg_pos);
+
+      let parameters = new FormalParameters();
+      // 这里的错误就不管了
+      parameters.is_simple = scope.has_simple_parameters_;
+      this.next_arrow_function_info_.Reset();
+
+      this.DeclareArrowFunctionFormalParameters(parameters, expression, loc);
+      expression = this.ParseArrowFunctionLiteral(parameters);
+
+      return expression;
     }
     
     /**
@@ -1518,7 +1566,7 @@ export default class ParserBase {
   /**
    * 所有的逻辑最终会汇集在这里 处理最基本的单位
    * 分为下列情况
-   * (1)this
+   * (1)this.xxx
    * (2)null
    * (3)true
    * (4)false
@@ -1541,22 +1589,37 @@ export default class ParserBase {
     if (IsAnyIdentifier(token)) {
       this.Consume();
       let kind = kArrowFunction;
-      // V8_UNLIKELY
+      // V8_UNLIKELY 不要这么写
       if (token === 'Token::ASYNC' 
       && !this.scanner_.HasLineTerminatorBeforeNext()
       && !this.scanner_.literal_contains_escapes()) {
-        // async普通函数
+        /**
+         * @example
+         * async function fn() {}
+         */
         if (this.peek() === 'Token::FUNCTION') return this.ParseAsyncFunctionLiteral();
-        // async箭头函数
+        /**
+         * @example
+         * async fn => fn
+         */
         if (this.peek_any_identifier() && this.PeekAhead() === 'Token::ARROW') {
           token = this.Next();
           beg_pos = this.position();
           kind = kAsyncArrowFunction;
         }
       }
-      // V8_UNLIKELY
+      /**
+       * V8_UNLIKELY
+       * @example 这样声明不可取
+       * let a = b => b;
+       */
       if (this.peek() === 'Token::ARROW') {
-        // TODO
+        let parsing_scope = new ArrowHeadParsingScope(this, kind);
+        let name = this.ParseAndClassifyIdentifier(token);
+        this.ClassifyParameter(name, beg_pos, this.end_position());
+        let result = this.ExpressionFromIdentifier(name, beg_pos, kNo);
+        this.next_arrow_function_info_ = parsing_scope.ValidateAndCreateScope();
+        return result;
       }
 
       let name = this.ParseAndClassifyIdentifier(token);
@@ -1574,6 +1637,42 @@ export default class ParserBase {
       // [Token::ASSIGN, Token::LBRACE, null]
       case 'Token::LBRACE':
         return this.ParseObjectLiteral();
+      case 'Token::LPAREN': {
+        this.Consume('Token::LPAREN');
+        /**
+         * @example
+         * let a = () => 1;
+         */
+        if(this.Check('Token::RPAREN')) {
+          // 如果是空括号后面必须跟箭头Token表示一个无参箭头函数
+          if(this.peek() !== 'Token::ARROW') throw new Error('UnexpectedToken ")"');
+          this.next_arrow_function_info_.scope = this.NewFunctionScope(kArrowFunction);
+          return this.ast_node_factory_.NewEmptyParentheses(beg_pos);
+        }
+        // Scope::Snapshot scope_snapshot(scope());
+        let maybe_arrow = new ArrowHeadParsingScope(this, kArrowFunction);
+        if(this.peek() === 'Token::FUNCTION' || 
+        (this.peek() === 'Token::ASYNC' && this.PeekAhead() === 'Token::FUNCTION')) {
+          this.function_state_.set_next_function_is_likely_called();
+        }
+        // AcceptINScope scope(this, true);
+        let previous_accept_IN_ = this.accept_IN_;
+        this.accept_IN_ = true;
+        let expr = this.ParseExpressionCoverGrammar();
+        expr.mark_parenthesized();
+        this.Expect('Token::RPAREN');
+
+        if(this.peek() === 'Token::ARROW') {
+          this.next_arrow_function_info_.scope = maybe_arrow.ValidateAndCreateScope();
+          // scope_snapshot.Reparent(next_arrow_function_info_.scope);
+        }
+
+        // 析构
+        this.accept_IN_ = previous_accept_IN_;
+        return expr;
+      }
+      default:
+        break;
     }
     throw new Error('UnexpectedToken');
   }
@@ -1641,6 +1740,10 @@ export default class ParserBase {
     } while(IsMember(this.peek()));
     return expression;
   }
+  ParseExpressionCoverGrammar() {
+    
+  }
+
   ParseTemplateLiteral() {}
 
   /**
@@ -2047,11 +2150,6 @@ export default class ParserBase {
       throw new Error('UnexpectedToken');
     }
   }
-
-  // TODO
-  is_generator() { return true; }
-  is_async_function() { return true; }
-
   /**
    * 处理自动分号插入
    */
@@ -2075,5 +2173,3 @@ export default class ParserBase {
 
   FailureExpression() { throw new Error('UnexpectedExpression'); }
 }
-
-class NextArrowFunctionInfo {}

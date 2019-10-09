@@ -22,6 +22,7 @@ import {
   NORMAL_VARIABLE,
   kCreatedInitialized,
   SLOPPY_BLOCK_FUNCTION_VARIABLE,
+  kUseAsm,
 } from '../enum';
 
 import { 
@@ -155,6 +156,12 @@ class Parser extends ParserBase {
     let operand = expression;
     return operand !== null && !operand.is_new_target();
   }
+  IsStringLiteral(statement, arg = null) {
+    if(statement === null) return false;
+    let literal = statement.expression_;
+    if(literal === null || !literal.IsString()) return false;
+    return arg === null || literal.AsRawString() === arg;
+  }
   NullExpression() { return null; }
   NullIdentifier() { return null; }
 
@@ -172,6 +179,11 @@ class Parser extends ParserBase {
     else this.UNREACHABLE();
     ++this.use_counts_[feature];
     this.scope_.SetLanguageMode(mode);
+  }
+  SetAsmModule() {
+    ++this.use_counts_[kUseAsm];
+    this.scope_.is_asm_module_ = true;
+    this.info_.set_contains_asm_module(true);
   }
   /**
    * 这个方法的实现太复杂 简化处理
@@ -247,6 +259,10 @@ class Parser extends ParserBase {
     this.scope_, false /* was_added */, pos, this.end_position());
     proxy.BindTo(variable);
     return proxy;
+  }
+  DeclareAndBindVariable(proxy, kind, mode, init, scope, was_added, begin, end) {
+    let variable = this.DeclareVariable(proxy.raw_name(), kind, mode, init, scope, was_added, begin, end);
+    proxy.BindTo(variable);
   }
   DeclareVariable(name, kind, mode, init, scope, was_added_params, begin, end = kNoSourcePosition) {
     let declaration;

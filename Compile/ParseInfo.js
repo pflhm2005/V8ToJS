@@ -119,6 +119,7 @@ export default class ParseInfo {
   is_asm_wasm_broken() { return this.GetFlag(kIsAsmWasmBroken); }
 
   set_language_mode(v) { this.SetFlag(kStrictMode, v); }
+  set_contains_asm_module(v) { this.SetFlag(kContainsAsmModule, v); }
   is_strict_mode() { return this.GetFlag(kStrictMode); }
 
   set_allow_eval_cache(v) { this.SetFlag(kAllowEvalCache, v); }

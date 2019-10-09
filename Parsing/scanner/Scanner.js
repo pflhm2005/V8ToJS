@@ -760,4 +760,10 @@ export default class Scanner {
   literal_one_byte_string() {
     return this.current().literal_chars.one_byte_literal();
   }
+  next_literal_one_byte_string() {
+    return this.next().literal_chars.one_byte_literal();
+  }
+  NextLiteralExactlyEquals(string) {
+    return this.next_literal_one_byte_string() === string;
+  }
 }

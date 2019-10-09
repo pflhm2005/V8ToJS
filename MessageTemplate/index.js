@@ -37,4 +37,6 @@ export const kUnexpectedTokenUnaryExponentiation = 'Unary operator used immediat
 export const kParamDupe = 'Duplicate parameter name not allowed in this context';
 
 export const kUnexpectedStrictReserved = 'Unexpected strict mode reserved word';
-export const kInvalidPrivateFieldResolution = 'Private field '%' must be declared in an enclosing class';
+export const kInvalidPrivateFieldResolution = 'Private field xxx must be declared in an enclosing class';
+export const kIllegalLanguageModeDirective = 'Illegal "use strict" directive in function with non-simple parameter list';
+export const kMalformedArrowFunParamList = 'Malformed arrow function parameter list';

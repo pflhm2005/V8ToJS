@@ -483,12 +483,8 @@ class Literal extends Expression{
     return this.val_[this.type];
   }
   AsLiteral() {}
-  IsString() {
-    return this.type = kString;
-  }
-  AsRawString() {
-    return this.val();
-  }
+  IsString() { return this.type = kString; }
+  AsRawString() { return this.val(); }
   Hash() {
     return this.IsString() ? 
     this.AsRawString().Hash() : 

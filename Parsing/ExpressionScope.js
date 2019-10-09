@@ -3,7 +3,12 @@ import { Variable, VariableProxy } from '../ast/Ast';
 import {
   NORMAL_VARIABLE,
 
-  kNoSourcePosition
+  kNoSourcePosition,
+  kArrowFunction,
+  kAsyncArrowFunction,
+  PARAMETER_VARIABLE,
+  kVar,
+  kLet
 } from '../enum';
 
 import {
@@ -60,6 +65,7 @@ class ExpressionScope {
   IsLexicalDeclaration() { return this.type_ === kLexicalDeclaration; }
   IsCertainlyDeclaration() { return IsInRange(this.type_, kParameterDeclaration, kLexicalDeclaration); }
   IsArrowHeadParsingScope() { return IsInRange(this.type_, kMaybeArrowParameterDeclaration, kMaybeAsyncArrowParameterDeclaration); }
+  IsAsyncArrowHeadParsingScope() { return this.type_ === kMaybeAsyncArrowParameterDeclaration; }
   /**
    * 下面三个方法 源码将类向下强转类型
    * JS做不到 不搞了
@@ -232,5 +238,32 @@ export class AccumulationScope {
   copy(entry) {
     this.messages_[entry] = this.scope_.messages_[entry];
     this.locations_[entry] = this.scope_.locations_[entry];
+  }
+}
+
+export class ArrowHeadParsingScope extends ExpressionParsingScope {
+  constructor(parser, kind) {
+    super(parser, kind === kArrowFunction ? kMaybeArrowParameterDeclaration : kMaybeAsyncArrowParameterDeclaration);
+    this.has_simple_parameter_list_ = true;
+    this.uses_this_ = false;
+  }
+  ValidateAndCreateScope() {
+    let result = this.parser_.NewFunctionScope(this.kind());
+    if(!this.has_simple_parameter_list_) result.SetHasNonSimpleParameters();
+    let kind = PARAMETER_VARIABLE;
+    let mode = this.has_simple_parameter_list_ ? kVar : kLet;
+    for(let proxy of this.variable_list_) {
+      this.parser_.DeclareAndBindVariable(proxy, kind, mode, Variable.DefaultInitializationFlag(mode), 
+      result, false, proxy.position());
+    }
+    let initializer_position = this.parser_.end_position();
+    for(let declaration of result.declarations()) {
+      declaration.var_.initializer_position_ = initializer_position;
+    }
+    if(this.uses_this_) result.UsesThis();
+    return result;
+  }
+  kind() {
+    return this.IsAsyncArrowHeadParsingScope() ? kAsyncArrowFunction : kArrowFunction;
   }
 }

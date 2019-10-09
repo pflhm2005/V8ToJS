@@ -50,3 +50,6 @@ export const kMaxArguments = (1 << kArgumentsBits) - 2;
 
 export const kExpression = 0;
 export const kBlock = 0;
+
+export const kYes = 0;
+export const kNo = 1;
