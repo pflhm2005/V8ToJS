@@ -82,6 +82,9 @@ import {
   kParseArrowFunctionLiteral,
   kPreParseBackgroundArrowFunctionLiteral,
   kPreParseArrowFunctionLiteral,
+  kAnonymousExpression,
+  kNoDuplicateParameters,
+  kBlock,
 } from '../enum';
 
 import {
@@ -804,8 +807,113 @@ export default class ParserBase {
       [kPreParseBackgroundArrowFunctionLiteral, kPreParseArrowFunctionLiteral]
     ];
     // RuntimeCallTimerScope runtime_timer(runtime_call_stats_, counters[Impl::IsPreParser()][parsing_on_main_thread_]);
+    
+    if(!this.HasCheckedSyntax() && this.scanner_.HasLineTerminatorBeforeNext()) {
+      throw new Error('UnexpectedToken "=>"');
+    }
 
-    // TODO
+    let expected_property_count = 0;
+    let suspend_count = 0;
+    let function_literal_id = this.GetNextFunctionLiteralId();
+
+    let kind = formal_parameters.scope.function_kind_;
+    let eager_compile_hint = this.default_eager_compile_hint_;
+    let can_preparse = this.parse_lazily() && eager_compile_hint === kShouldLazyCompile;
+    
+    let is_lazy_top_level_function = can_preparse && this.AllowsLazyParsingWithoutUnresolvedVariables();
+    // 标记有函数体没有大括号
+    let has_braces = true;
+    let produced_preparse_data = null;
+    // StatementListT body(pointer_buffer()); TODO
+    let body = [];
+    {
+      let outer_scope_ = formal_parameters.scope;
+      let function_state = new FunctionState(this.function_state_, this.scope_, outer_scope_);
+      this.Consume('Token::ARROW');
+      // 有大括号的函数体
+      if(this.peek() === 'Token::LBRACE') {
+        if(is_lazy_top_level_function) {
+          // 复杂参数会强行解析参数
+          if(!formal_parameters.is_simple) {
+            this.BuildParameterInitializationBlock(formal_parameters);
+          }
+
+          // 箭头函数不用恢复函数状态(即没有generator)
+          let did_preparse_successfully = this.SkipFunction(
+            null, kind, kAnonymousExpression, formal_parameters.scope,
+            -1, -1, produced_preparse_data);
+
+          if(did_preparse_successfully) {
+            this.ValidateFormalParameters(this.language_mode(), formal_parameters, false);
+          } else {
+            // BlockState block_state(&scope_, scope()->outer_scope());
+            let outer_scope_ = this.scope_;
+            this.scope_ = this.scope_.outer_scope_;
+
+            let expression = this.ParseConditionalExpression();
+
+            let function_scope = this.next_arrow_function_info_.scope;
+            new FunctionState(this.function_state_, this.scope_, function_scope);
+
+            let loc = new Location(function_scope.start_position_, this.end_position());
+            let parameters = new FormalParameters(function_scope);
+            parameters.is_simple = function_scope.has_simple_parameters_;
+            this.DeclareArrowFunctionFormalParameters(parameters, expression, loc);
+            this.next_arrow_function_info_.Reset();
+
+            this.Consume('Token::ARROW');
+            this.Consume('Token::LBRACE');
+
+            // AcceptINScope scope(this, true);
+            let previous_accept_IN_ = this.accept_IN_;
+            this.accept_IN_ = true;
+            this.ParseFunctionBody(body, null, kNoSourcePosition, parameters,
+              kind, kAnonymousExpression, kBlock);
+
+            // 析构
+            this.scope_ = outer_scope_;
+            this.accept_IN_ = previous_accept_IN_;
+          }
+        } else {
+          this.Consume('Token::LBRACE');
+          // AcceptINScope scope(this, true);
+          let previous_accept_IN_ = this.accept_IN_;
+          this.accept_IN_ = true;
+          this.ParseFunctionBody(body, null, kNoSourcePosition, 
+            formal_parameters, kind, kAnonymousExpression, kBlock);
+          expected_property_count = function_state.expected_property_count_;
+          // 析构
+          this.accept_IN_ = previous_accept_IN_;
+        }
+      }
+      // 没有大括号 直接代表返回值
+      else {
+        has_braces = false;
+        this.ParseFunctionBody(body, null, kNoSourcePosition, 
+          formal_parameters, kind, kAnonymousExpression, kExpression);
+        expected_property_count = function_state.expected_property_count_;
+      }
+
+      formal_parameters.scope.end_position_ = this.end_position();
+
+      // if(is_strict(this.language_mode())) {} 略
+      suspend_count = function_state.suspend_count_;
+      // 析构
+      this.scope_ = outer_scope_;
+    }
+
+    let function_literal = this.ast_node_factory_.NewFunctionLiteral(
+      this.EmptyIdentifierString(), formal_parameters.scope, body, expected_property_count, formal_parameters.num_parameters(), formal_parameters.function_length, kNoDuplicateParameters,
+      kAnonymousExpression, eager_compile_hint, formal_parameters.scope.start_position_,
+      has_braces, this.function_literal_id_, produced_preparse_data);
+    
+    function_literal.suspend_count_ = suspend_count;
+    function_literal.function_token_position_ = formal_parameters.scope.start_position_;
+
+    this.RecordFunctionLiteralSourceRange(function_literal);
+    this.AddFunctionForNameInference(function_literal);
+
+    return function_literal;
   }
   
   /**
@@ -1412,8 +1520,9 @@ export default class ParserBase {
     }
 
     /**
-     * V8_UNLIKELY
-     * @example 很不合理 这个写法被标记为V8_UNLIKELY 意味着任何箭头函数表达式都是负优化
+     * 这个写法被标记为V8_UNLIKELY 意味着任何箭头函数表达式都是负优化
+     * 个人理解是 箭头函数作为ES6的新特性 在总的JS代码中仍然占比较小的比重 所以不需要做优化
+     * @example
      * let fn = a => a;
      */
     if (op === 'Token::ARROW') {

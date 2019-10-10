@@ -364,6 +364,11 @@ export default class Scope extends ZoneObject {
   SetHasNonSimpleParameters() {
     this.has_simple_parameters_ = false;
   }
+  SetMustUsePreparseData() {
+    if(this.must_use_preparsed_scope_data_) return;
+    this.must_use_preparsed_scope_data_ = true;
+    if(this.outer_scope_) this.outer_scope_.SetMustUsePreparseData();
+  }
   /**
    * ...
    * @param {AstRawString*} name 参数名

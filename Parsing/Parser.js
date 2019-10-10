@@ -24,6 +24,7 @@ import {
   SLOPPY_BLOCK_FUNCTION_VARIABLE,
   kUseAsm,
   kMaxArguments,
+  kSloppy,
 } from '../enum';
 
 import { 
@@ -145,6 +146,8 @@ class Parser extends ParserBase {
   }
   ParseWrapped() {}
 
+  parse_lazily() { return this.mode_ === PARSE_LAZILY; }
+
   IsName(identifier) { return identifier.literal_bytes_ === this.ast_value_factory_.name_string(); }
   IsEval(identifier) { return identifier.literal_bytes_ === this.ast_value_factory_.eval_string(); }
   IsConstructor(identifier) { return identifier.literal_bytes_ === this.ast_value_factory_.constructor_string(); }
@@ -164,16 +167,12 @@ class Parser extends ParserBase {
     if(literal === null || !literal.IsString()) return false;
     return arg === null || literal.AsRawString() === arg;
   }
+  EmptyIdentifierString() { return this.ast_value_factory_.empty_string(); }
   NullExpression() { return null; }
   NullIdentifier() { return null; }
 
-  GetIdentifier() {
-    return this.GetSymbol();
-  }
-  GetSymbol() {
-    const result = this.scanner_.CurrentSymbol(this.ast_value_factory_);
-    return result;
-  }
+  GetIdentifier() { return this.GetSymbol(); }
+  GetSymbol() { return this.scanner_.CurrentSymbol(this.ast_value_factory_); }
   SetLanguageMode(scope, mode) {
     let feature;
     if(is_sloppy(mode)) feature = kSloppyMode;
@@ -363,7 +362,8 @@ class Parser extends ParserBase {
    * @param {ZonePtrList} arguments_for_wrapped_function null
    * @returns {FunctionLiteral} 返回一个函数字面量
    */
-  ParseFunctionLiteral(function_name, function_name_location, function_name_validity, kind, function_token_pos, function_type, language_mode, arguments_for_wrapped_function) {
+  ParseFunctionLiteral(function_name, function_name_location, function_name_validity, 
+    kind, function_token_pos, function_type, language_mode, arguments_for_wrapped_function) {
     /**
      * 难道是(function(){}) ???
      */
@@ -377,7 +377,8 @@ class Parser extends ParserBase {
      * !function(){}、+function(){}、IIFE等等
      * 默认懒编译
      */
-    let eager_compile_hint = this.function_state_.next_function_is_likely_called_ || is_wrapped ? kShouldEagerCompile : this.default_eager_compile_hint_;
+    let eager_compile_hint = this.function_state_.next_function_is_likely_called_ || 
+    is_wrapped ? kShouldEagerCompile : this.default_eager_compile_hint_;
     
     /**
      * 有些函数在解析(抽象语法树生成阶段)阶段就需要被提前编译 比如说IIFE
@@ -410,7 +411,8 @@ class Parser extends ParserBase {
     // 默认是false
     let should_post_parallel_task = false;
 
-    let should_preparse = (this.parse_lazily() && is_lazy_top_level_function) || should_preparse_inner || should_post_parallel_task;
+    let should_preparse = (this.parse_lazily() && is_lazy_top_level_function) || 
+    should_preparse_inner || should_post_parallel_task;
     /**
      * 这个地方的源码如下
      * ScopedPtrList<Statement> body(pointer_buffer());
@@ -460,7 +462,12 @@ class Parser extends ParserBase {
         -1, -1, false, 0, -1, arguments_for_wrapped_function);
     }
 
-    let { num_parameters = -1, function_length = -1, has_duplicate_parameters = false, expected_property_count = 0, suspend_count = -1 } = result;
+    let { 
+      num_parameters = -1,
+      function_length = -1, 
+      has_duplicate_parameters = false, 
+      expected_property_count = 0, 
+      suspend_count = -1 } = result;
     /**
      * 解析完函数后再检测函数名合法性
      * 因为函数名的严格模式取决于外部作用域
@@ -500,8 +507,34 @@ class Parser extends ParserBase {
     ++this.use_counts_[feature];
     scope.SetLanguageMode(mode);
   }
-  SkipFunction() {
-    
+  // TODO
+  SkipFunction(function_name, kind, function_syntax_kind, function_scope,
+    num_parameters, function_length, produced_preparse_data) {
+    let outer_scope_ = this.scope_;
+    new FunctionState(this.function_state_, this.scope_, function_scope);
+
+    // 有两个跳过函数的方式
+    if(this.consumed_preparse_data_) {
+      let result = this.consumed_preparse_data_.GetDataForSkippableFunction(null, function_scope.start_position_,
+        0, num_parameters, function_length, 0, false, kSloppy);
+      produced_preparse_data = result.produced_preparse_data;
+      let { end_position, language_mode, num_inner_functions, uses_super_property } = result;
+
+      function_scope.outer_scope_.SetMustUsePreparseData();
+      function_scope.is_skipped_function_ = true;
+      function_scope.end_position_ = end_position;
+      this.scanner_.SeekForward(end_position - 1);
+      this.Expect('Token::RBRACE');
+      this.SetLanguageMode(function_scope, language_mode);
+      if(uses_super_property) function_scope.RecordSuperPropertyUsage();
+      this.SkipFunctionLiterals(num_inner_functions);
+      function_scope.ResetAfterPreparsing(this.ast_value_factory_, false);
+      return true;
+    }
+
+    // 析构
+    this.scope_ = outer_scope_;
+    return true;
   }
   // RecordFunctionLiteralSourceRange(node) {
   //   if(this.source_range_map_ === null) return;
