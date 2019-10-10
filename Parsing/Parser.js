@@ -23,6 +23,7 @@ import {
   kCreatedInitialized,
   SLOPPY_BLOCK_FUNCTION_VARIABLE,
   kUseAsm,
+  kMaxArguments,
 } from '../enum';
 
 import { 
@@ -31,7 +32,8 @@ import {
   kArgStringTerminatesParametersEarly, 
   kUnexpectedEndOfArgString, 
   kTooManyParameters, 
-  kParamAfterRest 
+  kParamAfterRest, 
+  kMalformedArrowFunParamList
 } from '../MessageTemplate';
 import { is_strict, is_sloppy } from '../util';
 import ParserFormalParameters from './function/ParserFormalParameters';
@@ -237,6 +239,19 @@ class Parser extends ParserBase {
       }
     }
     return this.ast_node_factory_.NewUnaryOperation(op, expression, pos);
+  }
+  // 突然发现这里的参数是从0开始计数 有点蒙
+  ExpressionListToExpression(args) {
+    let expr = args[0];
+    if(args.length === 1) return expr;
+    if(args.length === 2) {
+      return this.ast_node_factory_.NewBinaryOperation('Token::COMMA', expr, args[1], args[1].position());
+    }
+    let result = this.ast_node_factory_.NewNaryOperation('Token::COMMA', expr, args.length - 1);
+    for(let i = 0; i < args.length; i++) {
+      result.AddSubsequent(args[i], args[i].position());
+    }
+    return result;
   }
   /**
    * 返回一个变量代理 继承于Expression类
@@ -773,6 +788,51 @@ class Parser extends ParserBase {
       return statement;
     }
     return this.ast_node_factory_.EmptyStatement();
+  }
+  DeclareArrowFunctionFormalParameters(parameters, expr, params_loc) {
+    if(expr.IsEmptyParentheses()) return;
+    this.AddArrowFunctionFormalParameters(parameters, expr, params_loc.end_pos);
+
+    if(parameters.arity > kMaxArguments) throw new Error(kMalformedArrowFunParamList);
+
+    this.DeclareFormalParameters(parameters);
+  }
+  // JS的弱类型有时候是真的好用
+  AddArrowFunctionFormalParameters(parameters, expr, end_pos) {
+    // 递归处理多形参
+    if(expr.IsNaryOperation()) {
+      let next = nary.first_;
+      for(let i = 0; i < expr.subsequent_length(); ++i) {
+        this.AddArrowFunctionFormalParameters(parameters, next, expr.subsequent_op_position(i));
+        next = nary.subsequent(i);
+      }
+      this.AddArrowFunctionFormalParameters(parameters, next, end_pos);
+      return;
+    }
+    // 两个形参只递归解决左边的 右边的在方法尾部处理
+    if(expr.IsBinaryOperation()) {
+      let left = expr.left_;
+      let right = expr.right_;
+      let comma_pos = expr.position_;
+      this.AddArrowFunctionFormalParameters(parameters, left, comma_pos);
+      expr = right;
+    }
+
+    // 处理扩展运算符
+    let is_rest = expr.IsSpread();
+    if(is_rest) {
+      expr = expr.expression_;
+      parameters.has_rest = true;
+    }
+
+    // 默认参数在这里处理
+    let initializer = null;
+    if(expr.IsAssignment()) {
+      initializer = expr.value_;
+      expr = expr.target_;
+    }
+
+    this.AddFormalParameter(parameters, expr, initializer, end_pos, is_rest);
   }
 
   /**

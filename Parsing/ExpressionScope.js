@@ -49,8 +49,6 @@ class ExpressionScope {
     this.parent_ = parser.expression_scope_;
     this.type_ = type;
     parser.expression_scope_ = this;
-    // 这个属性属于一个特殊子类 后续处理
-    this.uses_this_ = false;
   }
   CanBeParameterDeclaration() {
     return IsInRange(this.type_, kMaybeArrowParameterDeclaration, kParameterDeclaration);
@@ -74,6 +72,8 @@ class ExpressionScope {
   AsParameterDeclarationParsingScope(parser) { return new ParameterDeclarationParsingScope(parser); }
   AsVariableDeclarationParsingScope(parser, mode, names) { return new VariableDeclarationParsingScope(parser, mode, names); }
 
+  // JS不存在向子类强转 调用实例如果是父类一律不作为
+  RecordNonSimpleParameter() {}
   // 这里有方法重写 比较麻烦
   RecordThisUse() {
     let scope = this;
@@ -246,6 +246,9 @@ export class ArrowHeadParsingScope extends ExpressionParsingScope {
     super(parser, kind === kArrowFunction ? kMaybeArrowParameterDeclaration : kMaybeAsyncArrowParameterDeclaration);
     this.has_simple_parameter_list_ = true;
     this.uses_this_ = false;
+  }
+  RecordNonSimpleParameter() {
+    this.has_simple_parameter_list_ = false;
   }
   ValidateAndCreateScope() {
     let result = this.parser_.NewFunctionScope(this.kind());

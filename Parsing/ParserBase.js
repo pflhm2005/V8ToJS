@@ -78,6 +78,10 @@ import {
   kBaseConstructor,
   kSloppy,
   kNo,
+  kParseBackgroundArrowFunctionLiteral,
+  kParseArrowFunctionLiteral,
+  kPreParseBackgroundArrowFunctionLiteral,
+  kPreParseArrowFunctionLiteral,
 } from '../enum';
 
 import {
@@ -622,7 +626,7 @@ export default class ParserBase {
     this.fni_.names_stack_.length = top_;
     --this.fni_.scope_depth_;
   }
-  ClassifyParameter(parameters, begin, end) {
+  ClassifyParameter(parameters) {
     if (this.IsEvalOrArguments(parameters)) throw new Error(kStrictEvalArguments);
   }
   /**
@@ -788,6 +792,20 @@ export default class ParserBase {
       variable.ForceContextAllocation();
     }
     return variable;
+  }
+
+  /**
+   * 解析箭头函数函数体
+   * @param {ParserFormalParameters} formal_parameters 形参
+   */
+  ParseArrowFunctionLiteral(formal_parameters) {
+    const counters = [
+      [kParseBackgroundArrowFunctionLiteral, kParseArrowFunctionLiteral],
+      [kPreParseBackgroundArrowFunctionLiteral, kPreParseArrowFunctionLiteral]
+    ];
+    // RuntimeCallTimerScope runtime_timer(runtime_call_stats_, counters[Impl::IsPreParser()][parsing_on_main_thread_]);
+
+    // TODO
   }
   
   /**
@@ -1395,7 +1413,7 @@ export default class ParserBase {
 
     /**
      * V8_UNLIKELY
-     * @example 很奇怪 这个写法被标记为V8_UNLIKELY
+     * @example 很不合理 这个写法被标记为V8_UNLIKELY 意味着任何箭头函数表达式都是负优化
      * let fn = a => a;
      */
     if (op === 'Token::ARROW') {
@@ -1658,10 +1676,11 @@ export default class ParserBase {
         // AcceptINScope scope(this, true);
         let previous_accept_IN_ = this.accept_IN_;
         this.accept_IN_ = true;
+        // 解析括号中的长表达式
         let expr = this.ParseExpressionCoverGrammar();
         expr.mark_parenthesized();
         this.Expect('Token::RPAREN');
-
+        // 下一个Token是箭头时 设置箭头函数的作用域
         if(this.peek() === 'Token::ARROW') {
           this.next_arrow_function_info_.scope = maybe_arrow.ValidateAndCreateScope();
           // scope_snapshot.Reparent(next_arrow_function_info_.scope);
@@ -1741,7 +1760,46 @@ export default class ParserBase {
     return expression;
   }
   ParseExpressionCoverGrammar() {
-    
+    let list = [];
+    let expression;
+    let accumulation_scope = new AccumulationScope(this.expression_scope_);
+    while(true) {
+      /**
+       * V8_UNLIKELY
+       * @example
+       * let fn = (...args) => args;
+       */
+      if(this.peek() === 'Token::ELLIPSIS') {
+        return this.ParseArrowParametersWithRest(list, accumulation_scope);
+      }
+      let expr_pos = this.peek_position();
+      // 这里解析一个完整的表达式
+      expression = this.ParseAssignmentExpressionCoverGrammar();
+
+      this.ClassifyArrowParameter(accumulation_scope, expr_pos, expression);
+      list.push(expression);
+      // 非逗号break
+      if(!this.Check('Token::COMMA')) break;
+      // 同时检测右括号与箭头符号 隐式地允许了最后一个形参的逗号
+      if(this.peek() === 'Token::RPAREN' && this.PeekAhead() === 'Token::ARROW') break;
+
+      if(this.peek() === 'Token::FUNCTION' && this.function_state_.previous_function_was_likely_called_) {
+        this.function_state_.set_next_function_is_likely_called();
+      }
+    }
+    if(list.length === 1) return expression;
+    return this.ExpressionListToExpression(list);
+  }
+  ClassifyArrowParameter(accumulation_scope, position, parameter) {
+    accumulation_scope.Accumulate();
+    if(parameter.is_parenthesized() || 
+    !(this.IsIdentifier(parameter) || parameter.IsPattern() || parameter.IsAssignment())) {
+      throw new Error(kInvalidDestructuringTarget);
+    } else if(this.IsIdentifier(parameter)) {
+      this.ClassifyParameter(parameter, position, this.end_position());
+    } else {
+      this.expression_scope_.RecordNonSimpleParameter();
+    }
   }
 
   ParseTemplateLiteral() {}

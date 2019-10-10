@@ -58,6 +58,11 @@ import {
   kNeedsInitialization,
   kCreatedInitialized,
   _kThisExpression,
+  _kEmptyParentheses,
+  _kAssignment,
+  _kBinaryOperation,
+  _kNaryOperation,
+  _kSpread,
 } from "../enum";
 
 import {
@@ -190,12 +195,23 @@ export class AstNodeFactory {
   NewSloppyBlockFunctionStatement(pos, variable, init) {
     return new SloppyBlockFunctionStatement(pos, variable, init, this.empty_statement_);
   }
+  // ++a
   NewCountOperation(op, is_prefix, expr, pos) {
     return new CountOperation(op, is_prefix, expr, pos);
   }
+  // +a
   NewUnaryOperation(op, expression, pos) {
     return new UnaryOperation(op, expression, pos);
   }
+  // a+b
+  NewBinaryOperation(op, left, right, pos) {
+    return new BinaryOperation(op, left, right, pos);
+  }
+  // a+b+c...
+  NewNaryOperation(op, first, initial_subsequent_size) {
+    return new NaryOperation(op, first, initial_subsequent_size);
+  }
+
   NewCompareOperation(op, left, right, pos) {
     return new CompareOperation(op, left, right, pos);
   }
@@ -231,6 +247,10 @@ export class AstNodeFactory {
     kNoDuplicateParameters, kShouldLazyCompile, 0, false, kFunctionLiteralIdTopLevel);
   }
 
+  NewEmptyParentheses(pos) {
+    return new EmptyParentheses(pos);
+  }
+
   // 比较特殊 处理this
   ThisExpression() {
     this.this_expression_.clear_parenthesized();
@@ -252,6 +272,11 @@ class AstNode {
   IsCallNew() { return this.node_type() === _kCallNew; }
   IsProperty() { return this.node_type() === _kProperty; }
   IsPattern() { return this.node_type() === _kPattern; }
+  IsAssignment() { return this.node_type() === _kAssignment; }
+  IsEmptyParentheses() { return this.node_type() === _kEmptyParentheses; }
+  IsBinaryOperation() { return this.node_type() === _kBinaryOperation; }
+  IsNaryOperation() { return this.node_type() === _kNaryOperation; }
+  IsSpread() { return this.node_type() === _kSpread; }
 
   node_type() { return NodeTypeField.decode(this.bit_field_); }
   AsMaterializedLiteral() {
@@ -556,13 +581,54 @@ class UnaryOperation extends Expression {
   }
 }
 
+class BinaryOperation extends Expression {
+  constructor(op, left, right, pos) {
+    super(pos, _kBinaryOperation);
+    this.left_ = left;
+    this.right_ = right;
+    op = TokenEnumList.indexOf(op);
+    this.bit_field_ |= OperatorField.encode(op);
+  }
+}
+
+class NaryOperation extends Expression {
+  constructor(op, first, initial_subsequent_size) {
+    super(first.position(), _kNaryOperation);
+    this.first_ = first;
+    // 此处会根据initial_subsequent_size调用vector::reserve JS这边不需要这个逻辑
+    this.subsequent_ = [];
+    op = TokenEnumList.indexOf(op);
+    this.bit_field_ |= OperatorField.encode(op);
+  }
+  AddSubsequent(expr, pos) {
+    // vector::emplace_back
+    this.subsequent_.push(new NaryOperationEntry(expr, pos));
+  }
+  subsequent_length() {
+    return this.subsequent_.length;
+  }
+  subsequent_op_position() {
+    return this.subsequent_[index].op_position;
+  }
+  subsequent(index) {
+    return this.subsequent_[index].expression;
+  }
+}
+
+class NaryOperationEntry {
+  constructor(e, pos) {
+    this.expression = e;
+    this.op_position = pos;
+  }
+}
+
 class CompareOperation extends Expression {
   constructor(op, left, right, pos) {
     super(pos, _kCompareOperation);
     this.left_ = left;
     this.right_ = right;
     op = TokenEnumList.indexOf(op);
-    this.bit_field_ = OperatorField.encode(op);
+    this.bit_field_ |= OperatorField.encode(op);
   }
 }
 
@@ -688,6 +754,14 @@ class Suspend extends Expression {
     super(pos, node_type);
     this.expression_ = expression;
     this.bit_field_ |= OnAbruptResumeField.encode(on_abrupt_resume);
+  }
+}
+
+// 这个类专门处理没有参数的箭头函数
+class EmptyParentheses extends Expression {
+  constructor(pos) {
+    super(pos, _kEmptyParentheses);
+    this.mark_parenthesized();
   }
 }
 
