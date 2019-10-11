@@ -147,6 +147,10 @@ class Parser extends ParserBase {
   ParseWrapped() {}
 
   parse_lazily() { return this.mode_ === PARSE_LAZILY; }
+  // 判断是否可以懒编译这个函数字面量
+  AllowsLazyParsingWithoutUnresolvedVariables() {
+    return this.scope_.AllowsLazyParsingWithoutUnresolvedVariables(this.original_scope_);
+  }
 
   IsName(identifier) { return identifier.literal_bytes_ === this.ast_value_factory_.name_string(); }
   IsEval(identifier) { return identifier.literal_bytes_ === this.ast_value_factory_.eval_string(); }
@@ -624,23 +628,7 @@ class Parser extends ParserBase {
     // AcceptINScope scope(this, true);
     let previous_accept_IN_ = this.accept_IN_;
     this.accept_IN_ = true;
-    /**
-     * 解析函数体 主要步骤如下
-     * 1. 判断函数类型是否是function*这种需要保留状态的
-     * 注: 内部生成了一个名为.generator_object特殊对象来处理函数状态变更
-     * 2. 检查函数参数是否是复杂类型(带有解构、...rest) 
-     * 注: 复杂类型存在变量的赋值操作 需要一个额外的作用域
-     * 3. 函数表达式先走赋值逻辑 函数声明直接重新走最外层的语句解析逻辑
-     * 4. 解析完函数体后 如果参数是简单类型 直接走变量提升逻辑
-     * 注: 变量提升的实质是在外部作用域的变量表中声明一个新变量 变量名是函数名 值是函数
-     * 有两种情况在变量提升中处理
-     * (1) 形参与函数名相同 function fn(fn) { console.log(fn) }; 此时形参覆盖函数名
-     * (2) 存在var类型的声明(实际上也包括let、const 不过会报错) var fn = 1;function fn(){} 此时函数声明无效
-     * 5. 复杂形参
-     * 6. 检查是否有重复形参 严格模式会报错
-     * 7. 非箭头函数会在变量表声明一个名为arguments变量 如果该变量已经被声明 则跳过这步
-     * 8. 合并内外作用域的变量表
-     */
+    
     this.ParseFunctionBody(body, function_name, pos, formals, kind, function_type, kBlock);
     has_duplicate_parameters = formals.has_duplicate();
     expected_property_count = function_state.expected_property_count_;

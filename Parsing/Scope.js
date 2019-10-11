@@ -172,6 +172,15 @@ export default class Scope extends ZoneObject {
   AllowsLazyCompilation() {
     return !this.force_eager_compilation_ && !IsClassMembersInitializerFunction(this.function_kind_);
   }
+  AllowsLazyParsingWithoutUnresolvedVariables(outer) {
+    for(let s = this; s !== outer; s = s.outer_scope_) {
+      if(e.is_eval_scope()) return is_sloppy(s.language_mode());
+      if(s.is_catch_scope()) continue;
+      if(s.is_with_scope()) continue;
+      return false;
+    }
+    return true;
+  }
   /**
    * 遍历作用域链 判定是否有未处理的变量
    * @param {Scope} outer 指定的外层作用域

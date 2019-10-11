@@ -246,6 +246,13 @@ export class AstNodeFactory {
     body, expected_property_count, parameter_count, parameter_count, kAnonymousExpression,
     kNoDuplicateParameters, kShouldLazyCompile, 0, false, kFunctionLiteralIdTopLevel);
   }
+  NewFunctionLiteral(name, scope, body, expected_property_count, parameter_count,
+    function_length, has_duplicate_parameters, function_type, eager_compile_hint,
+    position, has_braces, function_literal_id, produced_preparse_data = null) {
+    return new FunctionLiteral(null, name, this.ast_value_factory_, scope, body, expected_property_count,
+      parameter_count, function_length, function_type, has_duplicate_parameters,
+      eager_compile_hint, position, has_braces, function_literal_id, produced_preparse_data);
+  }
 
   NewEmptyParentheses(pos) {
     return new EmptyParentheses(pos);

@@ -632,15 +632,29 @@ export default class ParserBase {
   ClassifyParameter(parameters) {
     if (this.IsEvalOrArguments(parameters)) throw new Error(kStrictEvalArguments);
   }
-  /**
-   * 以下内容为解析函数体
+  /**=
+   * 解析函数体 主要步骤如下
+   * 1. 判断函数类型是否是function*这种需要保留状态的
+   * 注: 内部生成了一个名为.generator_object特殊对象来处理函数状态
+   * 2. 检查函数参数是否是复杂类型(带有解构、...rest) 
+   * 注: 复杂类型存在变量的赋值操作 需要一个额外的作用域
+   * 3. 函数表达式先走赋值逻辑 函数声明直接重新走最外层的语句解析逻辑
+   * 4. 解析完函数体后 如果参数是简单类型 直接走变量提升逻辑
+   * 注: 变量提升的实质是在外部作用域的变量表中声明一个新变量 变量名是函数名 值是函数
+   * 有两种情况在变量提升中处理
+   * (1) 形参与函数名相同 function fn(fn) { console.log(fn) }; 此时形参覆盖函数名
+   * (2) 存在var类型的声明(实际上也包括let、const 不过会报错) var fn = 1;function fn(){} 此时函数声明无效
+   * 5. 复杂形参
+   * 6. 检查是否有重复形参 严格模式会报错
+   * 7. 非箭头函数会在变量表声明一个名为arguments变量 如果该变量已经被声明 则跳过这步
+   * 8. 合并内外作用域的变量表
    * @param {StatementListT*} body pointer_buffer_
    * @param {Identifier} function_name 函数名
    * @param {int} pos 位置
    * @param {FormalParameters} parameters 函数参数
    * @param {FunctionKind} kind 函数类型 箭头函数、async等等
-   * @param {FunctionSyntaxKind} function_type 函数的语法类型
-   * @param {FunctionBodyType} body_type 表达式还是声明 即a => a or function a() {}
+   * @param {FunctionSyntaxKind} function_type 函数声明类型 匿名函数、具名函数、函数表达式
+   * @param {FunctionBodyType} body_type 函数体类型 单表达式还是作用域 适用于箭头函数
    */
   ParseFunctionBody(body, function_name, pos, parameters, kind, function_type, body_type) {
     // FunctionBodyParsingScope body_parsing_scope(impl());
@@ -799,7 +813,7 @@ export default class ParserBase {
 
   /**
    * 解析箭头函数函数体
-   * @param {ParserFormalParameters} formal_parameters 形参
+   * @param {ParserFormalParameters} formal_parameters 形参描述类
    */
   ParseArrowFunctionLiteral(formal_parameters) {
     const counters = [
@@ -827,13 +841,14 @@ export default class ParserBase {
     // StatementListT body(pointer_buffer()); TODO
     let body = [];
     {
+      // FunctionState function_state(&function_state_, &scope_, formal_parameters.scope);
       let outer_scope_ = formal_parameters.scope;
       let function_state = new FunctionState(this.function_state_, this.scope_, outer_scope_);
       this.Consume('Token::ARROW');
       // 有大括号的函数体
       if(this.peek() === 'Token::LBRACE') {
         if(is_lazy_top_level_function) {
-          // 复杂参数会强行解析参数
+          // 复杂参数需要一个作用域
           if(!formal_parameters.is_simple) {
             this.BuildParameterInitializationBlock(formal_parameters);
           }
@@ -905,7 +920,7 @@ export default class ParserBase {
     let function_literal = this.ast_node_factory_.NewFunctionLiteral(
       this.EmptyIdentifierString(), formal_parameters.scope, body, expected_property_count, formal_parameters.num_parameters(), formal_parameters.function_length, kNoDuplicateParameters,
       kAnonymousExpression, eager_compile_hint, formal_parameters.scope.start_position_,
-      has_braces, this.function_literal_id_, produced_preparse_data);
+      has_braces, function_literal_id, produced_preparse_data);
     
     function_literal.suspend_count_ = suspend_count;
     function_literal.function_token_position_ = formal_parameters.scope.start_position_;
