@@ -63,6 +63,7 @@ import {
   _kBinaryOperation,
   _kNaryOperation,
   _kSpread,
+  kMaybeAssigned,
 } from "../enum";
 
 import {
@@ -324,10 +325,13 @@ class SloppyBlockFunctionStatement extends Statement {
     this.var_ = variable;
     this.statement_ = statement;
     this.next_ = null;
-    init = TokenEnumList.indexOf(init);
     this.bit_field_ = SloppyBlockFunctionStatementTokenField.update(this.bit_field_, init);
   }
+  name() { return this.var_.raw_name(); }
+  scope() { return this.var_.scope_; }
+  init() { return SloppyBlockFunctionStatementTokenField.decode(this.bit_field_); }
 }
+
 
 /**
  * break语句除了for、while等关键词的break操作
@@ -351,19 +355,6 @@ class Block extends BreakableStatement {
   // InitializeStatements(statements, zone = null) {
   //   this.statement_ = statements;
   // }
-}
-
-class SloppyBlockFunctionStatement extends Statement {
-  constructor(pos, variable, init, statement) {
-    super(pos, _kSloppyBlockFunctionStatement);
-    this.var_ = variable;
-    this.statement_ = statement;
-    this.next_ = null;
-    this.bit_field_ = SloppyBlockFunctionStatementTokenField.update(this.bit_field_, init);
-  }
-  name() { return this.var_.raw_name(); }
-  scope() { return this.var_.scope_; }
-  init() { return SloppyBlockFunctionStatementTokenField.decode(this.bit_field_); }
 }
 
 // goto语法的block

@@ -158,7 +158,7 @@ export default class ParserBase {
     runtime_call_stats, logger, script_id, parsing_module, parsing_on_main_thread) {
     this.scope_ = new Scope(null);
     this.original_scope_ = null;
-    this.function_state_ = new FunctionState(null, this.scope_, null);
+    this.function_state_ = null;
     this.extension_ = extension;
 
     this.fni_ = new FuncNameInferrer(ast_value_factory);
@@ -529,9 +529,12 @@ export default class ParserBase {
     return kFunctionKinds[is_method][i][j];
   }
   /**
-   * @description 以下内容为解析函数参数
-   * @param {ParserFormalParameters*} parameters 
-   * @return {void}
+   * 解析函数参数 主要就是以逗号作为分割 处理每一个形参
+   * 形参类型主要有以下几种
+   * 1. 单标识符 => (a, b) => 标记为简单参数
+   * 2. 解构对象、数组 => ({a}, [b]) => 标记为复杂参数
+   * 3. rest参数 => (...args) => 标记为复杂参数
+   * 4. 有默认值的形参 => (a = 1) => 标记为复杂参数
    */
   ParseFormalParameterList(parameters) {
     /**
@@ -816,15 +819,16 @@ export default class ParserBase {
    * @param {ParserFormalParameters} formal_parameters 形参描述类
    */
   ParseArrowFunctionLiteral(formal_parameters) {
-    const counters = [
-      [kParseBackgroundArrowFunctionLiteral, kParseArrowFunctionLiteral],
-      [kPreParseBackgroundArrowFunctionLiteral, kPreParseArrowFunctionLiteral]
-    ];
+    // const counters = [
+    //   [kParseBackgroundArrowFunctionLiteral, kParseArrowFunctionLiteral],
+    //   [kPreParseBackgroundArrowFunctionLiteral, kPreParseArrowFunctionLiteral]
+    // ];
     // RuntimeCallTimerScope runtime_timer(runtime_call_stats_, counters[Impl::IsPreParser()][parsing_on_main_thread_]);
-    
-    if(!this.HasCheckedSyntax() && this.scanner_.HasLineTerminatorBeforeNext()) {
-      throw new Error('UnexpectedToken "=>"');
-    }
+
+    // 这里有问题
+    // if(!this.HasCheckedSyntax() && this.scanner_.HasLineTerminatorBeforeNext()) {
+    //   throw new Error('UnexpectedToken "=>"');
+    // }
 
     let expected_property_count = 0;
     let suspend_count = 0;
@@ -837,7 +841,7 @@ export default class ParserBase {
     let is_lazy_top_level_function = can_preparse && this.AllowsLazyParsingWithoutUnresolvedVariables();
     // 标记有函数体没有大括号
     let has_braces = true;
-    let produced_preparse_data = null;
+    let produced_preparse_data = Object.create(null);
     // StatementListT body(pointer_buffer()); TODO
     let body = [];
     {
@@ -854,11 +858,13 @@ export default class ParserBase {
           }
 
           // 箭头函数不用恢复函数状态(即没有generator)
-          let did_preparse_successfully = this.SkipFunction(
+          let result = this.SkipFunction(
             null, kind, kAnonymousExpression, formal_parameters.scope,
             -1, -1, produced_preparse_data);
 
-          if(did_preparse_successfully) {
+          // produced_preparse_data = result.produced_preparse_data;
+
+          if(result.did_preparse_successfully) {
             this.ValidateFormalParameters(this.language_mode(), formal_parameters, false);
           } else {
             // BlockState block_state(&scope_, scope()->outer_scope());
@@ -871,7 +877,7 @@ export default class ParserBase {
             new FunctionState(this.function_state_, this.scope_, function_scope);
 
             let loc = new Location(function_scope.start_position_, this.end_position());
-            let parameters = new FormalParameters(function_scope);
+            let parameters = new ParserFormalParameters(function_scope);
             parameters.is_simple = function_scope.has_simple_parameters_;
             this.DeclareArrowFunctionFormalParameters(parameters, expression, loc);
             this.next_arrow_function_info_.Reset();
@@ -925,7 +931,7 @@ export default class ParserBase {
     function_literal.suspend_count_ = suspend_count;
     function_literal.function_token_position_ = formal_parameters.scope.start_position_;
 
-    this.RecordFunctionLiteralSourceRange(function_literal);
+    // this.RecordFunctionLiteralSourceRange(function_literal);
     this.AddFunctionForNameInference(function_literal);
 
     return function_literal;
@@ -1298,21 +1304,6 @@ export default class ParserBase {
       let pattern = null;
       // 检查下一个token是否是标识符 V8_LIKELY
       if (IsAnyIdentifier(this.peek())) {
-        /**
-         * 解析变量名并返回一个字符串对象 总体流程如下
-         * 1、区分单字节字符串与双字符串 目前只考虑ascii码小于128的单字节
-         * 2、确定类型后 由AstValueFactory类统一处理字符串实例的生成
-         * 3、根据字符串的特征计算Hash值 有如下四种情况
-         * (1)单字符 计算后 将值缓存到一个名为one_character_strings_的容器 下次直接返回
-         * (2)纯数字字符串且小于2^32(int类型可保存范围内) 会转换为数字后进行Hash计算
-         * (3)出现ascii码大于127会特殊处理 暂时不管
-         * (4)其余情况会以一个种子数字为基准 遍历每一个字符的ascii码进行位运算 算出一个Hash值
-         * 解析结果返回一个AstRawString实例与一个Hash值 并缓存到一个全局的Map中
-         * 
-         * 游标变动
-         * [LET, IDENTIFIER, null] => [IDENTIFIER, ASSIGN, null]
-         * @returns {AstRawString}
-         */
         name = this.ParseAndClassifyIdentifier(this.Next());
         /**
          * 1.下一个token是否是赋值运算符
@@ -1323,26 +1314,6 @@ export default class ParserBase {
         // 判断for in、for of语法 这个暂时不解析
         (var_context === kForStatement && this.PeekInOrOf()) ||
         parsing_result.descriptor.mode === kLet) {
-          /**
-           * 过程总结如下：
-           * 1、生成一个VariableProxy实例(继承于Expressio) 
-           * 该类负责管理VariableDeclaration 并记录了变量是否被赋值、是否被使用等等
-           * 2、生成一个VariableDeclaration实例(继承于AstNode)
-           * 该类管理Variable 并描述了变量的位置、声明类型(变量、参数、表达式)等
-           * 3、在合适的Scope中生成一个Variable实例 插入到Map中
-           * 该类描述了变量的作用域、名称等等
-           * 
-           * 整个过程有如下细节
-           * (1)有两种情况下 该声明会被标记为unresolved丢进一个容器
-           * 第一是赋值右值为复杂表达式 复杂表达式需要重新走Parse的完整解析
-           * 例如let a = '123'.split('').map(v => v ** 2);
-           * 第二种情况是var类型的声明 由于需要向上搜索合适的作用域 声明需要后置处理
-           * (2)let、const与var生成的AstNode类型不一致 var属于NestedVariable({var a=1;{var a=2;}})
-           * (3)有一个作用域链 类似于原型链 从里向外通过outer_scope属性(类似于__proto__)连着
-           * (4)var类型的声明会向上一直搜索is_declaration_scope_为1的作用域
-           * (5)由于检测到了赋值运算符 所以这里的变量属性都会被标记可能被赋值
-           * @returns {Expression}
-           */
           pattern = this.ExpressionFromIdentifier(name, decl_pos);
         }
         /**
@@ -1378,27 +1349,6 @@ export default class ParserBase {
           // AcceptINScope scope(this, var_context != kForStatement);
           let previous_accept_IN_ = this.accept_IN_;
           this.accept_IN_ = var_context !== kForStatement;
-          /**
-           * 这里处理赋值
-           * 大部分情况下这是一个简单右值 源码使用了一个Precedence来进行渐进解析与优先级判定
-           * Precedence代表该表达式的复杂程度 值越低表示越复杂(或运算符优先级越低)
-           * Precedence = 2 基本处理方法
-           * Precedence = 3 处理三元表达式 每一块都是独立的表达式 之间没有直接的逻辑
-           * Precedence >= 4 处理二元表达式、一元表达式、纯字面量
-           * 其中 由于运算存在多元的情况 所以均有一个对应的xxxContinuation方法来递归解析
-           * 例如a ? b : c ? d : e、a.b.c、a[b][c]等等
-           * 
-           * Precedence >= 4的分类如下
-           * (1)单值字面量 null、true、false、1、1.1、1n、'1'
-           * (2)一元运算 +1、++a 形如+function(){}、!function(){}会被特殊处理
-           * (3)二元运算 'a' + 'b'、1 + 2
-           * (4){}对象、[]数组、``模板字符串复杂字面量
-           * 等等情况 实在太过繁琐
-           * 除了上述情况 被赋值的可能也是一个左值 比如遇到如下的特殊Token
-           * import、async、new、this、function、任意标识符等等
-           * 左值的解析相当于一个完整的新表达式
-           * @returns {Assignment}
-           */
           value = this.ParseAssignmentExpression();
           // 析构
           this.accept_IN_ = previous_accept_IN_;
@@ -1460,8 +1410,19 @@ export default class ParserBase {
     expression_scope_ = null;
   }
   /**
-   * 跳到scanner实现
-   * @returns {AstRawString*}
+   * 解析变量名并返回一个字符串对象 总体流程如下
+   * 1、区分单字节字符串与双字符串 目前只考虑ascii码小于128的单字节
+   * 2、确定类型后 由AstValueFactory类统一处理字符串实例的生成
+   * 3、根据字符串的特征计算Hash值 有如下四种情况
+   * (1)单字符 计算后 将值缓存到一个名为one_character_strings_的容器 下次直接返回
+   * (2)纯数字字符串且小于2^32(int类型可保存范围内) 会转换为数字后进行Hash计算
+   * (3)出现ascii码大于127会特殊处理 暂时不管
+   * (4)其余情况会以一个种子数字为基准 遍历每一个字符的ascii码进行位运算 算出一个Hash值
+   * 解析结果返回一个AstRawString实例与一个Hash值 并缓存到一个全局的Map中
+   * 
+   * 游标变动
+   * [LET, IDENTIFIER, null] => [IDENTIFIER, ASSIGN, null]
+   * @returns {AstRawString}
    */
   ParseAndClassifyIdentifier(next) {
     if (IsAnyIdentifier(next, 'IDENTIFIER', 'ASYNC')) {
@@ -1484,8 +1445,25 @@ export default class ParserBase {
   }
 
   /**
-   * 处理赋值表达式
-   * @returns {Assignment} 返回赋值右值
+   * 这里处理赋值
+   * 大部分情况下这是一个简单右值 源码使用了一个Precedence来进行渐进解析与优先级判定
+   * Precedence代表该表达式的复杂程度 值越低表示越复杂(或运算符优先级越低)
+   * Precedence = 2 基本处理方法
+   * Precedence = 3 处理三元表达式 每一块都是独立的表达式 之间没有直接的逻辑
+   * Precedence >= 4 处理二元表达式、一元表达式、纯字面量
+   * 其中 由于运算存在多元的情况 所以均有一个对应的xxxContinuation方法来递归解析
+   * 例如a ? b : c ? d : e、a.b.c、a[b][c]等等
+   * 
+   * Precedence >= 4的分类如下
+   * (1)单值字面量 null、true、false、1、1.1、1n、'1'
+   * (2)一元运算 +1、++a 形如+function(){}、!function(){}会被特殊处理
+   * (3)二元运算 'a' + 'b'、1 + 2
+   * (4){}对象、[]数组、``模板字符串复杂字面量
+   * 等等情况 实在太过繁琐
+   * 除了上述情况 被赋值的可能也是一个左值 比如遇到如下的特殊Token
+   * import、async、new、this、function、任意标识符等等
+   * 左值的解析相当于一个完整的新表达式
+   * @returns {Assignment}
    */
   ParseAssignmentExpression() {
     /**
@@ -1549,7 +1527,7 @@ export default class ParserBase {
       let scope = this.next_arrow_function_info_.scope;
       scope.set_start_position(lhs_beg_pos);
 
-      let parameters = new FormalParameters();
+      let parameters = new ParserFormalParameters(scope);
       // 这里的错误就不管了
       parameters.is_simple = scope.has_simple_parameters_;
       this.next_arrow_function_info_.Reset();

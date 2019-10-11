@@ -10,7 +10,7 @@ class BlockState {
 };
 
 export default class FunctionState extends BlockState {
-  constructor(function_state_stack = null, scope_stack = null, scope = null) {
+  constructor(function_state_stack, scope_stack = null, scope = null) {
     super(scope_stack, scope);
     this.expected_property_count_ = 0;
     this.suspend_count_ = 0;
@@ -21,6 +21,13 @@ export default class FunctionState extends BlockState {
     this.next_function_is_likely_called_ = false;
     this.previous_function_was_likely_called_ = false;
     this.contains_function_or_eval_ = false;
+
+    function_state_stack = this;
+    if(this.outer_function_state_) {
+      this.outer_function_state_.previous_function_was_likely_called_ = 
+      this.outer_function_state_.next_function_is_likely_called_;
+      this.outer_function_state_.next_function_is_likely_called_ = false;
+    }
   }
   RecordFunctionOrEvalCall() { 
     this.contains_function_or_eval_ = true;

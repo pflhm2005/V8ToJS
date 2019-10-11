@@ -767,3 +767,12 @@ export default class Scanner {
     return this.next_literal_one_byte_string() === string;
   }
 }
+
+const kNoBookmark = Number.MAX_SAFE_INTEGER - 1;
+
+export class BookmarkScope {
+  constructor(scanner) {
+    this.scanner_ = scanner;
+    this.bookmark_ = kNoBookmark;
+  }
+}

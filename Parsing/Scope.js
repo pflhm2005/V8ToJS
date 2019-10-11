@@ -35,7 +35,8 @@ import {
   IsDerivedConstructor, 
   IsClassMembersInitializerFunction,
   IsLexicalVariableMode,
-  is_sloppy
+  is_sloppy,
+  IsArrowFunction
 } from "../util";
 // import ThreadedList from '../base/ThreadedList';
 
@@ -140,6 +141,7 @@ export default class Scope extends ZoneObject {
 
   is_eval_scope() { return this.scope_type_ === EVAL_SCOPE; }
   is_function_scope() { return this.scope_type_ === FUNCTION_SCOPE; }
+  is_arrow_scope() { return this.is_function_scope() && IsArrowFunction(this.function_kind_); }
   is_module_scope() { return this.scope_type_ === MODULE_SCOPE; }
   is_script_scope() { return this.scope_type_ === SCRIPT_SCOPE; }
   is_catch_scope() { return this.scope_type_ === CATCH_SCOPE; }
@@ -241,6 +243,12 @@ export default class Scope extends ZoneObject {
     let scope = this;
     while(!scope.is_declaration_scope_ || (!scope.is_script_scope() && !scope.has_this_declaration_)) scope = scope.outer_scope_;
     return scope;
+  }
+  GetClassScope() {
+    let scope = this;
+    while(scope !== null && !scope.is_class_scope()) scope = scope.outer_scope_;
+    if(scope !== null && scope.is_class_scope()) return scope;
+    return null;
   }
   HasSimpleParameters() {
     let scope = this.GetClosureScope();
@@ -359,10 +367,6 @@ export default class Scope extends ZoneObject {
     let p2 = derived_constructor ? kNeedsInitialization : kCreatedInitialized;
     this.receiver_ = new Variable(this, ast_value_factory.GetOneByteStringInternal(ast_value_factory.this_string()), p1, THIS_VARIABLE, p2, kNotAssigned);
   }
-  EnsureRareData() {
-    if (this.rare_data_ === null) this.rare_data_ = new RareData();
-    return this.rare_data_;
-  }
   MakeParametersNonSimple() {
     this.SetHasNonSimpleParameters();
     for(let p of this.variables_) {
@@ -442,6 +446,15 @@ class DeclarationScope extends Scope {
     this.was_lazily_parsed_ = false;
     this.is_skipped_function_ = false;
     this.preparse_data_builder_ = null;
+  }
+  EnsureRareData() {
+    if (this.rare_data_ === null) {
+      this.rare_data_ = {
+        this_function: null,
+        generator_object: null
+      };
+    }
+    return this.rare_data_;
   }
   AddLocal(variable) {
     this.locals_.push(variable);
@@ -581,13 +594,8 @@ export class ClassScope extends Scope {
   DeclareBrandVariable() {
     
   }
-}
-
-class RareData extends ZoneObject {
-  constructor() {
-    super();
-    this.this_function = null;
-    this.generator_object = null;
+  GetUnresolvedPrivateNameTail() {
+    if(this.rare_data_ === null) return [];
+    return this.rare_data_.unresolved_private_names.end();
   }
 }
-
