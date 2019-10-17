@@ -131,6 +131,8 @@ import {
   kInvalidPrivateFieldResolution,
   kIllegalLanguageModeDirective,
   kMalformedArrowFunParamList,
+  kAsyncFunctionInSingleStatementContext,
+  kUnexpectedLexicalDeclaration,
 } from '../MessageTemplate';
 import ParserFormalParameters from './function/ParserFormalParameters';
 import NextArrowFunctionInfo from './function/NextArrowFunctionInfo';
@@ -258,6 +260,9 @@ export default class ParserBase {
   PeekInOrOf() {
     return this.peek() === 'Token::IN'
     //  || PeekContextualKeyword(ast_value_factory()->of_string());
+  }
+  peek_any_identifier() {
+    return IsAnyIdentifier(this.peek());
   }
   position() {
     return this.scanner_.location().beg_pos;
@@ -404,9 +409,109 @@ export default class ParserBase {
    * 12. switch语句
    * 13. throw语句
    * 14. try语句
-   * 15. debugger语句(貌似不在标准内))
+   * 15. debugger语句
    */
-  ParseStatement(labels, own_labels, allow_function) {}
+  ParseStatement(labels, own_labels, allow_function) {
+    switch(this.peek()) {
+      case 'Token::LBRACE':
+        return this.ParseBlock(labels);
+      case 'Token::SEMICOLON':
+        this.Next();
+        return this.ast_node_factory_.empty_statement_;
+      case 'Token::IF':
+        return this.ParseIfStatement(labels);
+      case 'Token::DO':
+        return this.ParseDoWhileStatement(labels, own_labels);
+      case 'Token::WHILE':
+        return this.ParseWhileStatement(labels, own_labels);
+      case 'Token::FOR':
+        // V8_UNLIKELY
+        if(this.is_async_function() && this.PeekAhead() === 'Token::AWAIT') {
+          return this.ParseForAwaitStatement(labels, own_labels);
+        }
+        return this.ParseForStatement(labels, own_labels);
+      case 'Token::CONTINUE':
+        return this.ParseContinueStatement();
+      case 'Token::BREAK':
+        return this.ParseBreakStatement(labels);
+      case 'Token::RETURN':
+        return this.ParseReturnStatement();
+      case 'Token::THROW':
+        return this.ParseThrowStatement();
+      case 'Token::TRY': {
+
+      }
+      case 'Token::WITH':
+        return this.ParseWithStatement(labels);
+      case 'Token::SWITCH':
+        return this.ParseSwitchStatement(labels);
+      case 'Token::FUNCTION':
+        throw new Error('UnexpectedToken');
+      case 'Token::DEBUGGER':
+        return this.ParseDebuggerStatement();
+      case 'Token::VAR':
+        return this.ParseVariableStatement(kStatement, null);
+      case 'Token::ASYNC':
+        throw new Error(kAsyncFunctionInSingleStatementContext);
+      default:
+        return this.ParseExpressionOrLabelledStatement(labels, own_labels, allow_function);
+    }
+  }
+  /**
+   * 直接的表达式
+   * 比如说v8案例的 'Hello' + 'World'
+   */
+  ParseExpressionOrLabelledStatement(labels, own_labels, allow_function) {
+    let pos = this.peek_position();
+    switch(this.peek()) {
+      case 'Token::FUNCTION':
+      case 'Token::LBRACE':
+        this.UNREACHABLE();
+      case 'Token::CLASS':
+        throw new Error('UnexpectedToken');
+      case 'Token::LET': {
+        let next_next = this.PeekAhead();
+        /**
+         * let后面跟着[、{代表解构 不应该出现在这里
+         * 然而，ASI may insert a line break before an identifier or a brace.
+         */
+        if(next_next !== 'Token::LBRACK' && 
+        ((next_next !== 'Token::LBRACE' && next_next !== 'Token::IDENTIFIER') || 
+        this.scanner_.HasLineTerminatorBeforeNext())) {
+          break;
+        }
+        throw new Error(kUnexpectedLexicalDeclaration);
+      }
+      default:
+        break;
+    }
+    
+    let starts_with_identifier = this.peek_any_identifier();
+    // 解析普通表达式
+    let expr = this.ParseExpression();
+    // labels表达式 即tag: ... break tag;
+    if(this.peek() === 'Token::COLON' && starts_with_identifier && this.IsIdentifier(expr)) {
+      this.DeclareLabel(labels, own_labels, expr);
+      this.Consume('Token::COLON');
+      if(this.peek() === 'Token::FUNCTION' && is_sloppy(this.language_mode()) &&
+      allow_function === kAllowLabelledFunctionStatement) {
+        return this.ParseFunctionDeclaration();
+      }
+      return this.ParseStatement(labels, own_labels, allow_function);
+    }
+
+    // 扩展情况下接受native函数
+    // native函数以native function开头
+    if(this.extension_ !== null && this.peek() === 'Token::FUNCTION' &&
+    !this.scanner_.HasLineTerminatorBeforeNext() && this.IsNative(expr) &&
+    !this.scanner_.literal_contains_escapes()) {
+      return this.ParseNativeDeclaration();
+    }
+
+    this.ExpectSemicolon();
+    if(expr === null) return null;
+    return this.ast_node_factory_.NewExpressionStatement(expr, pos);
+  }
 
   /**
    * @description function fn() {}
@@ -1445,6 +1550,83 @@ export default class ParserBase {
   }
 
   /**
+   * 解析块级作用域
+   * 主要步骤如下:
+   * 1、新建一个作用域类body与语法树容器statements
+   * 2、设置作用域的父类 标记当前作用域类型是BLOCK_SCOPE
+   * 3、解析{}中间的语法树放入statements中
+   * 4、处理作用域之间的交互
+   * 5、将statements挂载到body上返回
+   */
+  ParseBlock() {
+    let body = this.ast_node_factory_.NewBlock(false, labels);
+    let statements = [];
+    // CheckStackOverflow();
+    {
+      // BlockState block_state(zone(), &scope_);
+      let outer_scope_ = this.scope_;
+      this.scope_ = new Scope(this.scope_, BLOCK_SCOPE);
+      this.scope_.set_start_position(this.peek_position());
+      // TargetT target(this, body);
+      // 工具方法 暂时不知道干啥的
+      // new ParserTarget(this, body);
+
+      this.Expect('Token::LBRACE');
+
+      while(this.peek() !== 'Token::RBRACE') {
+        let stat = this.ParseStatementListItem();
+        if(stat === null) return body;
+        if(stat.IsEmptyStatement()) continue;
+        statements.push(stat);
+      }
+
+      this.Expect('Token::RBRACE');
+
+      let end_pos = this.end_position();
+      this.scope_.end_position_ = end_pos;
+
+      // this.RecordBlockSourceRange(body, end_pos);
+      body.scope_ = this.scope_.FinalizeBlockScope();
+
+      // 析构
+      this.scope_ = outer_scope_;
+    }
+
+    // body.InitializeStatements(statements, null);
+    body.statement_ = statements;
+    return body;
+  }
+
+  /**
+   * 解析if语句
+   */
+  ParseIfStatement(labels) {
+    let pos = this.peek_position();
+    this.Consume('Token::IF');
+    this.Expect('Token::LPAREN');
+    let condition = this.ParseExpression();
+    this.Expect('Token::RPAREN');
+
+    let then_range, else_range;
+    let then_statement = null;
+    {
+      let labels_copy = labels === null ? labels : labels.slice();
+      then_statement = this.ParseScopedStatement(labels_copy);
+    }
+
+    let else_statement = null;
+    if(this.Check('Token::ELSE')) {
+      else_statement = this.ParseScopedStatement(labels);
+      // else_range = 
+    } else {
+      else_statement = this.ast_node_factory_.empty_statement_;
+    }
+    let stmt = this.ast_node_factory_.NewIfStatement(condition, then_statement, else_statement, pos);
+    // this.RecordIfStatementSourceRange(stmt, then_range, else_range);
+    return stmt;
+  }
+
+  /**
    * 这里处理赋值
    * 大部分情况下这是一个简单右值 源码使用了一个Precedence来进行渐进解析与优先级判定
    * Precedence代表该表达式的复杂程度 值越低表示越复杂(或运算符优先级越低)
@@ -1860,6 +2042,21 @@ export default class ParserBase {
       }
     } while(IsMember(this.peek()));
     return expression;
+  }
+  ParseExpression() {
+    // ExpressionParsingScope expression_scope(impl());
+    let expression_scope_ = new ExpressionParsingScope(this);
+    // AcceptINScope scope(this, true);
+    let previous_accept_IN_ = this.accept_IN_;
+    this.accept_IN_ = true;
+    
+    let result = this.ParseExpressionCoverGrammar();
+
+    // 析构
+    this.accept_IN_ = previous_accept_IN_;
+    this.expression_scope_ = expression_scope_.parent_;
+    expression_scope_ = null;
+    return result;
   }
   ParseExpressionCoverGrammar() {
     let list = [];

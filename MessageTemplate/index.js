@@ -39,3 +39,5 @@ export const kUnexpectedStrictReserved = 'Unexpected strict mode reserved word';
 export const kInvalidPrivateFieldResolution = 'Private field xxx must be declared in an enclosing class';
 export const kIllegalLanguageModeDirective = 'Illegal "use strict" directive in function with non-simple parameter list';
 export const kMalformedArrowFunParamList = 'Malformed arrow function parameter list';
+export const kAsyncFunctionInSingleStatementContext = 'Async functions can only be declared at the top level or inside a block.';
+export const kUnexpectedLexicalDeclaration = 'Lexical declaration cannot appear in a single-statement context';

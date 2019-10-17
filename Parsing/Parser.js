@@ -170,6 +170,7 @@ class Parser extends ParserBase {
   IsConstructor(identifier) { return identifier.literal_bytes_ === this.ast_value_factory_.constructor_string(); }
   IsArguments(identifier) { return identifier.literal_bytes_ === this.ast_value_factory_.arguments_string(); }
   IsEvalOrArguments(identifier) { return this.IsEval(identifier) || this.IsArguments(identifier); }
+  IsNative(expr) { return expr.IsVariableProxy() && expr.raw_name() === this.ast_value_factory_.native_string(); }
   /**
    * 判断当前的expression是不是通过let const var声明的标识符
    * @param {Expression}} expression 
@@ -947,5 +948,13 @@ class Parser extends ParserBase {
     this.fni_.PushLiteralName(id);
   }
 }
+
+// export class ParserTarget {
+//   constructor(parser, statement) {
+//     this.variable_ = parser.target_stack_;
+//     this.statement_ = statement;
+//     parser.target_stack_ = this;
+//   }
+// }
 
 export default Parser;

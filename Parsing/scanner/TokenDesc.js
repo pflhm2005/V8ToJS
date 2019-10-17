@@ -13,6 +13,7 @@ export default class TokenDesc {
      * 还有一个raw_literal_chars属性储存源字符串
      */
     this.literal_chars = new LiteralBuffer();
+    this.raw_literal_chars = new LiteralBuffer();
     /**
      * Token类型
      * 此状态等同于null

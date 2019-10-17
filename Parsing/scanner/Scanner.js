@@ -32,6 +32,7 @@ import {
   IsValidBigIntKind,
   IsWhiteSpaceOrLineTerminator,
   StringToDouble,
+  IsLineTerminator,
 } from '../../util';
 
 import {
@@ -127,6 +128,9 @@ export default class Scanner {
   }
   AddLiteralChar(c) {
     this.next().literal_chars.AddChar(c);
+  }
+  AddRawLiteralChar(c) {
+    this.next().raw_literal_chars.AddChar(c);
   }
   CurrentLiteralEquals(target) {
     if (!this.is_literal_one_byte()) return false;
@@ -393,10 +397,63 @@ export default class Scanner {
     return 'Token::WHITESPACE';
   }
   /**
-   * 处理注释
+   * 处理html注释 <!--
    */
-  ScanHtmlComment() {}
-  SkipSingleHTMLComment() {}
+  ScanHtmlComment() {
+    this.Advance();
+    // 如果不是<!-- 则撤回到<!的状态
+    if(this.c0_ !== '-' || this.Peek() !== '-') {
+      this.PushBack('!');
+      return 'Token::LT';
+    }
+    this.Advance();
+    this.found_html_comment_ = true;
+    return this.SkipSingleHTMLComment();
+  }
+  SkipSingleHTMLComment() {
+    if(this.is_module_) throw new Error('Token::ILLEGAL');
+    return this.SkipSingleLineComment();
+  }
+  SkipSingleLineComment() {
+    this.AdvanceUntil((c0_) => IsLineTerminator(c0_));
+    return 'Token::WHITESPACE';
+  }
+  SkipMultiLineComment() {
+    if(!this.next().after_line_terminator) {
+      do {
+        this.AdvanceUntil((c0) => {
+          if(c0 > kMaxAscii) return IsLineTerminator(c0);
+          let char_flags = character_scan_flags[c0];
+          return this.MultilineCommentCharacterNeedsSlowPath(char_flags);
+        });
+        while(this.c0_ === '*') {
+          this.Advance();
+          if(this.c0_ === '/') {
+            this.Advance();
+            return 'Token::WHITESPACE';
+          }
+        }
+
+        if(IsLineTerminator(this.c0_)) {
+          this.next().after_line_terminator = true;
+          break;
+        }
+      } while(this.c0_ !== 'kEndOfInput');
+    }
+
+    while(this.c0_ !== 'kEndOfInput') {
+      this.AdvanceUntil((c0) => c0 === '*');
+      while(this.c0_ === '*') {
+        this.Advance();
+        if(this.c0_ === '/') {
+          this.Advance();
+          return 'Token::WHITESPACE';
+        }
+      }
+    }
+
+    return 'Token::ILLEGAL';
+  }
   
   /**
    * 解析数字相关
@@ -680,8 +737,9 @@ export default class Scanner {
       }
     }
     // 逻辑同上 进这里代表首字符Ascii值就过大 暂时不实现这种特殊情况了
-    // return ScanIdentifierOrKeywordInnerSlow(escaped, can_be_keyword);
+    return ScanIdentifierOrKeywordInnerSlow(escaped, can_be_keyword);
   }
+  ScanIdentifierOrKeywordInnerSlow() {}
   // 跳到另外一个文件里实现
   KeywordOrIdentifierToken(str, len) {
     return PerfectKeywordHash.GetToken(str, len);
@@ -725,13 +783,63 @@ export default class Scanner {
 
   /**
    * 解析模板字符串
+   * 进来之前已经将'`'符号消费了
    */
-  ScanTemplateSpan() {}
+  ScanTemplateSpan() {
+    let result = 'Token::TEMPLATE_SPAN';
+    this.next().literal_chars.Start();
+    this.next().raw_literal_chars.Start();
+    const capture_raw = true;
+    while(true) {
+      let c = this.c0_;
+      if(c === '`') {
+        this.Advance();
+        result = 'Token::TEMPLATE_TAIL';
+        break;
+      } else if(c === '$' && this.Peek() === '{') {
+        this.Advance();
+        this.Advance();
+        break;
+      } else if(c === '\\') {
+        this.Advance();
+        if(capture_raw) this.AddRawLiteralChar('\\');
+        if(IsLineTerminator(this.c0_)) {
+          let lastChar = this.c0_;
+          this.Advance();
+          if(lastChar === '\r') {
+            if(this.c0_ === '\n') this.Advance();
+            lastChar = '\n';
+          }
+          if(capture_raw) this.AddRawLiteralChar(lastChar);
+        }
+      } else if(c < 0) {
+        break;
+      } else {
+        this.Advance();
+        if(c === '\r') {
+          if(this.c0_ === '\n') this.Advance();
+          c = '\n';
+        }
+        if(capture_raw) this.AddRawLiteralChar(c);
+        this.AddLiteralChar(c);
+      }
+    }
+    this.next().location.end_pos = this.source_pos();
+    this.next().token = result;
+
+    return result;
+  }
   
   /**
    * 解析保留关键词
    */
-  ScanPrivateName() {}
+  ScanPrivateName() {
+    this.next().literal_chars.Start();
+    if(!IsIdentifierStart(this.Peek())) throw new Error('Token::ILLEGAL');
+    this.AddLiteralCharAdvance();
+    let token = this.ScanIdentifierOrKeywordInner();
+    return token === 'Token::ILLEGAL' ? 'Token::ILLEGAL' : 'Token::PRIVATE_NAME;';
+  }
 
   /**
    * 非Token解析方法

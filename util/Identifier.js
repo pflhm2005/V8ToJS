@@ -198,6 +198,11 @@ export const IsWhiteSpaceOrLineTerminator = (c) => {
   return kAsciiCharFlags[c] & kIsWhiteSpaceOrLineTerminator;
 }
 
+//
+export function IsLineTerminator(c) {
+  return c == 0x000A || c == 0x000D || c == 0x2028 || c == 0x2029;
+}
+
 /**
  * 首字符直接用上面那个对象的key做判断
  * 源码用的宏 懒得去模拟了(也基本上没法模拟)
