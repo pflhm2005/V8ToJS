@@ -10,7 +10,7 @@ import {
 import Scope, { FunctionDeclarationScope, ScriptDeclarationScope } from './Scope';
 
 import FunctionState from './function/FunctionState';
-import ClassInfo from './class/ClassInfo';
+import { ClassInfo, ForInfo } from './Info';
 import { FuncNameInferrer } from './FuncNameInferrer';
 
 import ParsePropertyInfo from './object/ParsePropertyInfo';
@@ -85,6 +85,8 @@ import {
   kAnonymousExpression,
   kNoDuplicateParameters,
   kBlock,
+  ENUMERATE,
+  ITERATE,
 } from '../enum';
 
 import {
@@ -217,6 +219,13 @@ export default class ParserBase {
   is_async_function() { return IsAsyncFunction(this.function_state_.kind()); }
   is_generator() { return IsGeneratorFunction(this.function_state_.kind()); }
   UNREACHABLE() { this.scanner_.UNREACHABLE(); }
+
+  NewScope(scope_type) {
+    return this.NewScopeWithParent(this.scope_, scope_type);
+  }
+  NewScopeWithParent(parent, scope_type) {
+    return new Scope(null, parent, scope_type);
+  }
   /**
    * 这里的DeclarationScope存在构造函数重载 并且初始化方式不一致
    * 差距过大 手动分成两个不同的子类
@@ -259,8 +268,21 @@ export default class ParserBase {
    */
   PeekInOrOf() {
     return this.peek() === 'Token::IN'
-    //  || PeekContextualKeyword(ast_value_factory()->of_string());
+     || this.PeekContextualKeyword(this.ast_value_factory_.of_string());
   }
+  CheckContextualKeyword(name) {
+    if(this.PeekContextualKeyword(name)) {
+      this.Consume('Token::IDENTIFIER');
+      return true;
+    }
+    return false;
+  }
+  PeekContextualKeyword(name) {
+    return this.peek() === 'Token::IDENTIFIER' &&
+    !this.scanner_.next_literal_contains_escapes() &&
+    this.scanner_.NextSymbol(this.ast_value_factory_).literal_bytes_ === name;
+  }
+
   peek_any_identifier() {
     return IsAnyIdentifier(this.peek());
   }
@@ -1596,9 +1618,19 @@ export default class ParserBase {
     body.statement_ = statements;
     return body;
   }
-
   /**
    * 解析if语句
+   * 主要步骤如下：
+   * 1、解析if括号中的condition
+   * 2、if中的语句名为then_statement else名为else_statement
+   * 3、分别尝试解析上面两个语句块
+   * 4、将condition、then、else三部分通过工厂方法生成一个IfStatement类返回
+   * 有以下几个知识点
+   * 1、不存在所谓的else if语法 只是将if语句加入else的语句中
+   * 2、if/else语句块都可以为空 但是if的condition必须有一个表达式
+   * 3、语句块分为single-expression与block 简单讲就是有没有大括号包住
+   * 4、single-expression的语句有诸多限制
+   * 5、一种极为特殊的情况是 if(..) function fn() {} 这会默认生成一个新作用域并解析函数声明
    */
   ParseIfStatement(labels) {
     let pos = this.peek_position();
@@ -1607,23 +1639,293 @@ export default class ParserBase {
     let condition = this.ParseExpression();
     this.Expect('Token::RPAREN');
 
-    let then_range, else_range;
+    // let then_range = new SourceRange();
+    // let else_range = new SourceRange();
     let then_statement = null;
     {
+      // SourceRangeScope range_scope(scanner(), &then_range);
+      // then_range.start = this.scanner_.peek_location().beg_pos;
       let labels_copy = labels === null ? labels : labels.slice();
       then_statement = this.ParseScopedStatement(labels_copy);
+      // then_range.end = this.scanner_.location().end_pos;
     }
 
     let else_statement = null;
     if(this.Check('Token::ELSE')) {
       else_statement = this.ParseScopedStatement(labels);
-      // else_range = 
+      // else_range = SourceRange.ContinuationOf(then_range, this.end_position());
     } else {
       else_statement = this.ast_node_factory_.empty_statement_;
     }
     let stmt = this.ast_node_factory_.NewIfStatement(condition, then_statement, else_statement, pos);
     // this.RecordIfStatementSourceRange(stmt, then_range, else_range);
     return stmt;
+  }
+  ParseScopedStatement(labels) {
+    if(is_strict(this.language_mode()) || this.peek() !== 'Token::FUNCTION') {
+      return this.ParseStatement(labels, null);
+    }
+    /**
+     * 进这个分支的条件十分特殊
+     * 1.非严格模式
+     * 2.下一个Token是function
+     * 即if(true) function fn() {}
+     */ 
+    else {
+      // BlockState block_state(zone(), &scope_);
+      let outer_scope_ = this.scope_;
+      this.scope_ = new Scope(this.scope_, BLOCK_SCOPE);
+      this.scope_.start_position_ = this.scanner_.location().beg_pos;
+      let block = this.ast_node_factory_.NewBlock(1, false);
+      let body = this.ParseFunctionDeclaration();
+      block.statement_.push(body, null);
+      this.scope_.end_position_ = this.end_position();
+      block.scope_ = this.scope_.FinalizeBlockScope();
+
+      // 析构
+      this.scope_ = outer_scope_;
+      return block;
+    }
+  }
+  /**
+   * 解析do while语句
+   * 去掉SourceRange相关逻辑
+   */
+  ParseDoWhileStatement(labels, own_labels) {
+    // typename FunctionState::LoopScope loop_scope(function_state_);
+    this.function_state_.loop_nesting_depth_++;
+    let loop = this.ast_node_factory_.NewDoWhileStatement(labels, own_labels, this.peek_position());
+    // TargetT target(this, loop);
+    let body = null;
+    this.Consume('Token::DO');
+
+    // CheckStackOverflow();
+    {
+      body = this.ParseStatement(null, null);
+    }
+    this.Expect('Token::WHILE');
+    this.Expect('Token::LPAREN');
+
+    let cond = this.ParseExpression();
+    this.Expect('Token::RPAREN');
+
+    this.Check('Token::SEMICOLON');
+    loop.Initialize(cond, body);
+
+    this.function_state_.loop_nesting_depth_--;
+    return loop;
+  }
+
+  /**
+   * 解析while语句
+   */
+  ParseWhileStatement(labels, own_labels) {
+    // typename FunctionState::LoopScope loop_scope(function_state_);
+    this.function_state_.loop_nesting_depth_++;
+    let loop = this.ast_node_factory_.NewWhileStatement(labels, own_labels, this.peek_position());
+    // TargetT target(this, loop);
+    let body = null;
+    this.Consume('Token::WHILE');
+    this.Expect('Token::LPAREN');
+    let cond = this.ParseExpression();
+    this.Expect('Token::RPAREN');
+    {
+      body = this.ParseStatement(null, null);
+    }
+    loop.Initialize(cond, body);
+
+    this.function_state_.loop_nesting_depth_--;
+    return loop;
+  }
+
+  /**
+   * 解析For循环
+   */
+  ParseForStatement(labels, own_labels) {
+    // typename FunctionState::LoopScope loop_scope(function_state_);
+    this.function_state_.loop_nesting_depth_++;
+
+    let stmt_pos = this.peek_position();
+    let for_info = new ForInfo();
+
+    this.Consume('Token::FOR');
+    this.Expect('Token::LPAREN');
+
+    /**
+     * 解析一下for语句
+     * for(let/const i = 0;;)
+     * for(let/const a in obj)
+     * for(let/const a of ar)
+     */
+    let starts_with_let  = this.peek() === 'Token::LET';
+    if(this.peek() === 'Token::CONST' || (starts_with_let && this.IsNextLetKeyword())) {
+      // BlockState for_state(zone(), &scope_);
+      let outer_scope_ = this.scope_;
+      this.scope_ = new Scope(this.scope_, BLOCK_SCOPE);
+      this.scope_.start_position_ = this.position();
+
+      // typename FunctionState::FunctionOrEvalRecordingScope recording_scope(function_state_);
+      let inner_block_scope = this.NewScope(BLOCK_SCOPE);
+      {
+        // BlockState inner_state(&scope_, inner_block_scope);
+        let outer_scope_ = this.scope_;
+        this.scope_ = inner_block_scope;
+        this.ParseVariableDeclarations(kForStatement, for_info.parsing_result, for_info.bound_names);
+
+        // 析构
+        this.scope_ = outer_scope_;
+      }
+      for_info.position = this.position();
+      // for in/of
+      if(this.CheckInOrOf(for_info)) {
+        this.scope_.is_hidden_ = true;
+        return this.ParseForEachStatementWithDeclarations(stmt_pos, for_info, labels, own_labels, inner_block_scope);
+      }
+
+      this.Expect('Token::SEMICOLON');
+
+      let result = null;
+      inner_block_scope.start_position_ = this.scope_.start_position_;
+      {
+        // BlockState inner_state(&scope_, inner_block_scope);
+        let outer_scope_ = this.scope_;
+        this.scope_ = inner_block_scope;
+        let init = this.BuildInitializationBlock(for_info.parsing_result);
+        result = this.ParseStandardForLoopWithLexicalDeclarations(stmt_pos, init, for_info, labels, own_labels);
+
+        // 析构
+        this.scope_ = outer_scope_;
+      }
+      this.scope_.FinalizeBlockScope();
+
+       // 析构
+       this.scope_ = outer_scope_;
+       return result;
+    }
+
+    // 同上 不过声明类型是var
+    let init = null;
+    if(this.peek() === 'Token::VAR') {
+      this.ParseVariableDeclarations(kForStatement, for_info.parsing_result, for_info.bound_names);
+      for_info.position = this.scanner_.location().beg_pos;
+      if(this.CheckInOrOf(for_info)) {
+        return this.ParseForEachStatementWithDeclarations(stmt_pos, for_info, labels, own_labels, this.scope_);
+      }
+
+      init = this.BuildInitializationBlock(for_info.parsing_result);
+    }
+    // for(a=1;)  for(a of ar)
+    else if(this.peek() !== 'Token::SEMICOLON') {
+      let next_loc = this.scanner_.peek_location();
+      let lhs_beg_pos = next_loc.beg_pos;
+      let lhs_end_pos;
+      let is_for_each;
+      let expression = null;
+
+      {
+        // ExpressionParsingScope expression_scope(impl());
+        let expression_scope_ = new ExpressionParsingScope(this);
+        // AcceptINScope scope(this, false);
+        let previous_accept_IN_ = this.accept_IN_;
+        this.accept_IN_ = false;
+        expression = this.ParseExpressionCoverGrammar();
+        lhs_end_pos = this.end_position();
+        is_for_each = this.CheckInOrOf(for_info);
+        if(is_for_each) {
+
+        }
+
+        // 析构
+        this.accept_IN_ = previous_accept_IN_;
+        this.expression_scope_ = expression_scope_.parent_;
+        expression_scope_ = null;
+      }
+      if(is_for_each) {
+        return this.ParseForEachStatementWithoutDeclarations(
+          stmt_pos, expression, lhs_beg_pos, lhs_end_pos. for_info, labels, own_labels);
+      }
+
+      init = this.ast_node_factory_.NewExpressionStatement(expression, lhs_beg_pos);
+    }
+    this.Expect('Token::SEMICOLON');
+
+    let cond = this.NullExpression();
+    let next = this.NullStatement();
+    let body = this.NullStatement();
+    let loop = this.ParseStandardForLoop(stmt_pos, labels, own_labels, cond, next, body);
+    loop.Initialize(init, cond, next, body);
+    this.function_state_.loop_nesting_depth_--;
+    return loop;
+  }
+  // 这个方法用的指针 不好模仿 直接传入整个对象
+  CheckInOrOf(for_info) {
+    if(this.Check('Token::IN')) {
+      for_info.mode = ENUMERATE;
+      return true;
+    } else if(this.CheckContextualKeyword(this.ast_value_factory_.of_string())) {
+      for_info.mode = ITERATE;
+      return true;
+    }
+    return false;
+  }
+  ParseForEachStatementWithDeclarations(stmt_pos, for_info, labels, own_labels, inner_block_scope) {
+
+  }
+  ParseForEachStatementWithoutDeclarations(stmt_pos, expression, lhs_beg_pos, lhs_end_pos, for_info, labels, own_labels) {
+    
+  }
+  ParseStandardForLoopWithLexicalDeclarations(stmt_pos, init, for_info, labels, own_labels) {
+    let inner_scope = this.NewScope(BLOCK_SCOPE);
+    let loop = this.NullStatement();
+    let cond = this.NullExpression();
+    let next = this.NullStatement();
+    let body = this.NullStatement();
+    {
+      // BlockState inner_state(&scope_, inner_block_scope);
+      let outer_scope_ = this.scope_;
+      this.scope_ = inner_block_scope;
+      this.scope_.start_position_ = this.scanner_.location().beg_pos;
+      loop = this.ParseStandardForLoop(stmt_pos, labels, own_labels, cond, next, body);
+      this.scope_.end_position_ = this.end_position();
+
+      // 析构
+      this.scope_ = outer_scope_;
+    }
+    this.scope_.end_position_ = this.end_position();
+    if(for_info.bound_names.length > 0 && this.function_state_.contains_function_or_eval_) {
+      this.scope_.is_hidden_ = true;
+      return this.DesugarLexicalBindingsInForStatement(loop, init, cond, next, body, inner_scope, for_info);
+    } else {
+      inner_scope = inner_scope.FinalizeBlockScope();
+    }
+    let for_scope = this.scope_.FinalizeBlockScope();
+    if(for_scope !== null) {
+      let block = this.ast_node_factory_.NewBlock(2, false);
+      block.statement_.push(init);
+      block.statement_.push(loop);
+      block.scope_ = for_scope;
+      loop.Initialize(this.NullStatement(), cond, next, body);
+      return block;
+    }
+    loop.Initialize(init, cond, next, body);
+    return loop;
+  }
+  // for(init; cond; next) { body }
+  ParseStandardForLoop(stmt_pos, labels, own_labels, cond, next, body) {
+    // CheckStackOverflow();
+    let loop = this.ast_node_factory_.NewForStatement(labels, own_labels, stmt_pos);
+    // TargetT target(this, loop);
+    if(this.peek() !== 'Token::SEMICOLON') cond = this.ParseExpression();
+    this.Expect('Token::SEMICOLON');
+    if(this.peek() !== 'Token::RPAREN') {
+      let exp = this.ParseExpression();
+      next = this.ast_node_factory_.NewExpressionStatement(exp, exp.position());
+    }
+    this.Expect('Token::RPAREN');
+    {
+      body = this.ParseStatement(null, null);
+    }
+    return loop;
   }
 
   /**

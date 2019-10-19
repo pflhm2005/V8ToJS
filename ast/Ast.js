@@ -64,6 +64,10 @@ import {
   _kNaryOperation,
   _kSpread,
   kMaybeAssigned,
+  _kIfStatement,
+  _kDoWhileStatement,
+  _kWhileStatement,
+  _kForStatement,
 } from "../enum";
 
 import {
@@ -223,7 +227,7 @@ export class AstNodeFactory {
     // 构造参数在这里基本上毫无意义
     let result = new Block(null, null, 0, ignore_completion_value);
     // result.InitializeStatements(statements, null);
-    result.statement_ = statements;
+    result.statement_ = statements || [];
     return result;
   }
 
@@ -231,13 +235,28 @@ export class AstNodeFactory {
     if(!expression) expression = this.NewUndefinedLiteral(pos);
     return new Await(expression, pos);
   }
-  // 返回语句
+  /**
+   * 返回各类语句
+   */
   NewReturnStatement(expression, pos, end_position = kNoSourcePosition) {
     return new ReturnStatement(expression, kNormal, pos, end_position);
   }
   NewAsyncReturnStatement(expression, pos, end_position = kNoSourcePosition) {
     return new ReturnStatement(expression, kAsyncReturn, pos, end_position);
   }
+  NewIfStatement(condition, then_statement, else_statement, pos) {
+    return new IfStatement(condition, then_statement, else_statement, pos);
+  }
+  NewDoWhileStatement(labels, own_labels, pos) {
+    return new DoWhileStatement(labels, own_labels, pos);
+  }
+  NewWhileStatement(labels, own_labels, pos) {
+    return new WhileStatement(labels, own_labels, pos);
+  }
+  NewForStatement(labels, own_labels, pos) {
+    return new ForStatement(labels, own_labels, pos);
+  }
+
   NewClassLiteralProperty(key, value, kind, is_static, is_computed_name, is_private) {
     return new ClassLiteralProperty(key, value, kind, is_static, is_computed_name, is_private);
   }
@@ -363,6 +382,52 @@ class LabeledBlock extends Block {
   constructor(labels, ignore_completion_value, capacity = 0) {
     super(labels, capacity, ignore_completion_value);
     this.labels_ = labels;
+  }
+}
+
+class IterationStatement extends BreakableStatement {
+  constructor(labels, own_labels, pos, type) {
+    super(TARGET_FOR_ANONYMOUS, pos, type);
+    this.labels_ = labels;
+    this.own_labels_ = own_labels;
+    this.body_ = null;
+  }
+}
+
+class DoWhileStatement extends IterationStatement {
+  constructor(labels, own_labels, pos) {
+    super(labels, own_labels, pos, _kDoWhileStatement);
+    this.cond_ = null;
+  }
+  Initialize(cond, body) {
+    this.body_ = body;
+    this.cond_ = cond;
+  }
+}
+
+class WhileStatement extends IterationStatement {
+  constructor(labels, own_labels, pos) {
+    super(labels, own_labels, pos, _kWhileStatement);
+    this.cond_ = null;
+  }
+  Initialize(cond, body) {
+    this.body_ = body;
+    this.cond_ = cond;
+  }
+}
+
+class ForStatement extends IterationStatement {
+  constructor(labels, own_labels, pos) {
+    super(labels, own_labels, pos, _kForStatement);
+    this.init_ = null;
+    this.cond_ = null;
+    this.next_ = null;
+  }
+  Initialize(init, cond, next, body) {
+    this.body_ = body;
+    this.init_ = init;
+    this.cond_ = cond;
+    this.next_ = next;
   }
 }
 
@@ -782,6 +847,15 @@ class ReturnStatement extends JumpStatement {
     this.expression_ = expression;
     this.end_position_ = end_position;
     this.bit_field_ |= ReturnStatementTypeField.encode(type);
+  }
+}
+
+class IfStatement extends Statement {
+  constructor(condition, then_statement, else_statement, pos) {
+    super(pos, _kIfStatement);
+    this.condition_ = condition;
+    this.then_statement_ = then_statement;
+    this.else_statement_ = else_statement;
   }
 }
 

@@ -1,4 +1,7 @@
-export default class ClassInfo {
+import { ENUMERATE, kNoSourcePosition } from "../../enum";
+import { DeclarationParsingResult } from "../DeclarationParsingResult";
+
+export class ClassInfo {
   constructor() {
     this.variable = null;
     this.extends = null;
@@ -17,5 +20,14 @@ export default class ClassInfo {
     this.static_fields_scope = false;
     this.instance_members_scope = false;
     this.computed_field_count = 0;
+  }
+}
+
+export class ForInfo {
+  constructor() {
+    this.bound_names = [];
+    this.mode = ENUMERATE;
+    this.position = kNoSourcePosition;
+    this.parsing_result = new DeclarationParsingResult();
   }
 }

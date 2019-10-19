@@ -850,6 +850,11 @@ export default class Scanner {
       return ast_value_factory.GetOneByteString(this.literal_one_byte_string());
     }
   }
+  NextSymbol(ast_value_factory) {
+    if(this.is_next_literal_one_byte()) {
+      return ast_value_factory.GetOneByteString(this.next_literal_one_byte_string());
+    }
+  }
   /**
    * 太麻烦 不实现了
    * 返回一个doubleValue
@@ -862,11 +867,17 @@ export default class Scanner {
   is_literal_one_byte() {
     return this.current().literal_chars.is_one_byte();
   }
+  is_next_literal_one_byte() {
+    return this.next().literal_chars.is_one_byte();
+  }
   /**
    * @returns {String} 当前Token的字符串
    */
   literal_one_byte_string() {
     return this.current().literal_chars.one_byte_literal();
+  }
+  next_literal_contains_escapes() {
+    return this.LiteralContainsEscapes(this.next());
   }
   next_literal_one_byte_string() {
     return this.next().literal_chars.one_byte_literal();

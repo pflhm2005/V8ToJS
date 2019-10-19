@@ -21,6 +21,7 @@ export default class FunctionState extends BlockState {
     this.next_function_is_likely_called_ = false;
     this.previous_function_was_likely_called_ = false;
     this.contains_function_or_eval_ = false;
+    this.loop_nesting_depth_ = 0;
 
     function_state_stack = this;
     if(this.outer_function_state_) {

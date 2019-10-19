@@ -186,8 +186,8 @@ class Parser extends ParserBase {
     return arg === null || literal.AsRawString() === arg;
   }
   EmptyIdentifierString() { return this.ast_value_factory_.empty_string(); }
-  NullExpression() { return null; }
-  NullIdentifier() { return null; }
+  NullExpression() { return Object.create(null); }
+  NullIdentifier() { return Object.create(null); }
 
   GetIdentifier() { return this.GetSymbol(); }
   GetSymbol() { return this.scanner_.CurrentSymbol(this.ast_value_factory_); }
@@ -946,6 +946,10 @@ class Parser extends ParserBase {
   }
   PushLiteralName(id) {
     this.fni_.PushLiteralName(id);
+  }
+
+  DesugarLexicalBindingsInForStatement() {
+    
   }
 }
 

@@ -14,3 +14,7 @@ export const kLexicalDeclaration = 5;
 
 export const kRequired = 0;
 export const kElided = 0;
+
+// for语句的遍历模式
+export const ENUMERATE = 0; // for in
+export const ITERATE = 0; // for of
