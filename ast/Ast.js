@@ -68,6 +68,8 @@ import {
   _kDoWhileStatement,
   _kWhileStatement,
   _kForStatement,
+  _kContinueStatement,
+  _kBreakStatement,
 } from "../enum";
 
 import {
@@ -256,6 +258,12 @@ export class AstNodeFactory {
   NewForStatement(labels, own_labels, pos) {
     return new ForStatement(labels, own_labels, pos);
   }
+  NewContinueStatement(target, pos) {
+    return new ContinueStatement(target, pos);
+  }
+  NewBreakStatement(target, pos) {
+    return new BreakStatement(target, pos);
+  }
 
   NewClassLiteralProperty(key, value, kind, is_static, is_computed_name, is_private) {
     return new ClassLiteralProperty(key, value, kind, is_static, is_computed_name, is_private);
@@ -351,6 +359,44 @@ class SloppyBlockFunctionStatement extends Statement {
   init() { return SloppyBlockFunctionStatementTokenField.decode(this.bit_field_); }
 }
 
+// 返回语句
+class JumpStatement extends Statement {
+  constructor(pos, type) {
+    super(pos, type);
+  }
+}
+
+class ReturnStatement extends JumpStatement {
+  constructor(expression, type, pos, end_position) {
+    super(pos, _kReturnStatement);
+    this.expression_ = expression;
+    this.end_position_ = end_position;
+    this.bit_field_ |= ReturnStatementTypeField.encode(type);
+  }
+}
+
+class IfStatement extends Statement {
+  constructor(condition, then_statement, else_statement, pos) {
+    super(pos, _kIfStatement);
+    this.condition_ = condition;
+    this.then_statement_ = then_statement;
+    this.else_statement_ = else_statement;
+  }
+}
+
+class ContinueStatement extends JumpStatement {
+  constructor(target, pos) {
+    super(pos, _kContinueStatement);
+    this.target_ = target;
+  }
+}
+
+class BreakStatement extends JumpStatement {
+  constructor(target, pos) {
+    super(pos, _kBreakStatement);
+    this.target_ = target;
+  }
+}
 
 /**
  * break语句除了for、while等关键词的break操作
@@ -360,6 +406,9 @@ class BreakableStatement extends Statement {
   constructor(breakable_type, position, type) {
     super(position, type);
     this.bit_field_ |= BreakableTypeField.encode(breakable_type);
+  }
+  is_target_for_anonymous() {
+    return BreakableTypeField.decode(this.bit_field_) === TARGET_FOR_ANONYMOUS;
   }
 }
 
@@ -831,31 +880,6 @@ class EmptyParentheses extends Expression {
 class Await extends Suspend {
   constructor(expression, pos) {
     super(_kAwait, expression, pos, kOnExceptionThrow);
-  }
-}
-
-// 返回语句
-class JumpStatement extends Statement {
-  constructor(pos, type) {
-    super(pos, type);
-  }
-}
-
-class ReturnStatement extends JumpStatement {
-  constructor(expression, type, pos, end_position) {
-    super(pos, _kReturnStatement);
-    this.expression_ = expression;
-    this.end_position_ = end_position;
-    this.bit_field_ |= ReturnStatementTypeField.encode(type);
-  }
-}
-
-class IfStatement extends Statement {
-  constructor(condition, then_statement, else_statement, pos) {
-    super(pos, _kIfStatement);
-    this.condition_ = condition;
-    this.then_statement_ = then_statement;
-    this.else_statement_ = else_statement;
   }
 }
 

@@ -87,6 +87,9 @@ import {
   kBlock,
   ENUMERATE,
   ITERATE,
+  SCRIPT_SCOPE,
+  EVAL_SCOPE,
+  MODULE_SCOPE,
 } from '../enum';
 
 import {
@@ -1926,6 +1929,84 @@ export default class ParserBase {
       body = this.ParseStatement(null, null);
     }
     return loop;
+  }
+
+  /**
+   * 解析continue语句
+   */
+  ParseContinueStatement() {
+    let pos = this.peek_position();
+    this.Consume('Token:CONTINUE');
+    let label = null;
+    let tok = this.peek();
+    if(!this.scanner_.HasLineTerminatorBeforeNext() && !IsAutoSemicolon(tok)) {
+      label = this.ParseIdentifier();
+    }
+    let target = this.LookupContinueTarget(label);
+    if(target === null) throw new Error('IllegalContinue');
+    this.ExpectSemicolon();
+    let stmt = this.ast_node_factory_.NewContinueStatement(target, pos);
+    return stmt;
+  }
+
+  /**
+   * 解析break语句
+   */
+  ParseBreakStatement(labels) {
+    let pos = this.peek_position();
+    this.Consume('Token::BREAK');
+    let label = null;
+    let tok = this.peek();
+    if(!this.scanner_.HasLineTerminatorBeforeNext() && !IsAutoSemicolon(tok)) {
+      label = this.ParseIdentifier();
+    }
+    if(label !== null && this.ContainsLabel(labels, label)) {
+      this.ExpectSemicolon();
+      return this.ast_node_factory_.empty_statement_;
+    }
+    let target = this.LookupBreakTarget(label);
+    if(target === null) throw new Error('IllegalBreak');
+    this.ExpectSemicolon();
+    let stmt = this.ast_node_factory_.NewBreakStatement(target, pos);
+    return stmt;
+  }
+
+  /**
+   * 解析return语句
+   */
+  ParseReturnStatement() {
+    this.Consume('Token::RETURN');
+    let loc = this.scanner_.location();
+
+    switch(this.GetDeclarationScope().scope_type_) {
+      case SCRIPT_SCOPE:
+      case EVAL_SCOPE:
+      case MODULE_SCOPE:
+        throw new Error('IllegalReturn');
+      default:
+        break;
+    }
+
+    let tok = this.peek();
+    let return_value = null;
+    if(this.scanner_.HasLineTerminatorBeforeNext() || IsAutoSemicolon(tok)) {
+      if(IsDerivedConstructor(this.function_state_.kind())) {
+        // ExpressionParsingScope expression_scope(impl());
+        let expression_scope_ = new ExpressionParsingScope(this);
+        return_value = this.ThisExpression();
+        // 析构
+        this.expression_scope_ = expression_scope_.parent_;
+        expression_scope_ = null;
+      }
+    } else {
+      return_value = this.ParseExpression();
+    }
+    this.ExpectSemicolon();
+
+    return_value = this.RewriteReturn(return_value, loc.beg_pos);
+    let continuation_pos = this.end_position();
+    let stmt = this.BuildReturnStatement(return_value, loc.beg_pos, continuation_pos);
+    return stmt;
   }
 
   /**

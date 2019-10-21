@@ -37,14 +37,12 @@ import {
   kParamAfterRest, 
   kMalformedArrowFunParamList
 } from '../MessageTemplate';
-import { is_strict, is_sloppy } from '../util';
+import { is_strict, is_sloppy, IsDerivedConstructor } from '../util';
 import ParserFormalParameters from './function/ParserFormalParameters';
 import { ParameterDeclarationParsingScope } from './ExpressionScope';
 import Parameter from './function/Parameter';
 import { Declaration } from './DeclarationParsingResult';
 import { Variable } from '../ast/Ast';
-import { BookmarkScope } from './scanner/Scanner';
-import PreParse from './PreParse';
 
 
 /**
@@ -188,6 +186,8 @@ class Parser extends ParserBase {
   EmptyIdentifierString() { return this.ast_value_factory_.empty_string(); }
   NullExpression() { return Object.create(null); }
   NullIdentifier() { return Object.create(null); }
+  
+  NewTemporary(name) { return this.scope_.NewTemporary(name); }
 
   GetIdentifier() { return this.GetSymbol(); }
   GetSymbol() { return this.scanner_.CurrentSymbol(this.ast_value_factory_); }
@@ -950,6 +950,61 @@ class Parser extends ParserBase {
 
   DesugarLexicalBindingsInForStatement() {
     
+  }
+
+  LookupContinueTarget(label) {
+    let anonymous = label === null;
+    for(let t = this.target_stack_; t !== null; t = t.previous_) {
+      let stat = t.statement_;
+      if(stat === null) continue;
+      if(anonymous || this.ContainsLabel(stat.own_labels_, label)) {
+        return stat;
+      }
+      if(this.ContainsLabel(stat.labels_, label)) break;
+    }
+    return null;
+  }
+  LookupBreakTarget() {
+    let anonymous = label === null;
+    for(let t = this.target_stack_; t !== null; t = t.previous_) {
+      let stat = t.statement_;
+      if((anonymous && stat.is_target_for_anonymous()) || 
+      (!anonymous && this.ContainsLabel(stat.labels_, label))) {
+        return stat;
+      }
+    }
+    return null;
+  }
+  ContainsLabel(labels, label) {
+    if(labels !== null && labels.includes(label)) {
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * 这个方法主要处理派生类构造函数的返回
+   * 派生类构造函数返回只能是undefined或者类(一般不会使用返回语句）
+   * 当返回是undefined(即未指定返回) 就会返回this
+   * 当返回是对象时 就会返回指定对象
+   * 这里就将返回语句置换成三元表达式语句 即(return_value === undefined) ? this : return_value
+   * 返回是基本类型时 会报下述错误
+   * Derived constructors may only return object or undefined
+   * @param {Expression} return_value 一般是this
+   */
+  RewriteReturn(return_value, pos) {
+    if(IsDerivedConstructor(this.function_state_.kind())) {
+      let temp = this.NewTemporary(this.ast_value_factory_.empty_string());
+      let assign = this.ast_node_factory_.NewAssignment(
+        'Token::ASSIGN', this.ast_node_factory_.NewVariableProxy(temp), return_value, pos);
+
+      let is_undefined = this.ast_node_factory_.NewCompareOperation(
+        'Token::EQ_STRICT', assign, this.ast_node_factory_.NewUndefinedLiteral(kNoSourcePosition), pos);
+
+      return_value = this.ast_node_factory_.NewConditional(is_undefined, this.ast_node_factory_.ThisExpression(), 
+      this.ast_node_factory_.NewVariableProxy(temp), pos);
+    }
+    return return_value;
   }
 }
 
