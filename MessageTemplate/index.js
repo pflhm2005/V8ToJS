@@ -41,3 +41,5 @@ export const kIllegalLanguageModeDirective = 'Illegal "use strict" directive in 
 export const kMalformedArrowFunParamList = 'Malformed arrow function parameter list';
 export const kAsyncFunctionInSingleStatementContext = 'Async functions can only be declared at the top level or inside a block.';
 export const kUnexpectedLexicalDeclaration = 'Lexical declaration cannot appear in a single-statement context';
+export const kNewlineAfterThrow = 'Illegal newline after throw';
+export const kStrictWith = 'Strict mode code may not include a with statement';

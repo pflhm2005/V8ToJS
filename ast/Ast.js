@@ -70,6 +70,9 @@ import {
   _kForStatement,
   _kContinueStatement,
   _kBreakStatement,
+  _kThrow,
+  _kWithStatement,
+  _kSwitchStatement,
 } from "../enum";
 
 import {
@@ -264,6 +267,15 @@ export class AstNodeFactory {
   NewBreakStatement(target, pos) {
     return new BreakStatement(target, pos);
   }
+  NewThrow(exception, pos) {
+    return new Throw(exception, pos);
+  }
+  NewWithStatement(scope, expression, statement, pos) {
+    return new WithStatement(scope, expression, statement, pos);
+  }
+  NewSwitchStatement(labels, tag, pos) {
+    return new SwitchStatement(null, labels, tag, pos);
+  }
 
   NewClassLiteralProperty(key, value, kind, is_static, is_computed_name, is_private) {
     return new ClassLiteralProperty(key, value, kind, is_static, is_computed_name, is_private);
@@ -384,6 +396,15 @@ class IfStatement extends Statement {
   }
 }
 
+class WithStatement extends Statement {
+  constructor(scope, expression, statement, pos) {
+    super(pos, _kWithStatement);
+    this.scope_ = scope;
+    this.expression_ = expression;
+    this.statement_ = statement;
+  }
+}
+
 class ContinueStatement extends JumpStatement {
   constructor(target, pos) {
     super(pos, _kContinueStatement);
@@ -409,6 +430,15 @@ class BreakableStatement extends Statement {
   }
   is_target_for_anonymous() {
     return BreakableTypeField.decode(this.bit_field_) === TARGET_FOR_ANONYMOUS;
+  }
+}
+
+class SwitchStatement extends BreakableStatement {
+  constructor(zone, labels, tag, pos) {
+    super(TARGET_FOR_ANONYMOUS, pos, _kSwitchStatement);
+    this.labels_ = labels;
+    this.tag_ = tag;
+    this.cases_ = [];
   }
 }
 
@@ -574,6 +604,13 @@ class Assignment extends Expression {
     this.value_ = value;
     op = TokenEnumList.indexOf(op);
     this.bit_field_ |= AssignmentTokenField.encode(op);
+  }
+}
+
+class Throw extends Expression {
+  constructor(exception, pos) {
+    super(pos, _kThrow);
+    this.exception_ = exception;
   }
 }
 

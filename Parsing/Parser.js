@@ -188,6 +188,9 @@ class Parser extends ParserBase {
   NullIdentifier() { return Object.create(null); }
   
   NewTemporary(name) { return this.scope_.NewTemporary(name); }
+  NewThrowStatement(exception, pos) {
+    return this.ast_node_factory_.NewExpressionStatement(this.ast_node_factory_.NewThrow(exception, pos), pos);
+  }
 
   GetIdentifier() { return this.GetSymbol(); }
   GetSymbol() { return this.scanner_.CurrentSymbol(this.ast_value_factory_); }

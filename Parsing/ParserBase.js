@@ -90,6 +90,7 @@ import {
   SCRIPT_SCOPE,
   EVAL_SCOPE,
   MODULE_SCOPE,
+  WITH_SCOPE,
 } from '../enum';
 
 import {
@@ -138,6 +139,8 @@ import {
   kMalformedArrowFunParamList,
   kAsyncFunctionInSingleStatementContext,
   kUnexpectedLexicalDeclaration,
+  kNewlineAfterThrow,
+  kStrictWith,
 } from '../MessageTemplate';
 import ParserFormalParameters from './function/ParserFormalParameters';
 import NextArrowFunctionInfo from './function/NextArrowFunctionInfo';
@@ -568,7 +571,7 @@ export default class ParserBase {
    * @param {Boolean} default_export 
    */
   ParseHoistableDeclaration(pos, flags, names, default_export) {
-    // this.CheckStackOverflow(); TODO
+    // this.CheckStackOverflow();
     if ((flags & kIsAsync) !== 0 && this.Check('Token::MUL')) flag |= kIsGenerator;
 
     // 函数名
@@ -972,7 +975,6 @@ export default class ParserBase {
     // 标记有函数体没有大括号
     let has_braces = true;
     let produced_preparse_data = Object.create(null);
-    // StatementListT body(pointer_buffer()); TODO
     let body = [];
     {
       // FunctionState function_state(&function_state_, &scope_, formal_parameters.scope);
@@ -1933,6 +1935,7 @@ export default class ParserBase {
 
   /**
    * 解析continue语句
+   * 'continue' Identifier? ';'
    */
   ParseContinueStatement() {
     let pos = this.peek_position();
@@ -1951,6 +1954,7 @@ export default class ParserBase {
 
   /**
    * 解析break语句
+   * 'break' Identifier? ';'
    */
   ParseBreakStatement(labels) {
     let pos = this.peek_position();
@@ -1973,6 +1977,7 @@ export default class ParserBase {
 
   /**
    * 解析return语句
+   * 'return' [no line terminator] Expression? ';'
    */
   ParseReturnStatement() {
     this.Consume('Token::RETURN');
@@ -2007,6 +2012,78 @@ export default class ParserBase {
     let continuation_pos = this.end_position();
     let stmt = this.BuildReturnStatement(return_value, loc.beg_pos, continuation_pos);
     return stmt;
+  }
+
+  /**
+   * 解析throw语句
+   * 'throw' Expression ';'
+   */
+  ParseThrowStatement() {
+    this.Consume('Token::THROW');
+    let pos = this.position();
+    // throw后面不可另起一行
+    if (this.scanner_.HasLineTerminatorBeforeNext()) throw new Error(kNewlineAfterThrow);
+    let exception = this.ParseExpression();
+    this.ExpectSemicolon();
+
+    let stmt = this.NewThrowStatement(exception, pos);
+    return stmt;
+  }
+
+  /**
+   * 解析with语句
+   * 'with' '(' Expression ')' Statement
+   */
+  ParseWithStatement(labels) {
+    this.Consume('Token::WITH');
+    let pos = this.position();
+    if(is_strict(this.language_mode())) throw new Error(kStrictWith);
+
+    this.Expect('Token::LPAREN');
+    let expr = this.ParseExpression();
+    this.Expect('Token::RPAREN');
+
+    let with_scope = this.NewScope(WITH_SCOPE);
+    let body = null;
+    {
+      // BlockState block_state(&scope_, with_scope);
+      let outer_scope_ = this.scope_;
+      this.scope_ = with_scope;
+      with_scope.start_position_ = this.scanner_.peek_position().beg_pos;
+      body = this.ParseStatement(labels, null);
+      with_scope.end_position_ = this.end_position();
+
+      // 析构
+      this.scope_ = outer_scope_;
+    }
+    return this.ast_node_factory_.NewWithStatement(with_scope, expr, body, pos);
+  }
+
+  /**
+   * 解析switch语句
+   * 'switch' '(' Expression ')' '{' CaseClause* '}'
+   */
+  ParseSwitchStatement(labels) {
+    let switch_pos = this.peek_position();
+    this.Consume('Token::SWITCH');
+    this.Expect('Token::LPAREN');
+    let tag = this.ParseExpression();
+    this.Expect('Token::RPAREN');
+
+    let switch_statement = this.ast_node_factory_.NewSwitchStatement(labels, tag, switch_pos);
+    {
+      // BlockState cases_block_state(zone(), &scope_);
+      let outer_scope_ = this.scope_;
+      this.scope_ = new Scope(this.scope_, BLOCK_SCOPE);
+      this.scope_.start_position_ = switch_pos;
+      this.scope_.scope_nonlinear_ = true;
+      // TargetT target(this, switch_statement);
+
+      let default_seen = false;
+      // TODO
+      // 析构
+      this.scope_ = outer_scope_;
+    }
   }
 
   /**
