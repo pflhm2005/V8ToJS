@@ -190,10 +190,11 @@ const BuildAsciiCharFlags = (c) => {
   (kIsIdentifierPart | (IsDecimalDigit(c) ? kIsIdentifierStart : 0)) : 0) | 
   ((c === ' ' || c === '\t' || c === '\v' || c === '\f') ?
   (kIsWhiteSpace | kIsWhiteSpaceOrLineTerminator) : 0) | 
-  ((c === 'r' || c=== '\n') ? kIsWhiteSpaceOrLineTerminator : 0);
+  ((c === '\r' || c=== '\n') ? kIsWhiteSpaceOrLineTerminator : 0);
 }
 const kAsciiCharFlags = UnicodeToAsciiMapping.map(c => BuildAsciiCharFlags(c));
 export const IsWhiteSpaceOrLineTerminator = (c) => {
+  if(typeof c !== 'number') c = c.charCodeAt();
   // if (!IsInRange(c, 0, 127)) return IsWhiteSpaceOrLineTerminatorSlow(c);
   return kAsciiCharFlags[c] & kIsWhiteSpaceOrLineTerminator;
 }

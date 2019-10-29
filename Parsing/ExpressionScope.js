@@ -99,7 +99,7 @@ class ExpressionScope {
      * 所以这里先将声明部分放入待完成容器中
      */
     if (this.CanBeExpression()) {
-      new ExpressionParsingScope().TrackVariable(result);
+      new ExpressionParsingScope(this.parser_).TrackVariable(result);
     }
     // 简单的单值赋值语句
     else {

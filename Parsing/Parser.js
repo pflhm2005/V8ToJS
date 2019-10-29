@@ -987,7 +987,7 @@ class Parser extends ParserBase {
 
   /**
    * 这个方法主要处理派生类构造函数的返回
-   * 派生类构造函数返回只能是undefined或者类(一般不会使用返回语句）
+   * 派生类构造函数返回只能是undefined或者类(当然一般不会出现返回语句）
    * 当返回是undefined(即未指定返回) 就会返回this
    * 当返回是对象时 就会返回指定对象
    * 这里就将返回语句置换成三元表达式语句 即(return_value === undefined) ? this : return_value
@@ -1008,6 +1008,32 @@ class Parser extends ParserBase {
       this.ast_node_factory_.NewVariableProxy(temp), pos);
     }
     return return_value;
+  }
+  /**
+   * 重写switch语句
+   * @returns {Statement*}
+   */
+  RewriteSwitchStatement(switch_statement, scope) {
+    let switch_block = this.ast_node_factory_.NewBlock(2, false);
+    let tag = switch_statement.tag_;
+    let tag_variable = this.NewTemporary(this.ast_value_factory_.dot_switch_tag_string());
+    let tag_assign = this.ast_node_factory_.NewAssignment('Token::ASSIGN',
+      this.ast_node_factory_.NewVariableProxy(tag_variable), tag, tag.position_);
+    
+    let tag_statement = this.IgnoreCompletion(this.ast_node_factory_.NewExpressionStatement(tag_assign, kNoSourcePosition));
+    switch_block.statement_.push(tag_statement);
+
+    switch_statement.tag_ = this.ast_node_factory_.NewVariableProxy(tag_variable);
+    let cases_block = this.ast_node_factory_.NewBlock(1, false);
+    cases_block.statement_.push(switch_statement);
+    cases_block.scope_ = scope;
+    switch_block.statement_.push(cases_block);
+    return switch_block;
+  }
+  IgnoreCompletion(statement) {
+    let block = this.ast_node_factory_.NewBlock(1, true);
+    block.statement_.push(statement);
+    return block;
   }
 }
 

@@ -141,6 +141,7 @@ import {
   kUnexpectedLexicalDeclaration,
   kNewlineAfterThrow,
   kStrictWith,
+  kMultipleDefaultsInSwitch,
 } from '../MessageTemplate';
 import ParserFormalParameters from './function/ParserFormalParameters';
 import NextArrowFunctionInfo from './function/NextArrowFunctionInfo';
@@ -1654,7 +1655,6 @@ export default class ParserBase {
       then_statement = this.ParseScopedStatement(labels_copy);
       // then_range.end = this.scanner_.location().end_pos;
     }
-
     let else_statement = null;
     if(this.Check('Token::ELSE')) {
       else_statement = this.ParseScopedStatement(labels);
@@ -1983,7 +1983,7 @@ export default class ParserBase {
     this.Consume('Token::RETURN');
     let loc = this.scanner_.location();
 
-    switch(this.GetDeclarationScope().scope_type_) {
+    switch(this.scope_.GetDeclarationScope().scope_type_) {
       case SCRIPT_SCOPE:
       case EVAL_SCOPE:
       case MODULE_SCOPE:
@@ -2062,6 +2062,8 @@ export default class ParserBase {
   /**
    * 解析switch语句
    * 'switch' '(' Expression ')' '{' CaseClause* '}'
+   * 'case' Expression ':' StatementList
+   * 'default' ':' StatementList
    */
   ParseSwitchStatement(labels) {
     let switch_pos = this.peek_position();
@@ -2080,10 +2082,59 @@ export default class ParserBase {
       // TargetT target(this, switch_statement);
 
       let default_seen = false;
-      // TODO
+      this.Expect('Token::LBRACE');
+      while(this.peek() !== 'Token::RBRACE') {
+        let label = null;
+        let statements = [];
+        // 去掉Range相关
+        {
+          /**
+           * 处理case/default条件
+           * 只能有一个default
+           */
+          if(this.Check('Token::CASE')) {
+            label = this.ParseExpression();
+          } else {
+            this.Expect('Token::DEFAULT');
+            if(default_seen) throw new Error(kMultipleDefaultsInSwitch);
+            default_seen = true;
+          }
+          this.Expect('Token::COLON');
+          // 默认解析语句块
+          while(this.peek() !== 'Token::CASE' && this.peek() !== 'Token::DEFAULT' &&
+          this.peek() !== 'Token::RBRACE') {
+            let stat = this.ParseStatementListItem();
+            if(stat === null) return stat;
+            if(stat.IsEmptyStatement()) continue;
+            statements.push(stat);
+          }
+        }
+        let clause = this.ast_node_factory_.NewCaseClause(label, statements);
+        switch_statement.cases_.push(clause);
+      }
+      this.Expect('Token::RBRACE');
+
+      let end_pos = this.end_position();
+      this.scope_.end_position_ = end_pos;
+      let switch_scope = this.scope_.FinalizeBlockScope();
       // 析构
       this.scope_ = outer_scope_;
+      if(switch_scope !== null) {
+        return this.RewriteSwitchStatement(switch_statement, switch_scope);
+      }
+      return switch_statement;
     }
+  }
+
+  /**
+   * 解析Debugger语句
+   * 'debugger' ';'
+   */
+  ParseDebuggerStatement() {
+    let pos = this.peek_position();
+    this.Consume('Token::DEBUGGER');
+    this.ExpectSemicolon();
+    return this.ast_node_factory_.NewDebuggerStatement(pos);
   }
 
   /**
@@ -2553,7 +2604,7 @@ export default class ParserBase {
     accumulation_scope.Accumulate();
     if(parameter.is_parenthesized() || 
     !(this.IsIdentifier(parameter) || parameter.IsPattern() || parameter.IsAssignment())) {
-      throw new Error(kInvalidDestructuringTarget);
+      // throw new Error(kInvalidDestructuringTarget);
     } else if(this.IsIdentifier(parameter)) {
       this.ClassifyParameter(parameter, position, this.end_position());
     } else {

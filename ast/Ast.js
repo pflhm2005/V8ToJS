@@ -73,6 +73,7 @@ import {
   _kThrow,
   _kWithStatement,
   _kSwitchStatement,
+  _kDebuggerStatement,
 } from "../enum";
 
 import {
@@ -104,6 +105,7 @@ import {
   OnAbruptResumeField,
   ReturnStatementTypeField,
   ForceContextAllocationField,
+  IsInRange,
 } from '../util';
 
 // 返回语句 因为被工厂方法引用同时为了规避暂时性死区 放前面
@@ -195,7 +197,7 @@ export class AstNodeFactory {
    * @returns {Assignment}
    */
   NewAssignment(op, target, value, pos) {
-    if (op !== 'Token::INIT' && target.IsVariableProxy()) target.AsVariableProxy().set_is_assigned();
+    if (op !== 'Token::INIT' && target.IsVariableProxy()) target.set_is_assigned();
     if (op === 'Token::ASSIGN' || op === 'Token::INIT') return new Assignment(kAssignment, op, target, value, pos);
     else return new CompoundAssignment(op, target, value, pos, this.NewBinaryOperation(BinaryOpForAssignment(op), target, value, pos + 1));
   }
@@ -234,6 +236,9 @@ export class AstNodeFactory {
     // result.InitializeStatements(statements, null);
     result.statement_ = statements || [];
     return result;
+  }
+  NewCaseClause(label, statements) {
+    return new CaseClause(label, statements);
   }
 
   NewAwait(expression, pos) {
@@ -274,7 +279,10 @@ export class AstNodeFactory {
     return new WithStatement(scope, expression, statement, pos);
   }
   NewSwitchStatement(labels, tag, pos) {
-    return new SwitchStatement(null, labels, tag, pos);
+    return new SwitchStatement(labels, tag, pos);
+  }
+  NewDebuggerStatement(pos) {
+    return new DebuggerStatement(pos);
   }
 
   NewClassLiteralProperty(key, value, kind, is_static, is_computed_name, is_private) {
@@ -318,7 +326,6 @@ class AstNode {
   IsCall() { return this.node_type() === _kCall; }
   IsCallNew() { return this.node_type() === _kCallNew; }
   IsProperty() { return this.node_type() === _kProperty; }
-  IsPattern() { return this.node_type() === _kPattern; }
   IsAssignment() { return this.node_type() === _kAssignment; }
   IsEmptyParentheses() { return this.node_type() === _kEmptyParentheses; }
   IsBinaryOperation() { return this.node_type() === _kBinaryOperation; }
@@ -348,6 +355,12 @@ class Statement extends AstNode {
 class EmptyStatement extends Statement {
   constructor() {
     super(kNoSourcePosition, _kEmptyStatement);
+  }
+}
+
+class DebuggerStatement extends Statement {
+  constructor(pos) {
+    super(pos, _kDebuggerStatement);
   }
 }
 
@@ -434,7 +447,7 @@ class BreakableStatement extends Statement {
 }
 
 class SwitchStatement extends BreakableStatement {
-  constructor(zone, labels, tag, pos) {
+  constructor(labels, tag, pos) {
     super(TARGET_FOR_ANONYMOUS, pos, _kSwitchStatement);
     this.labels_ = labels;
     this.tag_ = tag;
@@ -563,6 +576,7 @@ export class Expression extends AstNode {
     this.bit_field_ = IsParenthesizedField.update(this.bit_field_, false);
   }
   IsNumberLiteral() { return this.IsLiteral() && (this.type() === kHeapNumber || this.type() === kSmi); }
+  IsPattern() { return IsInRange(this.node_type(), _kObjectLiteral, _kArrayLiteral); }
 
   type() { return TypeField.decode(this.bit_field_); }
   ToBooleanIsFalse() { return !this.ToBooleanIsTrue(); }
@@ -954,6 +968,14 @@ export class Variable extends ZoneObject {
   }
   static DefaultInitializationFlag(mode) { return mode === kVar ? kCreatedInitialized : kNeedsInitialization; }
 };
+
+class CaseClause extends ZoneObject {
+  constructor(label, statements) {
+    super();
+    this.label_ = label;
+    this.statement_ = statements;
+  }
+}
 
 /**
  * 

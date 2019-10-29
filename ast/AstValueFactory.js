@@ -22,6 +22,7 @@ export default class AstValueFactory {
   arguments_string() { return 'arguments'; }
   dot_result_string() { return '.result'; }
   dot_generator_object_string() { return '.generator_object'; }
+  dot_switch_tag_string() { return '.switch_tag'; }
   prototype_string() { return 'prototype'; }
   proto_string() { return '__proto__'; }
   empty_string() { return ''; }
