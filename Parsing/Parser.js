@@ -26,6 +26,7 @@ import {
   kMaxArguments,
   kSloppy,
   _kVariableProxy,
+  kNoDuplicateParameters,
 } from '../enum';
 
 import { 
@@ -37,7 +38,7 @@ import {
   kParamAfterRest, 
   kMalformedArrowFunParamList
 } from '../MessageTemplate';
-import { is_strict, is_sloppy, IsDerivedConstructor } from '../util';
+import { is_strict, is_sloppy, IsDerivedConstructor, IsGetterFunction, IsSetterFunction } from '../util';
 import ParserFormalParameters from './function/ParserFormalParameters';
 import { ParameterDeclarationParsingScope } from './ExpressionScope';
 import Parameter from './function/Parameter';
@@ -194,14 +195,7 @@ class Parser extends ParserBase {
 
   GetIdentifier() { return this.GetSymbol(); }
   GetSymbol() { return this.scanner_.CurrentSymbol(this.ast_value_factory_); }
-  SetLanguageMode(scope, mode) {
-    let feature;
-    if(is_sloppy(mode)) feature = kSloppyMode;
-    else if(is_strict) feature = kStrictMode;
-    else this.UNREACHABLE();
-    ++this.use_counts_[feature];
-    this.scope_.SetLanguageMode(mode);
-  }
+
   SetAsmModule() {
     ++this.use_counts_[kUseAsm];
     this.scope_.is_asm_module_ = true;
@@ -530,8 +524,10 @@ class Parser extends ParserBase {
       function_name, scope, body, expected_property_count, num_parameters,
       function_length, duplicate_parameters, function_type,
       eager_compile_hint, pos, true, function_literal_id, produced_preparse_data);
-    function_literal.set_function_token_position(function_type);
-    function_literal.set_suspend_count(suspend_count);
+
+    function_literal.function_token_position_ = function_token_pos;
+    function_literal.suspend_count_ = suspend_count;
+    
 
     // this.RecordFunctionLiteralSourceRange(function_literal);
 
@@ -554,7 +550,7 @@ class Parser extends ParserBase {
     else if (is_strict(mode)) feature = kStrictMode;
     else this.UNREACHABLE();
     ++this.use_counts_[feature];
-    scope.SetLanguageMode(mode);
+    scope.set_language_mode(mode);
   }
   /**
    * TODO 过于麻烦 后面再处理
@@ -877,7 +873,7 @@ class Parser extends ParserBase {
     if(kind === SLOPPY_BLOCK_FUNCTION_VARIABLE) {
       let init = this.function_state_.loop_nesting_depth_ > 0 ? 'Token::ASSIGN' : 'Token::INIT';
       let statement = this.ast_node_factory_.NewSloppyBlockFunctionStatement(end_pos, declaration.var_, init);
-      this.GetDeclarationScope().DeclareSloppyBlockFunction(statement);
+      this.scope_.GetDeclarationScope().DeclareSloppyBlockFunction(statement);
       return statement;
     }
     return this.ast_node_factory_.EmptyStatement();

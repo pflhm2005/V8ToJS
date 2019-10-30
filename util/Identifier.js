@@ -40,6 +40,7 @@ export const IsInRange = (c, lower_limit, higher_limit) => {
 export const AsciiAlphaToLower = (c) => {
   // if (typeof c !== 'number') c = c.charCodeAt();
   // return String.fromCharCode(c | 0x20);
+  if(typeof c !== 'string') return c | 0x20;
   return c.toLowerCase();
 }
 

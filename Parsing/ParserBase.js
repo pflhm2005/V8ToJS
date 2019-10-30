@@ -556,7 +556,7 @@ export default class ParserBase {
     let flags = kIsNormal;
     // function *fn() {}表示Generator函数
     if (this.Check('Token::MUL')) flags |= kIsGenerator;
-    this.ParseHoistableDeclaration(pos, flags, names, default_export);
+    return this.ParseHoistableDeclaration(pos, flags, names, default_export);
   }
   /**
    * 普通函数声明的格式如下(function与*字符串已经在上一个函数中被Consume了):
@@ -623,9 +623,9 @@ export default class ParserBase {
     let functionLiteral = this.ParseFunctionLiteral(name, this.scanner_.location(), name_validity, 
     function_kind, pos, kDeclaration, this.language_mode(), null);
 
-    let mode = (!this.scope_.is_declaration_scope() || this.scope_.is_module_scope()) ? kLet : kVar;
+    let mode = (!this.scope_.is_declaration_scope_ || this.scope_.is_module_scope()) ? kLet : kVar;
     let kind = is_sloppy(this.language_mode()) && 
-    !this.scope_.is_declaration_scope() &&
+    !this.scope_.is_declaration_scope_ &&
     flags === kIsNormal ? SLOPPY_BLOCK_FUNCTION_VARIABLE : NORMAL_VARIABLE;
     let result = this.DeclareFunction(variable_name, functionLiteral, mode, kind, pos, this.end_position(), names);
     // 析构
@@ -946,6 +946,15 @@ export default class ParserBase {
       variable.ForceContextAllocation();
     }
     return variable;
+  }
+
+  CheckFunctionName(language_mode, function_name, function_name_validity, function_name_loc) {
+    if(function_name === null) return;
+    if(function_name_validity === kSkipFunctionNameCheck) return;
+    if(is_sloppy(language_mode)) return;
+
+    if(this.IsEvalOrArguments(function_name)) throw new Error(kStrictEvalArguments);
+    if(function_name_validity === kFunctionNameIsStrictReserved) throw new Error(kUnexpectedStrictReserved);
   }
 
   /**
@@ -1593,7 +1602,7 @@ export default class ParserBase {
     {
       // BlockState block_state(zone(), &scope_);
       let outer_scope_ = this.scope_;
-      this.scope_ = new Scope(this.scope_, BLOCK_SCOPE);
+      this.scope_ = new Scope(null, this.scope_, BLOCK_SCOPE);
       this.scope_.set_start_position(this.peek_position());
       // TargetT target(this, body);
       // 工具方法 暂时不知道干啥的
@@ -1679,7 +1688,7 @@ export default class ParserBase {
     else {
       // BlockState block_state(zone(), &scope_);
       let outer_scope_ = this.scope_;
-      this.scope_ = new Scope(this.scope_, BLOCK_SCOPE);
+      this.scope_ = new Scope(null, this.scope_, BLOCK_SCOPE);
       this.scope_.start_position_ = this.scanner_.location().beg_pos;
       let block = this.ast_node_factory_.NewBlock(1, false);
       let body = this.ParseFunctionDeclaration();
@@ -1766,7 +1775,7 @@ export default class ParserBase {
     if(this.peek() === 'Token::CONST' || (starts_with_let && this.IsNextLetKeyword())) {
       // BlockState for_state(zone(), &scope_);
       let outer_scope_ = this.scope_;
-      this.scope_ = new Scope(this.scope_, BLOCK_SCOPE);
+      this.scope_ = new Scope(null, this.scope_, BLOCK_SCOPE);
       this.scope_.start_position_ = this.position();
 
       // typename FunctionState::FunctionOrEvalRecordingScope recording_scope(function_state_);
@@ -2076,7 +2085,7 @@ export default class ParserBase {
     {
       // BlockState cases_block_state(zone(), &scope_);
       let outer_scope_ = this.scope_;
-      this.scope_ = new Scope(this.scope_, BLOCK_SCOPE);
+      this.scope_ = new Scope(null, this.scope_, BLOCK_SCOPE);
       this.scope_.start_position_ = switch_pos;
       this.scope_.scope_nonlinear_ = true;
       // TargetT target(this, switch_statement);

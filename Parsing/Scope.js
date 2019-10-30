@@ -153,8 +153,6 @@ export default class Scope extends ZoneObject {
   language_mode() { return this.is_strict_ ? kStrict : kSloppy; }
   is_sloppy(language_mode) { return language_mode === kSloppy; }
   is_strict(language_mode) { return language_mode !== kSloppy; }
-
-  outer_scope() { return this.outer_scope_; }
   /**
    * 初始化origin_scope_ 即最外层作用域
    * @param {Isolate*} isolate 
@@ -228,7 +226,7 @@ export default class Scope extends ZoneObject {
   GetDeclarationScope() {
     let scope = this;
     while (!scope.is_declaration_scope_) {
-      scope = scope.outer_scope();
+      scope = scope.outer_scope_;
     }
     return scope;
   }
@@ -563,7 +561,7 @@ export class FunctionDeclarationScope extends DeclarationScope {
    * 所以这个方法可以不用放到Scope上
    */
   DeclareArguments(ast_value_factory) {
-    let { was_added, variable: arguments_ } = this.Declare(null, ast_value_factory.arguments_string(), kVar,
+    let { was_added, variable: arguments_ } = this.Declare(null, ast_value_factory.GetOneByteStringInternal(ast_value_factory.arguments_string()), kVar,
     NORMAL_VARIABLE, kCreatedInitialized, kNotAssigned, false);
     /**
      * 若arguments变量已经被定义 且是通过let、const声明 此时默认的arguments变量为null => function fn(){let arguments = 1;}

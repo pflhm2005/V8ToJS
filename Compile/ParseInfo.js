@@ -123,6 +123,7 @@ export default class ParseInfo {
   is_strict_mode() { return this.GetFlag(kStrictMode); }
 
   set_allow_eval_cache(v) { this.SetFlag(kAllowEvalCache, v); }
+  coverage_enabled() { return this.GetFlag(kCoverageEnabled); }
 
   collect_type_profile() { return this.GetFlag(kCollectTypeProfile); }
   might_always_opt() { return this.GetFlag(kMightAlwaysOpt); }
