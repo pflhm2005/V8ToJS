@@ -87,7 +87,10 @@ export default class Scanner {
     return this.source_.pos() - kCharacterLookaheadBufferSize;
   }
   HasLineTerminatorBeforeNext() {
-    return this.next().after_line_terminator;
+    return this.next_.after_line_terminator;
+  }
+  HasLineTerminatorAfterNext() {
+    return this.next_next_.after_line_terminator;
   }
   // TODO
   literal_contains_escapes() {
@@ -156,8 +159,9 @@ export default class Scanner {
     if (this.next_next().token !== 'Token::UNINITIALIZED') return this.next_next().token;
     let temp = this.next_;
     this.next_ = this.next_next_;
-    this.next().after_line_terminator = false;
+    // 这个地方的顺序修改过 存疑
     this.Scan();
+    this.next_.after_line_terminator = false;
     this.next_next_ = this.next_;
     this.next_ = temp;
     return this.next_next_.token;

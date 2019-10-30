@@ -506,7 +506,7 @@ export default class ParserBase {
          */
         if(next_next !== 'Token::LBRACK' && 
         ((next_next !== 'Token::LBRACE' && next_next !== 'Token::IDENTIFIER') || 
-        this.scanner_.HasLineTerminatorBeforeNext())) {
+        this.scanner_.HasLineTerminatorAfterNext())) {
           break;
         }
         throw new Error(kUnexpectedLexicalDeclaration);
@@ -1586,7 +1586,7 @@ export default class ParserBase {
    * 4、处理作用域之间的交互
    * 5、将statements挂载到body上返回
    */
-  ParseBlock() {
+  ParseBlock(labels) {
     let body = this.ast_node_factory_.NewBlock(false, labels);
     let statements = [];
     // CheckStackOverflow();
