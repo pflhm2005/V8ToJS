@@ -179,3 +179,6 @@ export const MaybeAssignedFlagField = BitField(14, 1);
 export const OnAbruptResumeField = BitField(7, 1);
 
 export const ReturnStatementTypeField = BitField(6, 1);
+
+export const IsPossiblyEvalField = BitField(7, 1);
+export const IsTaggedTemplateField = BitField(8, 1);

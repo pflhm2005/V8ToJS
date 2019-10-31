@@ -315,7 +315,7 @@ class Parser extends ParserBase {
   DeclareVariable(name, kind, mode, init, scope, was_added_params, begin, end = kNoSourcePosition) {
     let declaration;
     // var声明的变量需要提升
-    if (mode === kVar && !scope.is_declaration_scope()) {
+    if (mode === kVar && !scope.is_declaration_scope_) {
       declaration = this.ast_node_factory_.NewNestedVariableDeclaration(scope, begin);
     }
     /**

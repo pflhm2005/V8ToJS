@@ -74,6 +74,8 @@ import {
   _kWithStatement,
   _kSwitchStatement,
   _kDebuggerStatement,
+  NOT_EVAL,
+  IS_POSSIBLY_EVAL,
 } from "../enum";
 
 import {
@@ -106,6 +108,8 @@ import {
   ReturnStatementTypeField,
   ForceContextAllocationField,
   IsInRange,
+  IsPossiblyEvalField,
+  IsTaggedTemplateField,
 } from '../util';
 
 // 返回语句 因为被工厂方法引用同时为了规避暂时性死区 放前面
@@ -300,6 +304,9 @@ export class AstNodeFactory {
     return new FunctionLiteral(null, name, this.ast_value_factory_, scope, body, expected_property_count,
       parameter_count, function_length, function_type, has_duplicate_parameters,
       eager_compile_hint, position, has_braces, function_literal_id, produced_preparse_data);
+  }
+  NewCall(expression, _arguments, pos, possibly_eval = NOT_EVAL) {
+    return new Call(expression, _arguments, pos, possibly_eval);
   }
 
   NewEmptyParentheses(pos) {
@@ -602,6 +609,15 @@ export class Expression extends AstNode {
         this.UNREACHABLE();
     }
     this.UNREACHABLE();
+  }
+}
+
+class Call extends Expression {
+  constructor(expression, _arguments, pos, possibly_eval) {
+    super(pos, _kCall);
+    this.expression_ = expression;
+    this.arguments_ = _arguments;
+    this.bit_field_ |= IsPossiblyEvalField.encode(possibly_eval === IS_POSSIBLY_EVAL) | IsTaggedTemplateField.encode(false);
   }
 }
 

@@ -115,6 +115,12 @@ export default class Scope extends ZoneObject {
     this.unresolved_list_ = [];
 
     this.SetDefaults();
+    if(outer_scope) this.outer_scope_.AddInnerScope(this);
+  }
+  AddInnerScope(inner_scope) {
+    inner_scope.sibling_ = this.inner_scope_;
+    this.inner_scope_ = inner_scope;
+    inner_scope.outer_scope_ = this;
   }
   SetDefaults() {
     this.inner_scope_ = null;
@@ -198,7 +204,7 @@ export default class Scope extends ZoneObject {
     if(this.variables_.occupancy() > 0 || (this.is_declaration_scope_ && calls_sloppy_eval())){
       return this;
     }
-    this.outer_scope.RemoveInnerScope(this);
+    this.outer_scope_.RemoveInnerScope(this);
     // 重新设置作用域关系
     if(this.inner_scope_ !== null) {
       let scope = this.inner_scope_;
@@ -221,6 +227,19 @@ export default class Scope extends ZoneObject {
     this.num_heap_slots_ = 0;
     
     return null;
+  }
+  RemoveInnerScope(inner_scope) {
+    if(inner_scope === this.inner_scope_) {
+      this.inner_scope_ = this.inner_scope_.sibling_;
+      return true;
+    }
+    for(let scope = this.inner_scope_; scope !== null; scope = scope.sibling_) {
+      if(scope.sibling_ === inner_scope) {
+        scope.sibling_ = scope.sibling_.sibling_;
+        return true;
+      }
+    }
+    return false;
   }
   // 这里形成一个作用域链
   GetDeclarationScope() {

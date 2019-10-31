@@ -44,3 +44,4 @@ export const kUnexpectedLexicalDeclaration = 'Lexical declaration cannot appear 
 export const kNewlineAfterThrow = 'Illegal newline after throw';
 export const kStrictWith = 'Strict mode code may not include a with statement';
 export const kMultipleDefaultsInSwitch = 'More than one default clause in switch statement';
+export const kUnterminatedArgList = 'missing ) after argument list';

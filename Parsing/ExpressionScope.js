@@ -111,7 +111,7 @@ class ExpressionScope {
        */
       let variable = this.Declare(name, pos);
       // var声明语句且当前作用域不是函数作用域
-      if (this.IsVarDeclaration() && !this.parser_.scope_.is_declaration_scope()) {
+      if (this.IsVarDeclaration() && !this.parser_.scope_.is_declaration_scope_) {
         this.parser_.scope_.AddUnresolved(result);
       } else {
         result.BindTo(variable);

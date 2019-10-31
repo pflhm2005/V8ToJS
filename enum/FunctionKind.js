@@ -52,3 +52,6 @@ export const kBlock = 1;
 
 export const kYes = 0;
 export const kNo = 1;
+
+export const kCertainlyNotArrowHead = 0;
+export const kMaybeArrowHead = 1;
