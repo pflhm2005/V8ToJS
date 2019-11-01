@@ -27,6 +27,7 @@ import {
   kSloppy,
   _kVariableProxy,
   kNoDuplicateParameters,
+  REFLECT_APPLY_INDEX,
 } from '../enum';
 
 import { 
@@ -552,6 +553,42 @@ class Parser extends ParserBase {
     ++this.use_counts_[feature];
     scope.set_language_mode(mode);
   }
+
+  SpreadCall(_function, args_list, pos, is_possibly_eval) {
+    if(this.OnlyLastArgIsSpread(args_list) || _function.IsSuperCallReference()) {
+      return this.ast_node_factory_.NewCall(_function, args_list, pos);
+    }
+    let args = [];
+    if(_function.IsProperty()) {
+      if(_function.IsSuperAccess()) {
+        let home = this.ThisExpression();
+        args.push(_function);
+        args.push(home);
+      } else {
+        let temp = this.NewTemporary(this.ast_value_factory_.empty_string());
+        let obj = this.ast_node_factory_.NewVariableProxy(temp);
+        let assign_obj = this.ast_node_factory_.NewAssignment('Token::ASSIGN', obj, _function.obj_, kNoSourcePosition);
+        _function = this.ast_node_factory_.NewProperty(assign_obj, _function.key_, kNoSourcePosition);
+        args.push(_function);
+        obj = this.ast_node_factory_.NewVariableProxy(temp);
+        args.push(obj);
+      }
+    } else {
+      args.push(_function);
+      args.push(this.ast_node_factory_.NewUndefinedLiteral(kNoSourcePosition));
+    }
+    args.push(this.ArrayLiteralFromListWithSpread(args_list));
+    return this.ast_node_factory_.NewCallRuntime(REFLECT_APPLY_INDEX, args, pos);
+  }
+  OnlyLastArgIsSpread(args) {
+    for(let i = 0; i < args.length; i++) {
+      if(args[i].IsSpread()) {
+        return false;
+      }
+    }
+    return args[args.length - 1].IsSpread();
+  }
+
   /**
    * TODO 过于麻烦 后面再处理
    * 预编译函数 跳过函数体的解析

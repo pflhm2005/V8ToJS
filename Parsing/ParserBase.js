@@ -93,6 +93,8 @@ import {
   WITH_SCOPE,
   kMaybeArrowHead,
   NOT_EVAL,
+  kCertainlyNotArrowHead,
+  IS_POSSIBLY_EVAL,
 } from '../enum';
 
 import {
@@ -120,6 +122,7 @@ import {
   IsAsyncGeneratorFunction,
   IsDerivedConstructor,
   IsConciseMethod,
+  IsCallable,
 } from '../util';
 
 import {
@@ -2502,6 +2505,10 @@ export default class ParserBase {
     }
     throw new Error('UnexpectedToken');
   }
+  /**
+   * 负责解析复杂标识符 即a[b] a.b a() 等等
+   * @param {Expression*} result 标识符
+   */
   ParseLeftHandSideContinuation(result) {
     /**
      * V8_UNLIKELY
@@ -2544,11 +2551,70 @@ export default class ParserBase {
     }
 
     do {
-      
+      switch (this.peek()) {
+        // IDENTIFIER[index] 数组索引
+        case 'Token::LBRACK': {
+          this.Consume('Token::LBRACK');
+          let pos = this.position();
+          // AcceptINScope scope(this, true);
+          let previous_accept_IN_ = this.accept_IN_;
+          this.accept_IN_ = true;
+          let index = this.ParseExpressionCoverGrammar();
+          result = this.ast_node_factory_.NewProperty(result, index, pos);
+          this.Expect('Token::RBRACK');
+          // 析构
+          this.accept_IN_ = previous_accept_IN_;
+          break;
+        }
+        // IDENTIFIER.xxx 对象取属性
+        case 'Token::PERIOD': {
+          this.Consume('Token::PERIOD');
+          let pos = this.position();
+          let key = this.ParsePropertyOrPrivatePropertyName();
+          result = this.ast_node_factory_.NewProperty(result, key, pos);
+          break;
+        }
+        // 函数调用
+        case 'Token::LPAREN': {
+          let pos;
+          // super,static,get,set等等特殊函数
+          if(IsCallable(this.scanner_.current_token())) {
+            pos = this.position();
+          } else {
+            pos = this.peek_position();
+            if(result.IsFunctionLiteral()) {
+              result.SetShouldEagerCompile();
+              if(this.scope_.is_script_scope()) {
+                result.mark_as_oneshot_iife();
+              }
+            }
+          }
+          let args = [];
+          let has_spread = this.ParseArguments(args);
+
+          let is_possibly_eval = this.CheckPossibleEvalCall(result, this.scope_);
+          if(has_spread) {
+            result = this.SpreadCall(result, args, pos, is_possibly_eval);
+          } else {
+            result = this.ast_node_factory_.NewCall(result, args, pos, is_possibly_eval);
+          }
+
+          this.fni_.RemoveLastFunction();
+          break;
+        }
+        default:
+          break;
+      }
     } while(IsPropertyOrCall(this.peek()));
     return result;
   }
-  ParseArguments(args, maybe_arrow) {
+  /**
+   * 解析函数参数
+   * @param {ExpressionList*} args 参数数组
+   * @param {ParsingArrowHeadFlag} maybe_arrow 是否是箭头函数
+   * @return {Boolean} has_spread 修改了源码函数 返回一个扩展符标记
+   */
+  ParseArguments(args, maybe_arrow = kCertainlyNotArrowHead) {
     let has_spread = false;
     this.Consume('Token::LPAREN');
     let accumulation_scope = new AccumulationScope(this.expression_scope_);
@@ -2584,6 +2650,45 @@ export default class ParserBase {
 
     return has_spread;
   }
+  ParsePropertyOrPrivatePropertyName() {
+    let pos = this.position();
+    let name = null;
+    let key = null;
+    let next = this.Next();
+    // V8_LIKELY
+    if(IsPropertyName(next)) {
+      name = this.GetSymbol();
+      key = this.ast_node_factory_.NewStringLiteral(name, pos);
+    } else if(next === 'Token::PRIVATE_NAME') {
+      let class_scope = this.scope_.GetClassScope();
+      name = this.GetIdentifier();
+      if(class_scope === null) throw new Error(kInvalidPrivateFieldResolution);
+      key = this.ExpressionFromPrivateName(class_scope, name, pos);
+    } else {
+      throw new Error('UnexpectedToken');
+    }
+    this.PushLiteralName(name);
+    return key;
+  }
+  ExpressionFromPrivateName(class_scope, name, start_position) {
+    let proxy = this.ast_node_factory_.NewVariableProxy(name, NORMAL_VARIABLE, start_position);
+    class_scope.AddUnresolvedPrivateName(proxy);
+    return proxy;
+  }
+  CheckPossibleEvalCall(expression, scope) {
+    if(IsIdentifier(expression) && this.IsEval(expression)) {
+      scope.RecordInnerScopeEvalCall();
+      this.function_state_.RecordFunctionOrEvalCall();
+      if(is_sloppy(scope.language_mode())) {
+        scope.GetDeclarationScope().scope_calls_eval_ = true;
+      }
+
+      scope.scope_calls_eval_ = true;
+      return IS_POSSIBLY_EVAL;
+    }
+    return NOT_EVAL;
+  }
+
   /**
    * 这里的所有方法都通过ast_node_factory工厂来生成literal类
    */

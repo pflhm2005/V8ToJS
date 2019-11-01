@@ -1,17 +1,17 @@
 import {
-  kLastLexicalVariableMode, 
+  kLastLexicalVariableMode,
   kAsyncArrowFunction,
-  kAsyncGeneratorFunction, 
-  kArrowFunction, 
-  kAsyncConciseMethod, 
-  kAsyncConciseGeneratorMethod, 
-  kConciseGeneratorMethod, 
-  kClassMembersInitializerFunction, 
-  kBaseConstructor, 
-  kDerivedConstructor, 
-  kGetterFunction, 
+  kAsyncGeneratorFunction,
+  kArrowFunction,
+  kAsyncConciseMethod,
+  kAsyncConciseGeneratorMethod,
+  kConciseGeneratorMethod,
+  kClassMembersInitializerFunction,
+  kBaseConstructor,
+  kDerivedConstructor,
+  kGetterFunction,
   kSetterFunction,
-  kDefaultDerivedConstructor, 
+  kDefaultDerivedConstructor,
   kSloppy,
   kStrict,
   kModule
@@ -24,7 +24,7 @@ export const is_strict = language_mode => language_mode === kStrict;
 /**
  * 表达式类型判定
  */
-export const IsLexicalVariableMode = (mode) =>{
+export const IsLexicalVariableMode = (mode) => {
   return mode <= kLastLexicalVariableMode;
 }
 
@@ -48,19 +48,20 @@ export const IsClassMembersInitializerFunction = (kind) => kind === kClassMember
 
 export const IsArrowOrAssignmentOp = (token) => TokenIsInRange(token, 'ARROW', 'ASSIGN_SUB');
 
-export const IsUnaryOp = op => TokenIsInRange(op, 'ADD', 'VOID');
-export const IsCountOp = op => TokenIsInRange(op, 'INC', 'DEC');
-export const IsUnaryOrCountOp = op => TokenIsInRange(op, 'ADD', 'DEC');
-export const IsShiftOp = op => TokenIsInRange(op, 'SHL', 'SHR');
+export const IsUnaryOp = (op) => TokenIsInRange(op, 'ADD', 'VOID');
+export const IsCountOp = (op) => TokenIsInRange(op, 'INC', 'DEC');
+export const IsUnaryOrCountOp = (op) => TokenIsInRange(op, 'ADD', 'DEC');
+export const IsShiftOp = (op) => TokenIsInRange(op, 'SHL', 'SHR');
 
-export const IsPropertyOrCall = op => TokenIsInRange(op, 'TEMPLATE_SPAN', 'LPAREN');
-export const IsLiteral = token => TokenIsInRange(token, 'NULL_LITERAL', 'STRING');
-export const IsMember = token => TokenIsInRange(token, 'TEMPLATE_SPAN', 'LBRACK');
+export const IsPropertyOrCall = (op) => TokenIsInRange(op, 'TEMPLATE_SPAN', 'LPAREN');
+export const IsLiteral = (token) => TokenIsInRange(token, 'NULL_LITERAL', 'STRING');
+export const IsMember = (token) => TokenIsInRange(token, 'TEMPLATE_SPAN', 'LBRACK');
+export const IsCallable = (token) => TokenIsInRange(token, 'SUPER', 'ESCAPED_STRICT_RESERVED_WORD');
 
-export const IsStrictReservedWord = token => TokenIsInRange(token, 'YIELD', 'ESCAPED_STRICT_RESERVED_WORD');
+export const IsStrictReservedWord = (token) => TokenIsInRange(token, 'YIELD', 'ESCAPED_STRICT_RESERVED_WORD');
 
-export const IsGetterFunction = kind => kind === kGetterFunction;
-export const IsSetterFunction = kind => kind === kSetterFunction;
+export const IsGetterFunction = (kind) => kind === kGetterFunction;
+export const IsSetterFunction = (kind) => kind === kSetterFunction;
 
 export const IsValidIdentifier = (token, language_mode, is_generator, disallow_await) => {
   if (TokenIsInRange(token, 'IDENTIFIER', 'ASYNC')) return true;

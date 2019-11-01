@@ -433,6 +433,13 @@ export default class Scope extends ZoneObject {
     if(maybe_assigned === kMaybeAssigned) variable.set_maybe_assigned();
     return variable;
   }
+  RecordInnerScopeEvalCall() {
+    this.inner_scope_calls_eval_ = true;
+    for(let scope = this.outer_scope_; scope !== null; scope = scope.outer_scope_) {
+      if(scope.inner_scope_calls_eval_) return;
+      scope.inner_scope_calls_eval_ = true;
+    }
+  }
 }
 
 /**
@@ -614,5 +621,8 @@ export class ClassScope extends Scope {
   GetUnresolvedPrivateNameTail() {
     if(this.rare_data_ === null) return [];
     return this.rare_data_.unresolved_private_names.end();
+  }
+  AddUnresolvedPrivateName(proxy) {
+    this.EnsureRareData().unresolved_private_names.push(proxy);
   }
 }

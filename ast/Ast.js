@@ -76,6 +76,9 @@ import {
   _kDebuggerStatement,
   NOT_EVAL,
   IS_POSSIBLY_EVAL,
+  _kProperty,
+  _kSuperCallReference,
+  _kSuperPropertyReference,
 } from "../enum";
 
 import {
@@ -190,6 +193,9 @@ export class AstNodeFactory {
     if(args.length === 3) return new ObjectLiteralProperty(this.ast_value_factory_, ...args);
     // 修正后[kind, key, value, is_computed_name]
     return new ObjectLiteralProperty(args[2], args[0], args[1], args[3]);
+  }
+  NewProperty(obj, key, pos) {
+    return new Property(obj, key, pos);
   }
 
   /**
@@ -338,6 +344,8 @@ class AstNode {
   IsBinaryOperation() { return this.node_type() === _kBinaryOperation; }
   IsNaryOperation() { return this.node_type() === _kNaryOperation; }
   IsSpread() { return this.node_type() === _kSpread; }
+  IsSuperCallReference() { return this.node_type() === _kSuperCallReference; }
+  IsSuperPropertyReference() { return this.node_type() === _kSuperPropertyReference; }
 
   node_type() { return NodeTypeField.decode(this.bit_field_); }
   AsMaterializedLiteral() {
@@ -618,6 +626,17 @@ class Call extends Expression {
     this.expression_ = expression;
     this.arguments_ = _arguments;
     this.bit_field_ |= IsPossiblyEvalField.encode(possibly_eval === IS_POSSIBLY_EVAL) | IsTaggedTemplateField.encode(false);
+  }
+}
+
+class Property extends Expression {
+  constructor(obj, key, pos) {
+    super(pos, _kProperty);
+    this.obj_ = obj;
+    this.key_ = key;
+  }
+  IsSuperAccess() {
+    return this.obj_.IsSuperPropertyReference();
   }
 }
 
