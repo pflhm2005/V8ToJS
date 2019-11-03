@@ -39,4 +39,7 @@ export default class FunctionState extends BlockState {
   set_next_function_is_likely_called() {
     this.next_function_is_likely_called_ = !FLAG_max_lazy;
   }
+  AddProperty() {
+    this.expected_property_count_++;
+  }
 }

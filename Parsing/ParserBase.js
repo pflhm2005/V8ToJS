@@ -95,6 +95,8 @@ import {
   NOT_EVAL,
   kCertainlyNotArrowHead,
   IS_POSSIBLY_EVAL,
+  kHomeObjectSymbol,
+  kNamedExpression,
 } from '../enum';
 
 import {
@@ -123,6 +125,8 @@ import {
   IsDerivedConstructor,
   IsConciseMethod,
   IsCallable,
+  IsAccessorFunction,
+  IsClassConstructor,
 } from '../util';
 
 import {
@@ -147,6 +151,11 @@ import {
   kNewlineAfterThrow,
   kStrictWith,
   kMultipleDefaultsInSwitch,
+  kImportCallNotNewExpression,
+  kUnexpectedPrivateField,
+  kImportMetaOutsideModule,
+  kImportMissingSpecifier,
+  kInvalidEscapedMetaProperty,
 } from '../MessageTemplate';
 import ParserFormalParameters from './function/ParserFormalParameters';
 import NextArrowFunctionInfo from './function/NextArrowFunctionInfo';
@@ -2253,7 +2262,9 @@ export default class ParserBase {
     if (this.IsAssignableIdentifier(expression)) {
       if (expression.is_parenthesized()) throw new Error(kInvalidDestructuringTarget);
       this.expression_scope_.MarkIdentifierAsAssigned();
-    } else if (expression.IsProperty()) throw new Error(kInvalidPropertyBindingPattern);
+    } else if (expression.IsProperty()) {
+      throw new Error(kInvalidPropertyBindingPattern);
+    }
     // 解构赋值
     else if (expression.IsPattern() && op === 'Token::ASSIGN') {
       if (expression.is_parenthesized()) {
@@ -2269,9 +2280,23 @@ export default class ParserBase {
     this.Consume(op);
     let op_position = this.position();
     let right = this.ParseAssignmentExpression();
-    // TODO 连续赋值?
-    if (op === 'Token::ASSIGN') { }
-    else { }
+    // 
+    if (op === 'Token::ASSIGN') {
+      if(this.IsThisProperty(expression)) {
+        this.function_state_.AddProperty();
+      }
+      this.CheckAssigningFunctionLiteralToProperty(expression, right);
+      if(right.IsCall() || right.IsCallNew()) {
+        this.fni_.RemoveLastFunction();
+      } else {
+        this.fni_.Infer();
+      }
+      this.SetFunctionNameFromIdentifierRef(right, expression);
+    }
+    else {
+      // RecordPatternError
+      this.fni_.RemoveLastFunction();
+    }
 
     let result = this.ast_node_factory_.NewAssignment(op, expression, right, op_position);
     // 析构
@@ -2279,7 +2304,8 @@ export default class ParserBase {
     --this.fni_.scope_depth_;
     return result;
   }
-  ParseYieldExpression() { }
+  // TODO
+  ParseYieldExpression() {}
 
   /**
    * Precedence = 3
@@ -2294,7 +2320,8 @@ export default class ParserBase {
     let expression = this.ParseBinaryExpression(4);
     return this.peek() === 'Token::CONDITIONAL' ? this.ParseConditionalContinuation(expression, pos) : expression;
   }
-  ParseConditionalContinuation() { }
+  // TODO
+  ParseConditionalContinuation() {}
   /**
    * Precedence >= 4
    * 处理二元表达式
@@ -2313,7 +2340,8 @@ export default class ParserBase {
     if (prec1 >= prec) return this.ParseBinaryContinuation(x, prec, prec1);
     return x;
   }
-  ParseBinaryContinuation() { }
+  // TODO
+  ParseBinaryContinuation() {}
   /**
    * 处理一元表达式 分为下列情况
    * (1)PostfixExpression
@@ -2366,7 +2394,8 @@ export default class ParserBase {
     // }
     return this.ast_node_factory_.NewCountOperation(op, true, expression, this.position());
   }
-  ParseAwaitExpression() { }
+  // TODO
+  ParseAwaitExpression() {}
   ParsePostfixExpression() {
     let lhs_beg_pos = this.peek_position();
     let expression = this.ParseLeftHandSideExpression();
@@ -2374,6 +2403,8 @@ export default class ParserBase {
     if (!IsCountOp(this.peek()) || this.scanner_.HasLineTerminatorBeforeNext()) return expression;
     return this.ParsePostfixContinuation(expression, lhs_beg_pos);
   }
+  // TODO
+  ParsePostfixContinuation() {}
   /**
    * LeftHandSideExpression
    */
@@ -2456,12 +2487,39 @@ export default class ParserBase {
     /**
      * 简单字面量
      */
-    if (IsLiteral(token)) return this.ExpressionFromLiteral(this.Next(), beg_pos);
+    if (IsLiteral(token)) {
+      return this.ExpressionFromLiteral(this.Next(), beg_pos);
+    }
     /**
      * 处理各种复杂字面量与特殊表达式
      * 比如new、this、[]、{}、super
      */
     switch (token) {
+      case 'Token::NEW':
+        return this.ParseMemberWithPresentNewPrefixesExpression();
+      case 'Token::THIS': {
+        this.Consume('Token::THIS');
+        return this.ThisExpression();
+      }
+
+      case 'Token::ASSIGN_DIV':
+      case 'Token::DIV':
+        return this.ParseRegExpLiteral();
+        
+      case 'Token::FUNCTION':
+        return this.ParseFunctionExpression();
+
+      case 'Token::SUPER': {
+        const is_new = false;
+        return this.ParseSuperExpression(is_new);
+      }
+      case 'Token::IMPORT':
+        if (!allow_harmony_dynamic_import_) break;
+        return this.ParseImportExpressions();
+
+      case 'Token::LBRACK':
+        return this.ParseArrayLiteral();
+
       // [Token::ASSIGN, Token::LBRACE, null]
       case 'Token::LBRACE':
         return this.ParseObjectLiteral();
@@ -2500,6 +2558,21 @@ export default class ParserBase {
         this.accept_IN_ = previous_accept_IN_;
         return expr;
       }
+
+      case 'Token::CLASS': {
+
+      }
+
+      case 'Token::TEMPLATE_SPAN':
+      case 'Token::TEMPLATE_TAIL':
+        return this.ParseTemplateLiteral(null, beg_pos, false);
+
+      case 'Token::MOD':
+        if(this.allow_natives_ || this.extension_ !== null) {
+          return this.ParseV8Intrinsic();
+        }
+        break;
+
       default:
         break;
     }
@@ -2730,21 +2803,34 @@ export default class ParserBase {
         case 'Token::LBRACK': {
           this.Consume('Token::LBRACK');
           let pos = this.position();
-          // TODO
+          // AcceptINScope scope(this, true);
+          let previous_accept_IN_ = this.accept_IN_;
+          this.accept_IN_ = true;
+          let index = this.ParseExpressionCoverGrammar();
+          expression = this.ast_node_factory_.NewProperty(expression, index, pos);
+          this.PushPropertyName(index);
+          this.Expect('Token::RBRACK');
+          // 析构
+          this.accept_IN_ = previous_accept_IN_;
           break;
         }
         case 'Token::PERIOD': {
           this.Consume('Token::PERIOD');
           let pos = this.position();
-          // TODO
+          let key = this.ParsePropertyOrPrivatePropertyName();
+          expression = this.ast_node_factory_.NewProperty(expression, key, pos);
           break;
         }
         default:
           let pos;
-          if (this.scanner_.current_token() === 'Token::IDENTIFIER') pos = this.position();
+          if (this.scanner_.current_token() === 'Token::IDENTIFIER') {
+            pos = this.position();
+          }
           else {
             pos = this.peek_position();
-            // TODO
+            if(expression.IsFunctionLiteral()) {
+              expression.SetShouldEagerCompile();
+            }
           }
           expression = this.ParseTemplateLiteral(expression, pos, true);
           break;
@@ -2809,9 +2895,222 @@ export default class ParserBase {
       this.expression_scope_.RecordNonSimpleParameter();
     }
   }
+  // TODO
+  ParseTemplateLiteral() {}
 
-  ParseTemplateLiteral() { }
+  /**
+   * 解析new表达式
+   * ('new')+ MemberExpression
+   * 'new' '.' 'target'
+   * 注释里面说 new表达式狗的一逼 比如以下的一些例子
+   * new foo.bar().baz => (new (foo.bar)()).baz
+   * new foo()() => (new foo())()
+   * new new foo()() => (new (new foo())())
+   * new new foo => new (new foo)
+   * new new foo() => new (new foo())
+   * new new foo().bar().baz =< (new (new foo()).bar()).baz
+   * 总结起来就是
+   * new会找到后面一连串的MemberExpression中第一个括号 然后进行初始化操作
+   */
+  ParseMemberWithPresentNewPrefixesExpression() {
+    this.Consume('Token::NEW');
+    let new_pos = this.position();
+    let result = null;
+    // CheckStackOverflow();
+    // new super() 然而这个语法根本过不了
+    if(this.peek() === 'Token::SUPER') {
+      const is_new = true;
+      result = this.ParseSuperExpression(is_new);
+    }
+    // new import(xxx)
+    else if(this.allow_harmony_dynamic_import_ && this.peek() === 'Token::IMPORT' &&
+    (!this.allow_harmony_import_meta_ || this.PeekAhead() === 'Token::LPAREN')) {
+      throw new Error(kImportCallNotNewExpression);
+    }
+    // new.target 
+    else if(this.peek() === 'Token::PERIOD') {
+      result = this.ParseNewTargetExpression();
+      return this.ParseMemberExpressionContinuation(result);
+    }
+    // new xxx 
+    else {
+      result = this.ParseMemberExpression();
+    }
+    // ( => 带参数的new表达式
+    if(this.peek() === 'Token::LPAREN') {
+      {
+        let args = [];
+        let has_spread = this.ParseArguments(args);
+        if(has_spread) {
+          result = this.SpreadCallNew(result, args, new_pos);
+        } else {
+          result = this.ast_node_factory_.NewCallNew(result, args, new_pos);
+        }
+      }
+      return this.ParseMemberExpressionContinuation();
+    }
+    // 无参new
+    let args = [];
+    return this.ast_node_factory_.NewCallNew(result, args, new_pos);
+  }
 
+  ParseSuperExpression(is_new) {
+    this.Consume('Token::SUPER');
+    let pos = this.position();
+
+    let scope = this.GetReceiverScope();
+    let kind = scope.function_kind_;
+    if(IsConciseMethod(kind) || IsAccessorFunction(kind) || IsClassConstructor(kind)) {
+      if(IsProperty(this.peek())) {
+        if(this.peek() === 'Token::PERIOD' && this.PeekAhead() === 'Token::PRIVATE_NAME') {
+          this.Consume('Token::PERIOD');
+          this.Consume('Token::PRIVATE_NAME');
+          throw new Error(kUnexpectedPrivateField);
+        }
+        scope.RecordSuperPropertyUsage();
+        this.UseThis();
+        return this.NewSuperPropertyReference();
+      }
+      // 简单讲就是派生类的super()
+      // new super() is never allowed.
+      // super() is only allowed in derived constructor
+      if(!is_new && this.peek() === 'Token::LPAREN' && IsDerivedConstructor(kind)) {
+        this.expression_scope_.RecordThisUse();
+        this.UseThis().set_maybe_assigned();
+        return this.NewSuperCallReference(pos);
+      }
+    }
+    throw new Error(kUnexpectedSuper);
+  }
+  NewSuperPropertyReference(pos) {
+    let this_function_proxy = this.NewUnresolved(this.ast_value_factory_.this_function_string(), pos);
+    let home_object_symbol_literal = this.ast_node_factory_.NewSymbolLiteral(kHomeObjectSymbol, kNoSourcePosition);
+    let home_object = this.ast_node_factory_.NewProperty(this_function_proxy, home_object_symbol_literal, pos);
+    return this.ast_node_factory_.NewSuperPropertyReference(home_object, pos);
+  }
+  NewSuperCallReference(pos) {
+    let new_target_proxy = this.NewUnresolved(this.ast_value_factory_.new_target_string(), pos);
+    let this_function_proxy = this.NewUnresolved(this.ast_value_factory_.this_function_string(), pos);
+    return this.ast_node_factory_.NewSuperCallReference(new_target_proxy, this_function_proxy, pos);
+  }
+  NewUnresolved(name, pos = null, kind = NORMAL_VARIABLE) {
+    // 怀疑函数参数的作用域this有毒
+    if(pos === null ) pos = this.scanner_.location().beg_pos;
+    return this.scope_.NewUnresolved(this.ast_node_factory_, name, pos, kind);
+  }
+
+  /**
+   * 解析函数表达式
+   */
+  ParseFunctionExpression() {
+    this.Consume('Token::FUNCTION');
+    let function_token_position = this.position();
+    let function_kind = this.Check('Token::MUL') ? kGeneratorFunction : kNormalFunction;
+    let name = null;
+    let is_strict_reserved_name = IsStrictReservedWord(this.peek());
+    let function_name_location = new Location().invalid();
+    let function_type = kAnonymousExpression;
+    if(this.ParsingDynamicFunctionDeclaration()) {
+      this.Consume('Token::IDENTIFIER');
+    }
+    // let a = function b() {} 
+    else if(this.peek_any_identifier()) {
+      name = this.ParseIdentifier(function_kind);
+      function_name_location = this.scanner_.location();
+      function_type = kNamedExpression;
+    }
+    let result = this.ParseFunctionLiteral(name, function_name_location,
+      is_strict_reserved_name ? kFunctionNameIsStrictReserved : kFunctionNameValidityUnknown, 
+      function_kind, function_token_position, function_type, this.language_mode(), null);
+    if(result === null) return this.FailureExpression();
+    return result;
+  }
+
+  /**
+   * 解析import表达式
+   */
+  ParseImportExpressions() {
+    this.Consume('Token::IMPORT');
+    let pos = this.position();
+    if(this.allow_harmony_import_meta_ && this.Check('Token::PERIOD')) {
+      this.ExpectContextualKeyword(this.ast_value_factory_.meta_string(), 'import.meta', pos);
+      if(!this.parsing_module_) {
+        throw new Error(kImportMetaOutsideModule);
+      }
+      return this.ImportMetaExpression(pos);
+    }
+    this.Expect('Token::LPAREN');
+    if(this.peek() === 'Token::RPAREN') {
+      throw new Error(kImportMissingSpecifier);
+    }
+    // AcceptINScope scope(this, true);
+    let previous_accept_IN_ = this.accept_IN_;
+    this.accept_IN_ = true;
+    let arg = this.ParseAssignmentExpressionCoverGrammar();
+    this.Expect('Token::RPAREN');
+
+    // 析构
+    this.accept_IN_ = previous_accept_IN_;
+    return this.ast_node_factory_.NewImportCallExpression(arg, pos);
+  }
+
+  /**
+   * 解析数组字面量
+   * '[' Expression? (',' Expression?)* ']'
+   */
+  ParseArrayLiteral() {
+    let pos = this.peek_position();
+    let values = [];
+    let first_spread_index = -1;
+    this.Consume('Token::LBRACK');
+    let accumulation_scope = new AccumulationScope(this.expression_scope_);
+
+    while(!this.Check('Token::RBRACK')) {
+      let elem;
+      if(this.peek() === 'Token::COMMA') {
+        elem = this.ast_node_factory_.NewTheHoleLiteral();
+      } else if(this.Check('Token::ELLIPSIS')) {
+        let start_pos = this.position();
+        let expr_pos = this.peek_position();
+        // AcceptINScope scope(this, true);
+        let previous_accept_IN_ = this.accept_IN_;
+        this.accept_IN_ = true;
+        let argument = this.ParsePossibleDestructuringSubPattern(accumulation_scope);
+        elem = this.ast_node_factory_.NewSpread(argument, start_pos, expr_pos);
+
+        if(first_spread_index < 0) {
+          first_spread_index = values.length;
+        }
+
+        if(argument.IsAssignment()) {
+          throw new Error(kInvalidDestructuringTarget);
+        }
+
+        if(this.peek() === 'Token::COMMA') {
+          throw new Error(kElementAfterRest);
+        }
+
+        this.accept_IN_ = previous_accept_IN_;
+      } else {
+        // AcceptINScope scope(this, true);
+        let previous_accept_IN_ = this.accept_IN_;
+        this.accept_IN_ = true;
+        elem = this.ParsePossibleDestructuringSubPattern(accumulation_scope);
+
+        this.accept_IN_ = previous_accept_IN_;
+      }
+      values.Add(elem);
+      if(this.peek() !== 'Token::RBRACK') {
+        this.Expect('Token::COMMA');
+        if(elem.IsFailureExpression()) return elem;
+      }
+    }
+    return this.ast_node_factory_.NewArrayLiteral(values, first_spread_index, pos);
+  }
+  ParsePossibleDestructuringSubPattern(scope) {
+    
+  }
+ 
   /**
    * 解析对象字面量
    * '{' (PropertyDefinition (',' PropertyDefinition)* ','? )? '}'
@@ -2825,7 +3124,7 @@ export default class ParserBase {
      * ScopedPtrList作为一个公共变量容器 在作用域结束时会进行还原
      */
     // let start_ = this.pointer_buffer_.length;
-    let properties = this.pointer_buffer_.slice();
+    let properties = [];
     // 引用属性计数
     let number_of_boilerplate_properties = 0;
     // 是否存在待计算的键 { ['a' + 'b']: 1, ...object } 都是需要计算的
@@ -3208,6 +3507,15 @@ export default class ParserBase {
     this.SetFunctionName(value, name, prefix);
   }
 
+  ExpectContextualKeyword(name, fullname = null, pos = -1) {
+    this.Expect('Token::IDENTIFIER');
+    if(this.scanner_.CurrentSymbol(this.ast_value_factory_).literal_bytes_ !== name) {
+      throw new Error('UnexpectedToken');
+    }
+    if(this.scanner_.literal_contains_escapes()) {
+      throw new Error(kInvalidEscapedMetaProperty);
+    }
+  }
   // 一般用于处理成对Token的闭合推断
   Expect(token) {
     let next = this.Next();

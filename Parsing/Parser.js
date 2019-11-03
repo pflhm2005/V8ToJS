@@ -28,6 +28,7 @@ import {
   _kVariableProxy,
   kNoDuplicateParameters,
   REFLECT_APPLY_INDEX,
+  kInlineGetImportMetaObject,
 } from '../enum';
 
 import { 
@@ -179,12 +180,24 @@ class Parser extends ParserBase {
     if(expression.node_type() === _kVariableProxy) return !expression.is_new_target();
     return false;
   }
+  IsThisProperty(expression) {
+    return expression !== null && expression.obj_.IsThisExpression();
+  }
+  CheckAssigningFunctionLiteralToProperty(left, right) {
+    if(left.IsProperty() && right.IsFunctionLiteral()) {
+      right.set_pretenure();
+    }
+  }
   IsStringLiteral(statement, arg = null) {
     if(statement === null) return false;
     let literal = statement.expression_;
     if(literal === null || !literal.IsString()) return false;
     return arg === null || literal.AsRawString() === arg;
   }
+  ParsingDynamicFunctionDeclaration() {
+    return this.parameters_end_pos_ !== kNoSourcePosition;
+  }
+
   EmptyIdentifierString() { return this.ast_value_factory_.empty_string(); }
   NullExpression() { return Object.create(null); }
   NullIdentifier() { return Object.create(null); }
@@ -192,6 +205,11 @@ class Parser extends ParserBase {
   NewTemporary(name) { return this.scope_.NewTemporary(name); }
   NewThrowStatement(exception, pos) {
     return this.ast_node_factory_.NewExpressionStatement(this.ast_node_factory_.NewThrow(exception, pos), pos);
+  }
+
+  ImportMetaExpression(pos) {
+    let args = [];
+    return this.ast_node_factory_.NewCallRuntime(kInlineGetImportMetaObject, args, pos);
   }
 
   GetIdentifier() { return this.GetSymbol(); }
@@ -220,6 +238,13 @@ class Parser extends ParserBase {
 
   PushEnclosingName(name) {
     this.fni_.PushEnclosingName(name);
+  }
+  PushPropertyName(expression) {
+    if(expression.IsPropertyName()) {
+      this.fni_.PushLiteralName(expression.AsRawPropertyName());
+    } else {
+      this.fni_.PushLiteralName(this.ast_value_factory_.computed_string());
+    }
   }
   AddFunctionForNameInference(func_to_infer) {
     this.fni_.AddFunction(func_to_infer);
@@ -771,7 +796,7 @@ class Parser extends ParserBase {
   // 为形参注入一个作用域
   BuildParameterInitializationBlock(parameters) {
     // ScopedPtrList<Statement> init_statements(pointer_buffer());
-    let init_statements = this.pointer_buffer_.slice();
+    let init_statements = [];
     let index = 0;
     for(let parameter of parameters.params) {
       /**

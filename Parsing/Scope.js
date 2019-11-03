@@ -433,6 +433,11 @@ export default class Scope extends ZoneObject {
     if(maybe_assigned === kMaybeAssigned) variable.set_maybe_assigned();
     return variable;
   }
+  NewUnresolved(factory, name, start_pos, kind = NORMAL_VARIABLE) {
+    let proxy = factory.NewVariableProxy(name, kind, start_pos);
+    this.AddUnresolved(proxy);
+    return proxy;
+  }
   RecordInnerScopeEvalCall() {
     this.inner_scope_calls_eval_ = true;
     for(let scope = this.outer_scope_; scope !== null; scope = scope.outer_scope_) {
@@ -485,6 +490,9 @@ class DeclarationScope extends Scope {
   }
   parameter(index) {
     return this.params_[index];
+  }
+  RecordSuperPropertyUsage() {
+    this.scope_uses_super_property_ = true;
   }
   DeclareGeneratorObjectVar(name) {
     let result = this.NewTemporary(name, kNotAssigned);

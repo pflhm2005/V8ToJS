@@ -79,6 +79,9 @@ import {
   _kProperty,
   _kSuperCallReference,
   _kSuperPropertyReference,
+  _kCallRuntime,
+  _kImportCallExpression,
+  _kFailureExpression,
 } from "../enum";
 
 import {
@@ -86,7 +89,6 @@ import {
   BreakableTypeField,
   IgnoreCompletionField,
   IsLabeledField,
-  HashMap,
   IsResolvedField,
   HasElementsField,
   HasRestPropertyField,
@@ -113,7 +115,10 @@ import {
   IsInRange,
   IsPossiblyEvalField,
   IsTaggedTemplateField,
+  Pretenure,
 } from '../util';
+
+import { AstValueFactory } from './AstValueFactory';
 
 // 返回语句 因为被工厂方法引用同时为了规避暂时性死区 放前面
 const kNormal = 0;
@@ -160,6 +165,9 @@ export class AstNodeFactory {
   NewSmiLiteral(number, pos) {
     return new Literal(kSmi, number, pos);
   }
+  NewArrayLiteral(values, first_spread_index, pos) {
+    return ArrayLiteral(values, first_spread_index, pos);
+  }
   NewObjectLiteral(properties, boilerplate_properties, pos, has_rest_property) {
     return new ObjectLiteral(properties, boilerplate_properties, pos, has_rest_property);
   }
@@ -168,6 +176,9 @@ export class AstNodeFactory {
   }
   NewStringLiteral(string, pos) {
     return new Literal(kString, string, pos);
+  }
+  NewSymbolLiteral(symbol, pos) {
+    return new Literal(kSymbol, symbol, pos);
   }
   /**
    * 存在重载 在内部区分 工厂方法保持唯一
@@ -324,6 +335,20 @@ export class AstNodeFactory {
     this.this_expression_.clear_parenthesized();
     return this.this_expression_;
   }
+
+  NewSuperPropertyReference(home_object, pos) {
+    return new SuperPropertyReference(home_object, pos);
+  }
+  NewSuperCallReference(new_target_var, this_function_var, pos) {
+    return new SuperCallReference(new_target_var, this_function_var, pos);
+  }
+
+  NewCallRuntime(fnc, args, pos) {
+    return new CallRuntime(fnc, args, pos);
+  }
+  NewImportCallExpression(args, pos) {
+    return new ImportCallExpression(args, pos);
+  }
 }
 
 class AstNode {
@@ -346,6 +371,8 @@ class AstNode {
   IsSpread() { return this.node_type() === _kSpread; }
   IsSuperCallReference() { return this.node_type() === _kSuperCallReference; }
   IsSuperPropertyReference() { return this.node_type() === _kSuperPropertyReference; }
+  IsThisExpression() { return this.node_type() === _kThisExpression; }
+  IsFailureExpression() { return this.node_type() === _kFailureExpression; }
 
   node_type() { return NodeTypeField.decode(this.bit_field_); }
   AsMaterializedLiteral() {
@@ -590,6 +617,9 @@ export class Expression extends AstNode {
   clear_parenthesized() {
     this.bit_field_ = IsParenthesizedField.update(this.bit_field_, false);
   }
+  IsPropertyName() {
+    return false;
+  }
   IsNumberLiteral() { return this.IsLiteral() && (this.type() === kHeapNumber || this.type() === kSmi); }
   IsPattern() { return IsInRange(this.node_type(), _kObjectLiteral, _kArrayLiteral); }
 
@@ -620,12 +650,46 @@ export class Expression extends AstNode {
   }
 }
 
+class FailureExpression extends Expression {
+  super(kNoSourcePosition, _kFailureExpression);
+}
+
 class Call extends Expression {
   constructor(expression, _arguments, pos, possibly_eval) {
     super(pos, _kCall);
     this.expression_ = expression;
     this.arguments_ = _arguments;
     this.bit_field_ |= IsPossiblyEvalField.encode(possibly_eval === IS_POSSIBLY_EVAL) | IsTaggedTemplateField.encode(false);
+  }
+}
+
+class SuperPropertyReference extends Expression {
+  constructor(home_object, pos) {
+    super(pos, _kSuperCallReference);
+    this.home_object_ = home_object;
+  }
+}
+
+class SuperCallReference extends Expression {
+  constructor(new_target_var, this_function_var, pos) {
+    super(pos, _kSuperCallReference);
+    this.new_target_var_ = new_target_var;
+    this.this_function_var_ = this_function_var;
+  }
+}
+
+class CallRuntime extends Expression {
+  constructor(fnc, args, pos) {
+    super(pos, _kCallRuntime);
+    this.function_ = fnc;
+    this.arguments_ = args || [];
+  }
+}
+
+class ImportCallExpression extends Expression {
+  constructor(args, pos) {
+    super(pos, _kImportCallExpression);
+    this.arguments_ = args;
   }
 }
 
@@ -707,7 +771,12 @@ class Literal extends Expression{
   }
   AsLiteral() {}
   IsString() { return this.type = kString; }
+  IsPropertyName() {
+    if(this.type !== kString) return true;
+    return !AstValueFactory.GetOneByteString(this.val()).AsArrayIndex().is_array_index;
+  }
   AsRawString() { return this.val(); }
+  AsRawPropertyName() { return this.val(); }
   Hash() {
     return this.IsString() ? 
     this.AsRawString().Hash() : 
@@ -844,6 +913,14 @@ class AggregateLiteral extends MaterializedLiteral {
   }
 }
 
+class ArrayLiteral extends AggregateLiteral {
+  constructor(values, first_spread_index, pos) {
+    super(pos, _kArrayLiteral);
+    this.first_spread_index_ = first_spread_index;
+    this.values_ = values || [];
+  }
+}
+
 class ObjectLiteral extends AggregateLiteral {
  constructor(properties, boilerplate_properties, pos, has_rest_property) {
     super(pos, _kObjectLiteral);
@@ -940,6 +1017,9 @@ class FunctionLiteral extends Expression {
   }
   CanSuspend() {
     return this.suspend_count_ > 0;
+  }
+  set_pretenure() {
+    this.bit_field_ = Pretenure.update(this.bit_field_, true);
   }
 }
 

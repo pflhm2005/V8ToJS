@@ -57,3 +57,5 @@ export const _kUnaryOperation = 52;
 export const _kVariableProxy = 53;
 export const _kYield = 54;
 export const _kYieldStar = 55;
+
+export const _kFailureExpression = 56;

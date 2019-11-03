@@ -45,3 +45,11 @@ export const kNewlineAfterThrow = 'Illegal newline after throw';
 export const kStrictWith = 'Strict mode code may not include a with statement';
 export const kMultipleDefaultsInSwitch = 'More than one default clause in switch statement';
 export const kUnterminatedArgList = 'missing ) after argument list';
+
+export const kImportCallNotNewExpression = 'Cannot use new with import';
+export const kUnexpectedPrivateField = 'Unexpected private field';
+export const kUnexpectedSuper = "'super' keyword unexpected here";
+
+export const kImportMetaOutsideModule = "Cannot use 'import.meta' outside a module";
+export const kImportMissingSpecifier = 'import() requires a specifier';
+export const kInvalidEscapedMetaProperty = 'must not contain escaped characters';

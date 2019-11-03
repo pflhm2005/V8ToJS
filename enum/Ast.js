@@ -21,3 +21,5 @@ export const ITERATE = 0; // for of
 
 export const IS_POSSIBLY_EVAL = 0;
 export const NOT_EVAL = 0;
+
+export const kHomeObjectSymbol = 0;

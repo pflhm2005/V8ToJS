@@ -35,6 +35,8 @@ export default class AstValueFactory {
   set_space_string() { return 'set'; }
   native_string() { return 'native'; }
   of_string() { return 'of'; }
+  computed_string() { return '<computed>'; }
+  meta_string() { return 'meta'; }
 
   empty_cons_string() { return this.empty_cons_string_; }
   NewConsString(str1 = null, str2 = null) {
