@@ -1,4 +1,4 @@
-import { IsUppercase } from "../util";
+import { IsUppercase } from "../../util";
 
 const kEnclosingConstructorName = 0;
 const kLiteralName = 1;

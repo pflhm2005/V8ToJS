@@ -11,7 +11,7 @@ import Scope, { FunctionDeclarationScope, ScriptDeclarationScope } from './Scope
 
 import FunctionState from './function/FunctionState';
 import { ClassInfo, ForInfo } from './Info';
-import { FuncNameInferrer } from './FuncNameInferrer';
+import { FuncNameInferrer } from './function/FuncNameInferrer';
 
 import ParsePropertyInfo from './object/ParsePropertyInfo';
 
@@ -2676,7 +2676,7 @@ export default class ParserBase {
     return proxy;
   }
   CheckPossibleEvalCall(expression, scope) {
-    if(IsIdentifier(expression) && this.IsEval(expression)) {
+    if(this.IsIdentifier(expression) && this.IsEval(expression)) {
       scope.RecordInnerScopeEvalCall();
       this.function_state_.RecordFunctionOrEvalCall();
       if(is_sloppy(scope.language_mode())) {
