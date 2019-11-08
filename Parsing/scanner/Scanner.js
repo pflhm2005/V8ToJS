@@ -201,11 +201,12 @@ export default class Scanner {
    */
   ScanSingleToken() {
     let token = null;
+    let char = '';
     do {
       this.next().location.beg_pos = this.source_pos();
       if (this.c0_ < kMaxAscii && this.c0_ > 0) {
         token = UnicodeToToken[this.c0_];
-
+        char = String.fromCharCode(this.c0_);
         switch(token) {
           case 'Token::LPAREN':
           case 'Token::RPAREN':
@@ -227,9 +228,9 @@ export default class Scanner {
           case 'Token::LT':
             // < <= << <<= <!--
             this.Advance();
-            if (this.c0_ === '=') return this.Select('Token::LTE');
-            if (this.c0_ === '<') return this.Select('=', 'Token::ASSIGN_SHL', 'Token::SHL');
-            if (this.c0_ === '!') {
+            if (char === '=') return this.Select('Token::LTE');
+            if (char === '<') return this.Select('=', 'Token::ASSIGN_SHL', 'Token::SHL');
+            if (char === '!') {
               token = this.ScanHtmlComment();
               continue;
             }
@@ -238,41 +239,41 @@ export default class Scanner {
           case 'Token::GT':
             // > >= >> >>= >>> >>>=
             this.Advance();
-            if (this.c0_ === '=') return this.Select('Token::GTE');
-            if (this.c0_ === '>') {
+            if (char === '=') return this.Select('Token::GTE');
+            if (char === '>') {
               // >> >>= >>> >>>=
               this.Advance();
-              if (this.c0_ === '=') return this.Select('Token::ASSIGN_SAR');
-              if (this.c0_ === '>') return this.Select('=', 'Token::ASSIGN_SHR', 'Token::SHR');
+              if (char === '=') return this.Select('Token::ASSIGN_SAR');
+              if (char === '>') return this.Select('=', 'Token::ASSIGN_SHR', 'Token::SHR');
               return 'Token::SAR';
             }
             return 'Token::GT';
 
           case 'Token::ASSIGN':
             this.Advance();
-            if (UnicodeToAsciiMapping[this.c0_] === '=') return this.Select('=',' Token::EQ_STRICT', 'Token::EQ');
-            if (UnicodeToAsciiMapping[this.c0_] === '>') return this.Select('Token::ARROW');
+            if (char === '=') return this.Select('=',' Token::EQ_STRICT', 'Token::EQ');
+            if (char === '>') return this.Select('Token::ARROW');
             return 'Token::ASSIGN';
           
           case 'Token::NOT':
             // ! != !==
             this.Advance();
-            if (this.c0_ === '=') return this.Select('=', 'Token::NE_STRICT', 'Token::NE');
+            if (char === '=') return this.Select('=', 'Token::NE_STRICT', 'Token::NE');
             return 'Token::NOT';
 
           case 'Token::ADD':
             // + ++ +=
             this.Advance();
-            if (this.c0_ === '+') return this.Select('Token::INC');
-            if (this.c0_ === '=') return this.Select('Token::ASSIGN_ADD');
+            if (char === '+') return this.Select('Token::INC');
+            if (char === '=') return this.Select('Token::ASSIGN_ADD');
             return 'Token::ADD';
           
           case 'Token::SUB':
             // - -- --> -=
             this.Advance();
-            if (this.c0_ === '-') {
+            if (char === '-') {
               this.Advance();
-              if (this.c0_ === '>' && this.next().after_line_terminator) {
+              if (char === '>' && this.next().after_line_terminator) {
                 // For compatibility with SpiderMonkey, we skip lines that
                 // start with an HTML comment end '-->'.
                 token = this.SkipSingleHTMLComment();
@@ -280,14 +281,14 @@ export default class Scanner {
               }
               return 'Token::DEC';
             }
-            if (this.c0_ === '=') return this.Select('Token::ASSIGN_SUB');
+            if (char === '=') return this.Select('Token::ASSIGN_SUB');
             return 'Token::SUB';
           
           case 'Token::MUL':
             // * *=
             this.Advance();
-            if (this.c0_ === '*') return this.Select('=', 'Token::ASSIGN_EXP', 'Token::EXP');
-            if (this.c0_ === '=') return this.Select('Token::ASSIGN_MUL');
+            if (char === '*') return this.Select('=', 'Token::ASSIGN_EXP', 'Token::EXP');
+            if (char === '=') return this.Select('Token::ASSIGN_MUL');
             return 'Token::MUL';
 
           case 'Token::MOD':
@@ -297,7 +298,7 @@ export default class Scanner {
           case 'Token::DIV':
             // /  // /* /=
             this.Advance();
-            if (this.c0_ === '/') {
+            if (char === '/') {
               let c = this.Peek();
               if (c === '#' || c === '@') {
                 this.Advance();
@@ -308,25 +309,25 @@ export default class Scanner {
               token = this.SkipSingleLineComment();
               continue;
             }
-            if (this.c0_ === '*') {
+            if (char === '*') {
               token = this.SkipMultiLineComment();
               continue;
             }
-            if (this.c0_ === '=') return this.Select('Token::ASSIGN_DIV');
+            if (char === '=') return this.Select('Token::ASSIGN_DIV');
             return 'Token::DIV';
           
           case 'Token::BIT_AND':
             // & && &=
             this.Advance();
-            if (this.c0_ === '&') return this.Select('Token::AND');
-            if (this.c0_ === '=') return this.Select('Token::ASSIGN_BIT_AND');
+            if (char === '&') return this.Select('Token::AND');
+            if (char === '=') return this.Select('Token::ASSIGN_BIT_AND');
             return 'Token::BIT_AND';
           
           case 'Token::BIT_OR':
             // | || |=
             this.Advance();
-            if (this.c0_ === '|') return this.Select('Token::OR');
-            if (this.c0_ === '=') return this.Select('Token::ASSIGN_BIT_OR');
+            if (char === '|') return this.Select('Token::OR');
+            if (char === '=') return this.Select('Token::ASSIGN_BIT_OR');
             return 'Token::BIT_OR';
 
           case 'Token::BIT_XOR':
@@ -337,7 +338,7 @@ export default class Scanner {
             // . Number
             this.Advance();
             if (IsDecimalDigit(this.c0_)) return this.ScanNumber(true);
-            if (this.c0_ === '.') {
+            if (char === '.') {
               if (this.Peek() === '.') {
                 this.Advance();
                 this.Advance();
@@ -797,20 +798,25 @@ export default class Scanner {
     this.next().raw_literal_chars.Start();
     const capture_raw = true;
     while(true) {
-      let c = this.c0_;
-      if(c === '`') {
+      let char = String.fromCharCode(this.c0_);
+      // ``代表空字符串 直接标记为结尾
+      if(char === '`') {
         this.Advance();
         result = 'Token::TEMPLATE_TAIL';
         break;
-      } else if(c === '$' && this.Peek() === '{') {
+      }
+      // `xxx${ 返回 
+      else if(char === '$' && this.Peek() === '{') {
         this.Advance();
         this.Advance();
         break;
-      } else if(c === '\\') {
+      }
+      // `\x 转移字符
+      else if(char === '\\') {
         this.Advance();
         if(capture_raw) this.AddRawLiteralChar('\\');
         if(IsLineTerminator(this.c0_)) {
-          let lastChar = this.c0_;
+          let lastChar = String.fromCharCode(this.c0_);
           this.Advance();
           if(lastChar === '\r') {
             if(this.c0_ === '\n') this.Advance();
@@ -818,16 +824,22 @@ export default class Scanner {
           }
           if(capture_raw) this.AddRawLiteralChar(lastChar);
         }
-      } else if(c < 0) {
+      }
+      // 异常情况 
+      else if(this.c0_ < 0) {
         break;
-      } else {
+      }
+      // `xx 普通字符串 
+      else {
         this.Advance();
-        if(c === '\r') {
-          if(this.c0_ === '\n') this.Advance();
-          c = '\n';
+        // \r、\r\n统一被处理为\n
+        if(char === '\r') {
+          // \r\n
+          if(char === '\n') this.Advance();
+          char = '\n';
         }
-        if(capture_raw) this.AddRawLiteralChar(c);
-        this.AddLiteralChar(c);
+        if(capture_raw) this.AddRawLiteralChar(this.c0_);
+        this.AddLiteralChar(this.c0_);
       }
     }
     this.next().location.end_pos = this.source_pos();
