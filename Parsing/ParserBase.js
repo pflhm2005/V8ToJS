@@ -156,6 +156,7 @@ import {
   kImportMetaOutsideModule,
   kImportMissingSpecifier,
   kInvalidEscapedMetaProperty,
+  kUnterminatedTemplateExpr,
 } from '../MessageTemplate';
 import ParserFormalParameters from './function/ParserFormalParameters';
 import NextArrowFunctionInfo from './function/NextArrowFunctionInfo';
@@ -2282,11 +2283,11 @@ export default class ParserBase {
     let right = this.ParseAssignmentExpression();
     // 
     if (op === 'Token::ASSIGN') {
-      if(this.IsThisProperty(expression)) {
+      if (this.IsThisProperty(expression)) {
         this.function_state_.AddProperty();
       }
       this.CheckAssigningFunctionLiteralToProperty(expression, right);
-      if(right.IsCall() || right.IsCallNew()) {
+      if (right.IsCall() || right.IsCallNew()) {
         this.fni_.RemoveLastFunction();
       } else {
         this.fni_.Infer();
@@ -2305,7 +2306,7 @@ export default class ParserBase {
     return result;
   }
   // TODO
-  ParseYieldExpression() {}
+  ParseYieldExpression() { }
 
   /**
    * Precedence = 3
@@ -2321,7 +2322,7 @@ export default class ParserBase {
     return this.peek() === 'Token::CONDITIONAL' ? this.ParseConditionalContinuation(expression, pos) : expression;
   }
   // TODO
-  ParseConditionalContinuation() {}
+  ParseConditionalContinuation() { }
   /**
    * Precedence >= 4
    * 处理二元表达式
@@ -2341,7 +2342,7 @@ export default class ParserBase {
     return x;
   }
   // TODO
-  ParseBinaryContinuation() {}
+  ParseBinaryContinuation() { }
   /**
    * 处理一元表达式 分为下列情况
    * (1)PostfixExpression
@@ -2395,7 +2396,7 @@ export default class ParserBase {
     return this.ast_node_factory_.NewCountOperation(op, true, expression, this.position());
   }
   // TODO
-  ParseAwaitExpression() {}
+  ParseAwaitExpression() { }
   ParsePostfixExpression() {
     let lhs_beg_pos = this.peek_position();
     let expression = this.ParseLeftHandSideExpression();
@@ -2404,7 +2405,7 @@ export default class ParserBase {
     return this.ParsePostfixContinuation(expression, lhs_beg_pos);
   }
   // TODO
-  ParsePostfixContinuation() {}
+  ParsePostfixContinuation() { }
   /**
    * LeftHandSideExpression
    */
@@ -2505,7 +2506,7 @@ export default class ParserBase {
       case 'Token::ASSIGN_DIV':
       case 'Token::DIV':
         return this.ParseRegExpLiteral();
-        
+
       case 'Token::FUNCTION':
         return this.ParseFunctionExpression();
 
@@ -2560,7 +2561,17 @@ export default class ParserBase {
       }
 
       case 'Token::CLASS': {
-
+        this.Consume('Token::CLASS');
+        let class_token_pos = this.position();
+        let name = null;
+        let is_strict_reserved_name = false;
+        let class_name_location = new Location().invalid();
+        if (this.peek_any_identifier()) {
+          name = this.ParseAndClassifyIdentifier(this.Next());
+          class_name_location = this.scanner_.location();
+          is_strict_reserved_name = IsStrictReservedWord(this.scanner_.current_token());
+        }
+        return this.ParseClassLiteral(name, class_name_location, is_strict_reserved_name, class_token_pos);
       }
 
       case 'Token::TEMPLATE_SPAN':
@@ -2568,7 +2579,7 @@ export default class ParserBase {
         return this.ParseTemplateLiteral(null, beg_pos, false);
 
       case 'Token::MOD':
-        if(this.allow_natives_ || this.extension_ !== null) {
+        if (this.allow_natives_ || this.extension_ !== null) {
           return this.ParseV8Intrinsic();
         }
         break;
@@ -2592,35 +2603,35 @@ export default class ParserBase {
      * 脑瘫才这么写
      */
     if (this.peek() === 'Token::LPAREN' && this.IsIdentifier(result) &&
-    this.scanner_.current_token() === 'Token::ASYNC' &&
-    !this.scanner_.HasLineTerminatorBeforeNext() &&
-    !this.scanner_.literal_contains_escapes()) {
+      this.scanner_.current_token() === 'Token::ASYNC' &&
+      !this.scanner_.HasLineTerminatorBeforeNext() &&
+      !this.scanner_.literal_contains_escapes()) {
       let pos = this.position();
       let maybe_arrow = new ArrowHeadParsingScope(this, kAsyncArrowFunction);
       // Scope::Snapshot scope_snapshot(scope());
       let args = [];
       let has_spread = this.ParseArguments(args, kMaybeArrowHead);
       // V8_LIKELY
-      if(this.peek() === 'Token::ARROW') {
+      if (this.peek() === 'Token::ARROW') {
         this.fni_.RemoveAsyncKeywordFromEnd();
         this.next_arrow_function_info_ = maybe_arrow.ValidateAndCreateScope();
         // scope_snapshot.Reparent(next_arrow_function_info_.scope);
         // async () => ...
-        if(!args.length) return this.ast_node_factory_.NewEmptyParentheses(pos);
+        if (!args.length) return this.ast_node_factory_.NewEmptyParentheses(pos);
         // async (a, b, c) => ...
         let result = this.ExpressionListToExpression(args);
         result.mark_parenthesized();
         return result;
       }
 
-      if(has_spread) {
+      if (has_spread) {
         result = this.SpreadCall(result, args, pos, NOT_EVAL);
       } else {
         result = this.ast_node_factory_.NewCall(result, args, pos, NOT_EVAL);
       }
 
       this.fni_.RemoveLastFunction();
-      if(!IsPropertyOrCall(this.peek())) return result;
+      if (!IsPropertyOrCall(this.peek())) return result;
     }
 
     do {
@@ -2651,13 +2662,13 @@ export default class ParserBase {
         case 'Token::LPAREN': {
           let pos;
           // super,static,get,set等等特殊函数
-          if(IsCallable(this.scanner_.current_token())) {
+          if (IsCallable(this.scanner_.current_token())) {
             pos = this.position();
           } else {
             pos = this.peek_position();
-            if(result.IsFunctionLiteral()) {
+            if (result.IsFunctionLiteral()) {
               result.SetShouldEagerCompile();
-              if(this.scope_.is_script_scope()) {
+              if (this.scope_.is_script_scope()) {
                 result.mark_as_oneshot_iife();
               }
             }
@@ -2666,7 +2677,7 @@ export default class ParserBase {
           let has_spread = this.ParseArguments(args);
 
           let is_possibly_eval = this.CheckPossibleEvalCall(result, this.scope_);
-          if(has_spread) {
+          if (has_spread) {
             result = this.SpreadCall(result, args, pos, is_possibly_eval);
           } else {
             result = this.ast_node_factory_.NewCall(result, args, pos, is_possibly_eval);
@@ -2678,7 +2689,7 @@ export default class ParserBase {
         default:
           break;
       }
-    } while(IsPropertyOrCall(this.peek()));
+    } while (IsPropertyOrCall(this.peek()));
     return result;
   }
   /**
@@ -2691,7 +2702,7 @@ export default class ParserBase {
     let has_spread = false;
     this.Consume('Token::LPAREN');
     let accumulation_scope = new AccumulationScope(this.expression_scope_);
-    while(this.peek() !== 'Token::RPAREN') {
+    while (this.peek() !== 'Token::RPAREN') {
       let start_pos = this.peek_position();
       let is_spread = this.Check('Token::ELLIPSIS');
       let expr_pos = this.peek_position();
@@ -2700,26 +2711,26 @@ export default class ParserBase {
       this.accept_IN_ = true;
       let argument = this.ParseAssignmentExpressionCoverGrammar();
       // V8_UNLIKELY
-      if(maybe_arrow === kMaybeArrowHead) {
+      if (maybe_arrow === kMaybeArrowHead) {
         this.ClassifyArrowParameter(accumulation_scope, expr_pos, argument);
-        if(is_spread) {
+        if (is_spread) {
           this.expression_scope_.RecordNonSimpleParameter();
-          if(argument.IsAssignment()) throw new Error(kRestDefaultInitializer);
-          if(this.peek() === 'Token::COMMA') throw new Error(kParamAfterRest);
+          if (argument.IsAssignment()) throw new Error(kRestDefaultInitializer);
+          if (this.peek() === 'Token::COMMA') throw new Error(kParamAfterRest);
         }
       }
-      if(is_spread) {
+      if (is_spread) {
         has_spread = true;
         argument = this.ast_node_factory_.NewSpread(argument, start_pos, expr_pos);
       }
       args.push(argument);
-      if(!this.Check('Token::COMMA')) break;
+      if (!this.Check('Token::COMMA')) break;
       // 析构
       this.accept_IN_ = previous_accept_IN_;
     }
 
-    if(args.length > kMaxArguments) throw new Error(kTooManyArguments);
-    if(!this.Check('Token::RPAREN')) throw new Error(kUnterminatedArgList);
+    if (args.length > kMaxArguments) throw new Error(kTooManyArguments);
+    if (!this.Check('Token::RPAREN')) throw new Error(kUnterminatedArgList);
 
     return has_spread;
   }
@@ -2729,13 +2740,13 @@ export default class ParserBase {
     let key = null;
     let next = this.Next();
     // V8_LIKELY
-    if(IsPropertyName(next)) {
+    if (IsPropertyName(next)) {
       name = this.GetSymbol();
       key = this.ast_node_factory_.NewStringLiteral(name, pos);
-    } else if(next === 'Token::PRIVATE_NAME') {
+    } else if (next === 'Token::PRIVATE_NAME') {
       let class_scope = this.scope_.GetClassScope();
       name = this.GetIdentifier();
-      if(class_scope === null) throw new Error(kInvalidPrivateFieldResolution);
+      if (class_scope === null) throw new Error(kInvalidPrivateFieldResolution);
       key = this.ExpressionFromPrivateName(class_scope, name, pos);
     } else {
       throw new Error('UnexpectedToken');
@@ -2749,10 +2760,10 @@ export default class ParserBase {
     return proxy;
   }
   CheckPossibleEvalCall(expression, scope) {
-    if(this.IsIdentifier(expression) && this.IsEval(expression)) {
+    if (this.IsIdentifier(expression) && this.IsEval(expression)) {
       scope.RecordInnerScopeEvalCall();
       this.function_state_.RecordFunctionOrEvalCall();
-      if(is_sloppy(scope.language_mode())) {
+      if (is_sloppy(scope.language_mode())) {
         scope.GetDeclarationScope().scope_calls_eval_ = true;
       }
 
@@ -2828,7 +2839,7 @@ export default class ParserBase {
           }
           else {
             pos = this.peek_position();
-            if(expression.IsFunctionLiteral()) {
+            if (expression.IsFunctionLiteral()) {
               expression.SetShouldEagerCompile();
             }
           }
@@ -2895,8 +2906,53 @@ export default class ParserBase {
       this.expression_scope_.RecordNonSimpleParameter();
     }
   }
-  // TODO
-  ParseTemplateLiteral() {}
+
+  /**
+   * 解析模板字符串
+   */
+  ParseTemplateLiteral(tag, start, tagged) {
+    if (tagged) {
+      this.allow_eval_cache_ = false;
+    }
+    let is_valid = true;
+    // let forbid_illegal_escapes = !tagged;
+    if (this.peek() === 'Token::TEMPLATE_TAIL') {
+      this.Consume('Token::TEMPLATE_TAIL');
+      let pos = this.position();
+      let ts = this.OpenTemplateLiteral(pos);
+      // let is_valid = this.CheckTemplateEscapes(forbid_illegal_escapes);
+      this.AddTemplateSpan(ts, is_valid, true);
+      return this.CloseTemplateLiteral(ts, start, tag);
+    }
+
+    this.Consume('Token::TEMPLATE_SPAN');
+    let pos = this.position();
+    let ts = this.OpenTemplateLiteral(pos);
+    // let is_valid = this.CheckTemplateEscapes(forbid_illegal_escapes);
+    this.AddTemplateSpan(ts, is_valid, false);
+    let next = null;
+    do {
+      next = this.peek();
+      // let expr_pos = this.peek_position();
+      // AcceptINScope scope(this, true);
+      let previous_accept_IN_ = this.accept_IN_;
+      this.accept_IN_ = true;
+      let expression = this.ParseExpressionCoverGrammar();
+      this.AddTemplateExpression(ts, expression);
+      // ${}
+      if (this.peek() !== 'Token::RBRACE') {
+        throw new Error(kUnterminatedTemplateExpr);
+      }
+      next = this.scanner_.ScanTemplateContinuation();
+      pos = this.position();
+
+      // let is_valid = CheckTemplateEscapes(forbid_illegal_escapes);
+      this.AddTemplateSpan(ts, is_valid, next === 'Token::TEMPLATE_TAIL');
+      // 析构
+      this.accept_IN_ = previous_accept_IN_;
+    } while (next === 'Token::TEMPLATE_SPAN');
+    return this.CloseTemplateLiteral(ts, start, tag);
+  }
 
   /**
    * 解析new表达式
@@ -2918,17 +2974,17 @@ export default class ParserBase {
     let result = null;
     // CheckStackOverflow();
     // new super() 然而这个语法根本过不了
-    if(this.peek() === 'Token::SUPER') {
+    if (this.peek() === 'Token::SUPER') {
       const is_new = true;
       result = this.ParseSuperExpression(is_new);
     }
     // new import(xxx)
-    else if(this.allow_harmony_dynamic_import_ && this.peek() === 'Token::IMPORT' &&
-    (!this.allow_harmony_import_meta_ || this.PeekAhead() === 'Token::LPAREN')) {
+    else if (this.allow_harmony_dynamic_import_ && this.peek() === 'Token::IMPORT' &&
+      (!this.allow_harmony_import_meta_ || this.PeekAhead() === 'Token::LPAREN')) {
       throw new Error(kImportCallNotNewExpression);
     }
     // new.target 
-    else if(this.peek() === 'Token::PERIOD') {
+    else if (this.peek() === 'Token::PERIOD') {
       result = this.ParseNewTargetExpression();
       return this.ParseMemberExpressionContinuation(result);
     }
@@ -2937,11 +2993,11 @@ export default class ParserBase {
       result = this.ParseMemberExpression();
     }
     // ( => 带参数的new表达式
-    if(this.peek() === 'Token::LPAREN') {
+    if (this.peek() === 'Token::LPAREN') {
       {
         let args = [];
         let has_spread = this.ParseArguments(args);
-        if(has_spread) {
+        if (has_spread) {
           result = this.SpreadCallNew(result, args, new_pos);
         } else {
           result = this.ast_node_factory_.NewCallNew(result, args, new_pos);
@@ -2960,9 +3016,9 @@ export default class ParserBase {
 
     let scope = this.GetReceiverScope();
     let kind = scope.function_kind_;
-    if(IsConciseMethod(kind) || IsAccessorFunction(kind) || IsClassConstructor(kind)) {
-      if(IsProperty(this.peek())) {
-        if(this.peek() === 'Token::PERIOD' && this.PeekAhead() === 'Token::PRIVATE_NAME') {
+    if (IsConciseMethod(kind) || IsAccessorFunction(kind) || IsClassConstructor(kind)) {
+      if (IsProperty(this.peek())) {
+        if (this.peek() === 'Token::PERIOD' && this.PeekAhead() === 'Token::PRIVATE_NAME') {
           this.Consume('Token::PERIOD');
           this.Consume('Token::PRIVATE_NAME');
           throw new Error(kUnexpectedPrivateField);
@@ -2974,7 +3030,7 @@ export default class ParserBase {
       // 简单讲就是派生类的super()
       // new super() is never allowed.
       // super() is only allowed in derived constructor
-      if(!is_new && this.peek() === 'Token::LPAREN' && IsDerivedConstructor(kind)) {
+      if (!is_new && this.peek() === 'Token::LPAREN' && IsDerivedConstructor(kind)) {
         this.expression_scope_.RecordThisUse();
         this.UseThis().set_maybe_assigned();
         return this.NewSuperCallReference(pos);
@@ -2995,7 +3051,7 @@ export default class ParserBase {
   }
   NewUnresolved(name, pos = null, kind = NORMAL_VARIABLE) {
     // 怀疑函数参数的作用域this有毒
-    if(pos === null ) pos = this.scanner_.location().beg_pos;
+    if (pos === null) pos = this.scanner_.location().beg_pos;
     return this.scope_.NewUnresolved(this.ast_node_factory_, name, pos, kind);
   }
 
@@ -3010,19 +3066,19 @@ export default class ParserBase {
     let is_strict_reserved_name = IsStrictReservedWord(this.peek());
     let function_name_location = new Location().invalid();
     let function_type = kAnonymousExpression;
-    if(this.ParsingDynamicFunctionDeclaration()) {
+    if (this.ParsingDynamicFunctionDeclaration()) {
       this.Consume('Token::IDENTIFIER');
     }
     // let a = function b() {} 
-    else if(this.peek_any_identifier()) {
+    else if (this.peek_any_identifier()) {
       name = this.ParseIdentifier(function_kind);
       function_name_location = this.scanner_.location();
       function_type = kNamedExpression;
     }
     let result = this.ParseFunctionLiteral(name, function_name_location,
-      is_strict_reserved_name ? kFunctionNameIsStrictReserved : kFunctionNameValidityUnknown, 
+      is_strict_reserved_name ? kFunctionNameIsStrictReserved : kFunctionNameValidityUnknown,
       function_kind, function_token_position, function_type, this.language_mode(), null);
-    if(result === null) return this.FailureExpression();
+    if (result === null) return this.FailureExpression();
     return result;
   }
 
@@ -3032,15 +3088,15 @@ export default class ParserBase {
   ParseImportExpressions() {
     this.Consume('Token::IMPORT');
     let pos = this.position();
-    if(this.allow_harmony_import_meta_ && this.Check('Token::PERIOD')) {
+    if (this.allow_harmony_import_meta_ && this.Check('Token::PERIOD')) {
       this.ExpectContextualKeyword(this.ast_value_factory_.meta_string(), 'import.meta', pos);
-      if(!this.parsing_module_) {
+      if (!this.parsing_module_) {
         throw new Error(kImportMetaOutsideModule);
       }
       return this.ImportMetaExpression(pos);
     }
     this.Expect('Token::LPAREN');
-    if(this.peek() === 'Token::RPAREN') {
+    if (this.peek() === 'Token::RPAREN') {
       throw new Error(kImportMissingSpecifier);
     }
     // AcceptINScope scope(this, true);
@@ -3065,11 +3121,17 @@ export default class ParserBase {
     this.Consume('Token::LBRACK');
     let accumulation_scope = new AccumulationScope(this.expression_scope_);
 
-    while(!this.Check('Token::RBRACK')) {
+    while (!this.Check('Token::RBRACK')) {
       let elem;
-      if(this.peek() === 'Token::COMMA') {
+      // 直接逗号会被解析为洞
+      if (this.peek() === 'Token::COMMA') {
         elem = this.ast_node_factory_.NewTheHoleLiteral();
-      } else if(this.Check('Token::ELLIPSIS')) {
+      }
+      /**
+       * 处理扩展运算符
+       * 注: Check已经将运算符Consume了
+       */
+      else if (this.Check('Token::ELLIPSIS')) {
         let start_pos = this.position();
         let expr_pos = this.peek_position();
         // AcceptINScope scope(this, true);
@@ -3078,20 +3140,22 @@ export default class ParserBase {
         let argument = this.ParsePossibleDestructuringSubPattern(accumulation_scope);
         elem = this.ast_node_factory_.NewSpread(argument, start_pos, expr_pos);
 
-        if(first_spread_index < 0) {
+        if (first_spread_index < 0) {
           first_spread_index = values.length;
         }
 
-        if(argument.IsAssignment()) {
+        if (argument.IsAssignment()) {
           throw new Error(kInvalidDestructuringTarget);
         }
 
-        if(this.peek() === 'Token::COMMA') {
+        if (this.peek() === 'Token::COMMA') {
           throw new Error(kElementAfterRest);
         }
 
         this.accept_IN_ = previous_accept_IN_;
-      } else {
+      }
+      // 正常情况 
+      else {
         // AcceptINScope scope(this, true);
         let previous_accept_IN_ = this.accept_IN_;
         this.accept_IN_ = true;
@@ -3099,18 +3163,33 @@ export default class ParserBase {
 
         this.accept_IN_ = previous_accept_IN_;
       }
-      values.Add(elem);
-      if(this.peek() !== 'Token::RBRACK') {
+      values.push(elem);
+      if (this.peek() !== 'Token::RBRACK') {
         this.Expect('Token::COMMA');
-        if(elem.IsFailureExpression()) return elem;
+        if (elem.IsFailureExpression()) return elem;
       }
     }
     return this.ast_node_factory_.NewArrayLiteral(values, first_spread_index, pos);
   }
   ParsePossibleDestructuringSubPattern(scope) {
-    
+    if (scope) scope.Accumulate();
+    let begin = this.peek_position();
+    let result = this.ParseAssignmentExpressionCoverGrammar();
+    if (IsValidReferenceExpression(result)) {
+      if (this.IsIdentifier(result)) {
+        if (result.is_parenthesized()) {
+          throw new Error(kInvalidDestructuringTarget);
+        }
+        this.ClassifyParameter(result, begin, this.end_position());
+      } else {
+        throw new Error(kInvalidPropertyBindingPattern);
+      }
+    } else if (result.is_parenthesized() || (!result.IsPattern() && !result.IsAssignment())) {
+      throw new Error(kInvalidDestructuringTarget);
+    }
+    return result;
   }
- 
+
   /**
    * 解析对象字面量
    * '{' (PropertyDefinition (',' PropertyDefinition)* ','? )? '}'
@@ -3509,10 +3588,10 @@ export default class ParserBase {
 
   ExpectContextualKeyword(name, fullname = null, pos = -1) {
     this.Expect('Token::IDENTIFIER');
-    if(this.scanner_.CurrentSymbol(this.ast_value_factory_).literal_bytes_ !== name) {
+    if (this.scanner_.CurrentSymbol(this.ast_value_factory_).literal_bytes_ !== name) {
       throw new Error('UnexpectedToken');
     }
-    if(this.scanner_.literal_contains_escapes()) {
+    if (this.scanner_.literal_contains_escapes()) {
       throw new Error(kInvalidEscapedMetaProperty);
     }
   }

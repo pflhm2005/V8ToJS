@@ -53,3 +53,5 @@ export const kUnexpectedSuper = "'super' keyword unexpected here";
 export const kImportMetaOutsideModule = "Cannot use 'import.meta' outside a module";
 export const kImportMissingSpecifier = 'import() requires a specifier';
 export const kInvalidEscapedMetaProperty = 'must not contain escaped characters';
+
+export const kUnterminatedTemplateExpr = 'Missing } in template expression';

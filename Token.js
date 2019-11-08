@@ -6,7 +6,7 @@ import Scanner from './Parsing/scanner/Scanner';
 import Stream from './Parsing/scanner/Stream';
 
 // 在这里设置待编译字符串
-const source_code = "foo();";
+const source_code = "`dadasdasd${123123}dddd`; let a = 1";
 
 let stream = new Stream(source_code);
 let scanner = new Scanner(stream);

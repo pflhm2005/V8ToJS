@@ -82,6 +82,8 @@ import {
   _kCallRuntime,
   _kImportCallExpression,
   _kFailureExpression,
+  _kTemplateLiteral,
+  _kGetTemplateObject,
 } from "../enum";
 
 import {
@@ -166,7 +168,7 @@ export class AstNodeFactory {
     return new Literal(kSmi, number, pos);
   }
   NewArrayLiteral(values, first_spread_index, pos) {
-    return ArrayLiteral(values, first_spread_index, pos);
+    return new ArrayLiteral(values, first_spread_index, pos);
   }
   NewObjectLiteral(properties, boilerplate_properties, pos, has_rest_property) {
     return new ObjectLiteral(properties, boilerplate_properties, pos, has_rest_property);
@@ -180,6 +182,17 @@ export class AstNodeFactory {
   NewSymbolLiteral(symbol, pos) {
     return new Literal(kSymbol, symbol, pos);
   }
+
+  NewTemplateLiteral(string_parts, substitutions, pos) {
+    return new TemplateLiteral(string_parts, substitutions, pos);
+  }
+  NewGetTemplateObject(cooked_strings, raw_strings, pos) {
+    return new GetTemplateObject(cooked_strings, raw_strings, pos);
+  }
+  NewTaggedTemplate(expression, args, pos) {
+    return new Call(expression, args, pos, 0)
+  }
+
   /**
    * 存在重载 在内部区分 工厂方法保持唯一
    * 3参时 构造函数会添加ast_value_factory_作为第一个参数 最后总的还是4个
@@ -322,8 +335,8 @@ export class AstNodeFactory {
       parameter_count, function_length, function_type, has_duplicate_parameters,
       eager_compile_hint, position, has_braces, function_literal_id, produced_preparse_data);
   }
-  NewCall(expression, _arguments, pos, possibly_eval = NOT_EVAL) {
-    return new Call(expression, _arguments, pos, possibly_eval);
+  NewCall(expression, args, pos, possibly_eval = NOT_EVAL) {
+    return new Call(expression, args, pos, possibly_eval);
   }
 
   NewEmptyParentheses(pos) {
@@ -655,10 +668,10 @@ class FailureExpression extends Expression {
 }
 
 class Call extends Expression {
-  constructor(expression, _arguments, pos, possibly_eval) {
+  constructor(expression, args, pos, possibly_eval) {
     super(pos, _kCall);
     this.expression_ = expression;
-    this.arguments_ = _arguments;
+    this.arguments_ = args;
     this.bit_field_ |= IsPossiblyEvalField.encode(possibly_eval === IS_POSSIBLY_EVAL) | IsTaggedTemplateField.encode(false);
   }
 }
@@ -690,6 +703,22 @@ class ImportCallExpression extends Expression {
   constructor(args, pos) {
     super(pos, _kImportCallExpression);
     this.arguments_ = args;
+  }
+}
+
+class TemplateLiteral extends Expression {
+  constructor(parts, substitutions, pos) {
+    super(pos, _kTemplateLiteral);
+    this.string_parts_ = parts;
+    this.substitutions_ = substitutions;
+  }
+}
+
+class GetTemplateObject extends Expression {
+  constructor(cooked_strings, raw_strings, pos) {
+    super(pos, _kGetTemplateObject);
+    this.cooked_strings_ = cooked_strings;
+    this.raw_strings_ = raw_strings;
   }
 }
 

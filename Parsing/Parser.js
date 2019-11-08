@@ -1,9 +1,9 @@
 import ParserBase from './ParserBase';
 import FunctionState from './function/FunctionState';
 
-import { 
-  PARSE_EAGERLY, 
-  kNoSourcePosition, 
+import {
+  PARSE_EAGERLY,
+  kNoSourcePosition,
   kUseCounterFeatureCount,
   kVar,
   PARAMETER_VARIABLE,
@@ -31,13 +31,13 @@ import {
   kInlineGetImportMetaObject,
 } from '../enum';
 
-import { 
+import {
   kParamDupe,
-  kVarRedeclaration, 
-  kArgStringTerminatesParametersEarly, 
-  kUnexpectedEndOfArgString, 
-  kTooManyParameters, 
-  kParamAfterRest, 
+  kVarRedeclaration,
+  kArgStringTerminatesParametersEarly,
+  kUnexpectedEndOfArgString,
+  kTooManyParameters,
+  kParamAfterRest,
   kMalformedArrowFunParamList
 } from '../MessageTemplate';
 import { is_strict, is_sloppy, IsDerivedConstructor, IsGetterFunction, IsSetterFunction } from '../util';
@@ -57,7 +57,7 @@ import { Variable } from '../ast/Ast';
 class Parser extends ParserBase {
   constructor(info) {
     super(null, info.scanner_, info.stack_limit_, info.extension_, info.ast_value_factory_,
-      info.pending_error_handler_, info.runtime_call_stats_, info.logger_,0, info.is_module(), true);
+      info.pending_error_handler_, info.runtime_call_stats_, info.logger_, 0, info.is_module(), true);
     this.info_ = info;
     // this.scanner = info.scanner_;
     this.preparser_zone_ = null;
@@ -121,7 +121,7 @@ class Parser extends ParserBase {
       this.function_state_ = new FunctionState(null, this.scope_, scope);
       // 这里暂时不知道是新的内存空间还是旧的
       let body = [];
-      if (this.parsing_module_) {}
+      if (this.parsing_module_) { }
       else if (info.is_wrapped_as_function()) this.ParseWrapped(isolate, info, body, scope, null);
       else {
         this.scope_.set_language_mode(info.is_strict_mode());
@@ -153,14 +153,14 @@ class Parser extends ParserBase {
     info.script_scope_ = script_scope;
     this.original_scope_ = script_scope;
   }
-  ParseWrapped() {}
+  ParseWrapped() { }
 
   parse_lazily() { return this.mode_ === PARSE_LAZILY; }
   // 判断是否可以懒编译这个函数字面量
   AllowsLazyParsingWithoutUnresolvedVariables() {
     return this.scope_.AllowsLazyParsingWithoutUnresolvedVariables(this.original_scope_);
   }
-  
+
   // RecordFunctionLiteralSourceRange(node) {
   //   if(this.source_range_map_ === null) return;
   //   this.source_range_map_.Insert(node, new FunctionLiteralSourceRanges);
@@ -177,21 +177,21 @@ class Parser extends ParserBase {
    * @param {Expression}} expression 
    */
   IsIdentifier(expression) {
-    if(expression.node_type() === _kVariableProxy) return !expression.is_new_target();
+    if (expression.node_type() === _kVariableProxy) return !expression.is_new_target();
     return false;
   }
   IsThisProperty(expression) {
     return expression !== null && expression.obj_.IsThisExpression();
   }
   CheckAssigningFunctionLiteralToProperty(left, right) {
-    if(left.IsProperty() && right.IsFunctionLiteral()) {
+    if (left.IsProperty() && right.IsFunctionLiteral()) {
       right.set_pretenure();
     }
   }
   IsStringLiteral(statement, arg = null) {
-    if(statement === null) return false;
+    if (statement === null) return false;
     let literal = statement.expression_;
-    if(literal === null || !literal.IsString()) return false;
+    if (literal === null || !literal.IsString()) return false;
     return arg === null || literal.AsRawString() === arg;
   }
   ParsingDynamicFunctionDeclaration() {
@@ -201,7 +201,7 @@ class Parser extends ParserBase {
   EmptyIdentifierString() { return this.ast_value_factory_.empty_string(); }
   NullExpression() { return Object.create(null); }
   NullIdentifier() { return Object.create(null); }
-  
+
   NewTemporary(name) { return this.scope_.NewTemporary(name); }
   NewThrowStatement(exception, pos) {
     return this.ast_node_factory_.NewExpressionStatement(this.ast_node_factory_.NewThrow(exception, pos), pos);
@@ -240,7 +240,7 @@ class Parser extends ParserBase {
     this.fni_.PushEnclosingName(name);
   }
   PushPropertyName(expression) {
-    if(expression.IsPropertyName()) {
+    if (expression.IsPropertyName()) {
       this.fni_.PushLiteralName(expression.AsRawPropertyName());
     } else {
       this.fni_.PushLiteralName(this.ast_value_factory_.computed_string());
@@ -264,12 +264,12 @@ class Parser extends ParserBase {
      * 只是利用了bit_field_属性
      * 把这些特殊方法直接放到公共父类expression上
      */
-    if(literal !== null) {
-      if(op === 'Token::NOT') return this.ast_node_factory_.NewBooleanLiteral(literal.ToBooleanIsFalse(), pos);
+    if (literal !== null) {
+      if (op === 'Token::NOT') return this.ast_node_factory_.NewBooleanLiteral(literal.ToBooleanIsFalse(), pos);
       // 处理数字字面量
-      else if(literal.IsNumberLiteral()) {
+      else if (literal.IsNumberLiteral()) {
         // double value = literal->AsNumber(); 又做了一次转换
-        switch(op) {
+        switch (op) {
           case 'case Token::ADD':
             return literal;
           case 'Token::SUB':
@@ -286,12 +286,12 @@ class Parser extends ParserBase {
   // 突然发现这里的参数是从0开始计数 有点蒙
   ExpressionListToExpression(args) {
     let expr = args[0];
-    if(args.length === 1) return expr;
-    if(args.length === 2) {
+    if (args.length === 1) return expr;
+    if (args.length === 2) {
       return this.ast_node_factory_.NewBinaryOperation('Token::COMMA', expr, args[1], args[1].position());
     }
     let result = this.ast_node_factory_.NewNaryOperation('Token::COMMA', expr, args.length - 1);
-    for(let i = 0; i < args.length; i++) {
+    for (let i = 0; i < args.length; i++) {
       result.AddSubsequent(args[i], args[i].position());
     }
     return result;
@@ -330,7 +330,7 @@ class Parser extends ParserBase {
   DeclareBoundVariable(name, mode, pos) {
     let proxy = this.ast_node_factory_.NewVariableProxy(name, NORMAL_VARIABLE, this.position());
     let { variable } = this.DeclareVariable(name, NORMAL_VARIABLE, mode, Variable.DefaultInitializationFlag(mode),
-    this.scope_, false /* was_added */, pos, this.end_position());
+      this.scope_, false /* was_added */, pos, this.end_position());
     proxy.BindTo(variable);
     return proxy;
   }
@@ -352,7 +352,7 @@ class Parser extends ParserBase {
     else {
       declaration = this.ast_node_factory_.NewVariableDeclaration(begin);
     }
-    let was_added = this.Declare(declaration, name, kind, mode, init, scope, was_added_params. begin, end);
+    let was_added = this.Declare(declaration, name, kind, mode, init, scope, was_added_params.begin, end);
     return { variable: declaration.var_, was_added };
   }
   Declare(declaration, name, variable_kind, mode, init, scope, was_added_params, var_begin_pos, var_end_pos) {
@@ -422,7 +422,7 @@ class Parser extends ParserBase {
    * @param {ZonePtrList} arguments_for_wrapped_function null
    * @returns {FunctionLiteral} 返回一个函数字面量
    */
-  ParseFunctionLiteral(function_name, function_name_location, function_name_validity, 
+  ParseFunctionLiteral(function_name, function_name_location, function_name_validity,
     kind, function_token_pos, function_type, language_mode, arguments_for_wrapped_function) {
     /**
      * 难道是(function(){}) ???
@@ -437,9 +437,9 @@ class Parser extends ParserBase {
      * !function(){}、+function(){}、IIFE等等
      * 默认懒编译
      */
-    let eager_compile_hint = this.function_state_.next_function_is_likely_called_ || 
-    is_wrapped ? kShouldEagerCompile : this.default_eager_compile_hint_;
-    
+    let eager_compile_hint = this.function_state_.next_function_is_likely_called_ ||
+      is_wrapped ? kShouldEagerCompile : this.default_eager_compile_hint_;
+
     /**
      * 有些函数在解析(抽象语法树生成阶段)阶段就需要被提前编译 比如说IIFE
      * 其余的函数则是懒编译 只做抽象语法树的解析
@@ -471,8 +471,8 @@ class Parser extends ParserBase {
     // 默认是false
     let should_post_parallel_task = false;
 
-    let should_preparse = (this.parse_lazily() && is_lazy_top_level_function) || 
-    should_preparse_inner || should_post_parallel_task;
+    let should_preparse = (this.parse_lazily() && is_lazy_top_level_function) ||
+      should_preparse_inner || should_post_parallel_task;
     /**
      * @warning 存疑
      * 这个地方的源码如下
@@ -496,7 +496,7 @@ class Parser extends ParserBase {
     let num_parameters = -1;
     let function_length = -1;
     let has_duplicate_parameters = false;
-    
+
     let function_literal_id = this.GetNextFunctionLiteralId();
     let produced_preparse_data = null;
 
@@ -512,16 +512,16 @@ class Parser extends ParserBase {
      * 目前的结构 => '(' 函数参数 ')' '{' 函数体 '}'
      */
     let did_preparse_successfully = false;
-    if(should_preparse) {
+    if (should_preparse) {
       let result = this.SkipFunction(function_name, kind, function_type, scope, -1, -1, null);
       did_preparse_successfully = result.did_preparse_successfully;
-      if(did_preparse_successfully) {
+      if (did_preparse_successfully) {
         num_parameters = result.num_parameters;
         function_length = result.function_length;
         produced_preparse_data = result.produced_preparse_data
       }
     }
-    
+
     /**
      * 预编译失败会走完整解析
      */
@@ -553,7 +553,7 @@ class Parser extends ParserBase {
 
     function_literal.function_token_position_ = function_token_pos;
     function_literal.suspend_count_ = suspend_count;
-    
+
 
     // this.RecordFunctionLiteralSourceRange(function_literal);
 
@@ -580,12 +580,12 @@ class Parser extends ParserBase {
   }
 
   SpreadCall(_function, args_list, pos, is_possibly_eval) {
-    if(this.OnlyLastArgIsSpread(args_list) || _function.IsSuperCallReference()) {
+    if (this.OnlyLastArgIsSpread(args_list) || _function.IsSuperCallReference()) {
       return this.ast_node_factory_.NewCall(_function, args_list, pos);
     }
     let args = [];
-    if(_function.IsProperty()) {
-      if(_function.IsSuperAccess()) {
+    if (_function.IsProperty()) {
+      if (_function.IsSuperAccess()) {
         let home = this.ThisExpression();
         args.push(_function);
         args.push(home);
@@ -606,8 +606,8 @@ class Parser extends ParserBase {
     return this.ast_node_factory_.NewCallRuntime(REFLECT_APPLY_INDEX, args, pos);
   }
   OnlyLastArgIsSpread(args) {
-    for(let i = 0; i < args.length; i++) {
-      if(args[i].IsSpread()) {
+    for (let i = 0; i < args.length; i++) {
+      if (args[i].IsSpread()) {
         return false;
       }
     }
@@ -724,7 +724,7 @@ class Parser extends ParserBase {
        * 这里的逻辑待定 还没搞懂怎么才会进
        */
       if (is_wrapped) {
-        for(const arg of arguments_for_wrapped_function) {
+        for (const arg of arguments_for_wrapped_function) {
           const is_rest = false;
           let argument = this.ExpressionFromIdentifier(arg, kNoSourcePosition);
           this.AddFormalParameter(formals, argument, null, kNoSourcePosition, is_rest);
@@ -758,7 +758,7 @@ class Parser extends ParserBase {
     // AcceptINScope scope(this, true);
     let previous_accept_IN_ = this.accept_IN_;
     this.accept_IN_ = true;
-    
+
     this.ParseFunctionBody(body, function_name, pos, formals, kind, function_type, kBlock);
     has_duplicate_parameters = formals.has_duplicate();
     expected_property_count = function_state.expected_property_count_;
@@ -798,13 +798,13 @@ class Parser extends ParserBase {
     // ScopedPtrList<Statement> init_statements(pointer_buffer());
     let init_statements = [];
     let index = 0;
-    for(let parameter of parameters.params) {
+    for (let parameter of parameters.params) {
       /**
        * parameters保存了所有的形参
        * 这里判断设置的默认值是否是undefined 过滤掉
        */
       let initial_value = this.ast_node_factory_.NewVariableProxy(parameters.scope.parameter(index));
-      if(parameter.initializer_ !== null) {
+      if (parameter.initializer_ !== null) {
         let condition = this.ast_node_factory_.NewCompareOperation(
           'Token::EQ_STRICT',
           this.ast_node_factory_.NewVariableProxy(parameters.scope.parameter(index)),
@@ -830,18 +830,18 @@ class Parser extends ParserBase {
   }
   InsertSloppyBlockFunctionVarBindings(scope) {
     // 最外层的eval作用域不需要做提升
-    if(scope.is_eval_scope() && scope.outer_scope_ === this.original_scope_) return;
+    if (scope.is_eval_scope() && scope.outer_scope_ === this.original_scope_) return;
     scope.HoistSloppyBlockFunctions(this.ast_node_factory_);
   }
   DeclareFunctionNameVar(function_name, function_type, function_scope) {
-    if(function_type === kNamedExpression && function_scope.LookupLocal(function_name) === null) {
+    if (function_type === kNamedExpression && function_scope.LookupLocal(function_name) === null) {
       function_scope.DeclareFunctionVar(function_name);
     }
   }
 
-  ParseAndRewriteAsyncGeneratorFunctionBody() {}
-  ParseAndRewriteGeneratorFunctionBody() {}
-  ParseAsyncFunctionBody() {}
+  ParseAndRewriteAsyncGeneratorFunctionBody() { }
+  ParseAndRewriteGeneratorFunctionBody() { }
+  ParseAsyncFunctionBody() { }
 
   /**
    * 给函数设名字
@@ -850,7 +850,7 @@ class Parser extends ParserBase {
    * @param {Expression*} identifier 键
    */
   SetFunctionNameFromIdentifierRef(value, identifier) {
-    if (!identifier.IsVariableProxy()) return; 
+    if (!identifier.IsVariableProxy()) return;
     this.SetFunctionName(value, identifier.raw_name());
   }
   SetFunctionName(value, name, prefix = null) {
@@ -904,7 +904,7 @@ class Parser extends ParserBase {
     let is_simple = parameters.is_simple;
     let scope = parameters.scope;
     if (!is_simple) scope.MakeParametersNonSimple();
-    for(let parameter of parameters.params) {
+    for (let parameter of parameters.params) {
       let is_optional = parameter.initializer_ !== null;
       /**
        * 根据simple属性来决定参数
@@ -918,11 +918,11 @@ class Parser extends ParserBase {
     }
   }
   RewriteClassLiteral() {
-    
+
   }
 
   DeclareClassVariable(name, class_info, class_token_pos) {
-    if(name !== null) {
+    if (name !== null) {
       let proxy = this.DeclareBoundVariable(name, kConst, class_token_pos);
       class_info.variable = proxy.var_;
     }
@@ -930,9 +930,9 @@ class Parser extends ParserBase {
   DeclareFunction(variable_name, fnc, mode, kind, beg_pos, end_pos, names) {
     let declaration = this.ast_node_factory_.NewFunctionDeclaration(fnc, beg_pos);
     this.Declare(declaration, variable_name, kind, mode, kCreatedInitialized, this.scope_, false, beg_pos);
-    if(this.info_.coverage_enabled()) declaration.var_.set_is_used();
-    if(names) names.push(variable_name);
-    if(kind === SLOPPY_BLOCK_FUNCTION_VARIABLE) {
+    if (this.info_.coverage_enabled()) declaration.var_.set_is_used();
+    if (names) names.push(variable_name);
+    if (kind === SLOPPY_BLOCK_FUNCTION_VARIABLE) {
       let init = this.function_state_.loop_nesting_depth_ > 0 ? 'Token::ASSIGN' : 'Token::INIT';
       let statement = this.ast_node_factory_.NewSloppyBlockFunctionStatement(end_pos, declaration.var_, init);
       this.scope_.GetDeclarationScope().DeclareSloppyBlockFunction(statement);
@@ -941,19 +941,19 @@ class Parser extends ParserBase {
     return this.ast_node_factory_.EmptyStatement();
   }
   DeclareArrowFunctionFormalParameters(parameters, expr, params_loc) {
-    if(expr.IsEmptyParentheses()) return;
+    if (expr.IsEmptyParentheses()) return;
     this.AddArrowFunctionFormalParameters(parameters, expr, params_loc.end_pos);
 
-    if(parameters.arity > kMaxArguments) throw new Error(kMalformedArrowFunParamList);
+    if (parameters.arity > kMaxArguments) throw new Error(kMalformedArrowFunParamList);
 
     this.DeclareFormalParameters(parameters);
   }
   // JS的弱类型有时候是真的好用
   AddArrowFunctionFormalParameters(parameters, expr, end_pos) {
     // 递归处理多形参
-    if(expr.IsNaryOperation()) {
+    if (expr.IsNaryOperation()) {
       let next = nary.first_;
-      for(let i = 0; i < expr.subsequent_length(); ++i) {
+      for (let i = 0; i < expr.subsequent_length(); ++i) {
         this.AddArrowFunctionFormalParameters(parameters, next, expr.subsequent_op_position(i));
         next = nary.subsequent(i);
       }
@@ -961,7 +961,7 @@ class Parser extends ParserBase {
       return;
     }
     // 两个形参只递归解决左边的 右边的在方法尾部处理
-    if(expr.IsBinaryOperation()) {
+    if (expr.IsBinaryOperation()) {
       let left = expr.left_;
       let right = expr.right_;
       let comma_pos = expr.position_;
@@ -971,14 +971,14 @@ class Parser extends ParserBase {
 
     // 处理扩展运算符
     let is_rest = expr.IsSpread();
-    if(is_rest) {
+    if (is_rest) {
       expr = expr.expression_;
       parameters.has_rest = true;
     }
 
     // 默认参数在这里处理
     let initializer = null;
-    if(expr.IsAssignment()) {
+    if (expr.IsAssignment()) {
       initializer = expr.value_;
       expr = expr.target_;
     }
@@ -1010,34 +1010,34 @@ class Parser extends ParserBase {
   }
 
   DesugarLexicalBindingsInForStatement() {
-    
+
   }
 
   LookupContinueTarget(label) {
     let anonymous = label === null;
-    for(let t = this.target_stack_; t !== null; t = t.previous_) {
+    for (let t = this.target_stack_; t !== null; t = t.previous_) {
       let stat = t.statement_;
-      if(stat === null) continue;
-      if(anonymous || this.ContainsLabel(stat.own_labels_, label)) {
+      if (stat === null) continue;
+      if (anonymous || this.ContainsLabel(stat.own_labels_, label)) {
         return stat;
       }
-      if(this.ContainsLabel(stat.labels_, label)) break;
+      if (this.ContainsLabel(stat.labels_, label)) break;
     }
     return null;
   }
   LookupBreakTarget() {
     let anonymous = label === null;
-    for(let t = this.target_stack_; t !== null; t = t.previous_) {
+    for (let t = this.target_stack_; t !== null; t = t.previous_) {
       let stat = t.statement_;
-      if((anonymous && stat.is_target_for_anonymous()) || 
-      (!anonymous && this.ContainsLabel(stat.labels_, label))) {
+      if ((anonymous && stat.is_target_for_anonymous()) ||
+        (!anonymous && this.ContainsLabel(stat.labels_, label))) {
         return stat;
       }
     }
     return null;
   }
   ContainsLabel(labels, label) {
-    if(labels !== null && labels.includes(label)) {
+    if (labels !== null && labels.includes(label)) {
       return true;
     }
     return false;
@@ -1054,7 +1054,7 @@ class Parser extends ParserBase {
    * @param {Expression} return_value 一般是this
    */
   RewriteReturn(return_value, pos) {
-    if(IsDerivedConstructor(this.function_state_.kind())) {
+    if (IsDerivedConstructor(this.function_state_.kind())) {
       let temp = this.NewTemporary(this.ast_value_factory_.empty_string());
       let assign = this.ast_node_factory_.NewAssignment(
         'Token::ASSIGN', this.ast_node_factory_.NewVariableProxy(temp), return_value, pos);
@@ -1062,8 +1062,8 @@ class Parser extends ParserBase {
       let is_undefined = this.ast_node_factory_.NewCompareOperation(
         'Token::EQ_STRICT', assign, this.ast_node_factory_.NewUndefinedLiteral(kNoSourcePosition), pos);
 
-      return_value = this.ast_node_factory_.NewConditional(is_undefined, this.ast_node_factory_.ThisExpression(), 
-      this.ast_node_factory_.NewVariableProxy(temp), pos);
+      return_value = this.ast_node_factory_.NewConditional(is_undefined, this.ast_node_factory_.ThisExpression(),
+        this.ast_node_factory_.NewVariableProxy(temp), pos);
     }
     return return_value;
   }
@@ -1077,7 +1077,7 @@ class Parser extends ParserBase {
     let tag_variable = this.NewTemporary(this.ast_value_factory_.dot_switch_tag_string());
     let tag_assign = this.ast_node_factory_.NewAssignment('Token::ASSIGN',
       this.ast_node_factory_.NewVariableProxy(tag_variable), tag, tag.position_);
-    
+
     let tag_statement = this.IgnoreCompletion(this.ast_node_factory_.NewExpressionStatement(tag_assign, kNoSourcePosition));
     switch_block.statement_.push(tag_statement);
 
@@ -1092,6 +1092,55 @@ class Parser extends ParserBase {
     let block = this.ast_node_factory_.NewBlock(1, true);
     block.statement_.push(statement);
     return block;
+  }
+
+  OpenTemplateLiteral(pos) {
+    return new TemplateLiteral(pos);
+  }
+  AddTemplateSpan(state, should_cook, tail) {
+    let end = this.scanner_.location().end_pos - (tail ? 1 : 2);
+    let raw = this.scanner_.CurrentRawSymbol(this.ast_value_factory_);
+    if(should_cook) {
+      let cooked = this.scanner_.CurrentSymbol(this.ast_value_factory_);
+      state.AddTemplateSpan(cooked, raw, end);
+    } else {
+      state.AddTemplateSpan(null, raw, end);
+    }
+  }
+  CloseTemplateLiteral(state, start, tag) {
+    let pos = state.pos_;
+    let cooked_strings = state.cooked_;
+    let raw_strings = state.raw_;
+    let expressions = state.expressions_;
+    if(!tag) {
+      if(cooked_strings.length === 1) {
+        return this.ast_node_factory_.NewStringLiteral(cooked_strings[0], pos);
+      }
+      return this.ast_node_factory_.NewTemplateLiteral(cooked_strings, expressions, pos);
+    } else {
+      let template_object = this.ast_node_factory_.NewGetTemplateObject(cooked_strings, raw_strings, pos);
+
+      let call_args = [];
+      call_args.push(template_object);
+      call_args.push(...expressions);
+      return this.ast_node_factory_.NewTaggedTemplate(tag, call_args, pos);
+    }
+  }
+}
+
+class TemplateLiteral {
+  constructor() {
+    this.cooked_ = [];
+    this.raw_ = [];
+    this.expressions_ = [];
+    this.pos_ = pos;
+  }
+  AddTemplateSpan(cooked, raw, end) {
+    this.cooked_.push(cooked);
+    this.raw_.push(raw);
+  }
+  AddExpression(expression) {
+    this.expressions_.push(expression);
   }
 }
 

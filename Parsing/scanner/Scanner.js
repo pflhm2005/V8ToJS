@@ -788,6 +788,8 @@ export default class Scanner {
   /**
    * 解析模板字符串
    * 进来之前已经将'`'符号消费了
+   * TEMPLATE_SPAN: `LiteralChars* ${、} LiteralChars* ${
+   * TEMPLATE_TAIL: } LiteralChar* `
    */
   ScanTemplateSpan() {
     let result = 'Token::TEMPLATE_SPAN';
@@ -832,6 +834,9 @@ export default class Scanner {
     this.next().token = result;
 
     return result;
+  }
+  ScanTemplateContinuation() {
+    return this.ScanTemplateSpan();
   }
   
   /**
