@@ -151,7 +151,7 @@ export default class Scanner {
   peek() { return this.next().token; }
   peek_location() { return this.next().location; }
   location() { return this.current().location; }
-  Peek() { return this.source_.Peek(); }
+  Peek() { return String.fromCharCode(this.source_.Peek()); }
   /**
    * 返回next_next_的值或next_保持不变 将下一个token解析到next_next_上 
    */
@@ -407,7 +407,7 @@ export default class Scanner {
   ScanHtmlComment() {
     this.Advance();
     // 如果不是<!-- 则撤回到<!的状态
-    if(this.c0_ !== '-' || this.Peek() !== '-') {
+    if(String.fromCharCode(this.c0_) !== '-' || this.Peek() !== '-') {
       this.PushBack('!');
       return 'Token::LT';
     }
