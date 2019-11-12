@@ -96,7 +96,7 @@ function topLevelFunction() {
 目前采用两种方式模拟
 ```js
 let pointer_buffer_ = [];
-// 1. 这种情况必须保证对象的存活 ~~直接浅拷贝~~
+// 1. 这种情况必须保证对象的存活
 // 直接生成一个新的数组 C++是为了节省内存才重复使用同一个指针变量 JS不搞这个
 function handle() {
   let statements = [];
