@@ -4,13 +4,13 @@ const kNoReason = 0;
 
 class BlockState {
   constructor(scope_stack, scope) {
-    this.scope_stack_ = scope_stack;
-    this.outer_scope_ = scope;
+    this.outer_scope_ = scope_stack;
+    scope_stack = scope;
   }
 };
 
 export default class FunctionState extends BlockState {
-  constructor(function_state_stack, scope_stack = null, scope = null) {
+  constructor(function_state_stack, scope_stack, scope) {
     super(scope_stack, scope);
     this.expected_property_count_ = 0;
     this.suspend_count_ = 0;

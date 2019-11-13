@@ -86,6 +86,8 @@ import {
   _kVariableDeclaration,
   kHasDuplicateParameters,
   kShouldEagerCompile,
+  kElided,
+  UNALLOCATED,
 } from "../enum";
 
 import {
@@ -128,6 +130,11 @@ import {
   RequiresInstanceMembersInitializer,
   HasBracesField,
   OneshotIIFEBit,
+  IsRemovedFromUnresolvedField,
+  HoleCheckModeField,
+  InitializationFlagField,
+  IsUsedField,
+  ForceHoleInitializationField,
 } from '../util';
 
 import { AstValueFactory } from './AstValueFactory';
@@ -842,7 +849,10 @@ export class VariableProxy extends Expression {
 
     this.var_ = null;
 
-    this.bit_field_ |= 0;
+    this.bit_field_ |= IsAssignedField.encode(false) | 
+    IsResolvedField.encode(false) |
+    IsRemovedFromUnresolvedField.encode(false) |
+    HoleCheckModeField.encode(kElided);
   }
   set_var(v) { this.var_ = v; }
   set_is_resolved() { this.bit_field_ = IsResolvedField.update(this.bit_field_, 1); }
@@ -861,7 +871,7 @@ export class VariableProxy extends Expression {
     if (this.is_assigned()) variable.set_maybe_assigned();
   }
   raw_name() {
-    return IsResolvedField.decode(this.bit_field_) ? this.var_.raw_name_ : this.raw_name_;
+    return IsResolvedField.decode(this.bit_field_) ? this.var_.name_ : this.raw_name_;
   }
   is_new_target() {
     return IsNewTargetField.decode(this.bit_field_);
@@ -1070,8 +1080,8 @@ class FunctionLiteral extends Expression {
   syntax_kind() {
     return FunctionSyntaxKindBits.decode(this.bit_field_);
   }
-  set_raw_name() {
-    this.raw_name_ = nane;
+  set_raw_name(name) {
+    this.raw_name_ = name;
   }
   AllowsLazyCompilation() {
     return this.scope_.AllowsLazyCompilation();
@@ -1120,17 +1130,22 @@ class Await extends Suspend {
 // variables. Variables themselves are never directly referred to from the AST,
 // they are maintained by scopes, and referred to from VariableProxies and Slots
 // after binding and variable allocation.
-export class ZoneObject {}
-export class Variable extends ZoneObject {
+export class Variable {
   constructor(scope, name, mode, kind, initialization_flag, maybe_assigned_flag = kNotAssigned) {
-    super();
     this.scope_ = scope;
     this.name_ = name;
     this.local_if_not_shadowed_ = false;
     this.next_ = null;
     this.index_ = -1;
     this.initializer_position_ = kNoSourcePosition;
-    this.bit_field_ = 0; // TODO
+    this.bit_field_ = MaybeAssignedFlagField.encode(maybe_assigned_flag) |
+    InitializationFlagField.encode(initialization_flag) | 
+    VariableModeField.encode(mode) |
+    IsUsedField.encode(false) | 
+    ForceContextAllocationField.encode(false) |
+    ForceHoleInitializationField.encode(false) |
+    LocationField.encode(UNALLOCATED) | 
+    VariableKindField.encode(kind);
   }
   mode() { return VariableModeField.decode(this.bit_field_); }
   location() { return LocationField.decode(this.bit_field_); }
@@ -1148,9 +1163,8 @@ export class Variable extends ZoneObject {
   static DefaultInitializationFlag(mode) { return mode === kVar ? kCreatedInitialized : kNeedsInitialization; }
 };
 
-class CaseClause extends ZoneObject {
+class CaseClause {
   constructor(label, statements) {
-    super();
     this.label_ = label;
     this.statement_ = statements;
   }
@@ -1159,9 +1173,8 @@ class CaseClause extends ZoneObject {
 /**
  * 
  */
-class LiteralProperty extends ZoneObject {
+class LiteralProperty {
   constructor(key, value, is_computed_name) {
-    super();
     this.pointer_ = 0;
     this.key_ = key;
     this.value_ = value;

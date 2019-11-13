@@ -1,4 +1,4 @@
-import { Variable, VariableProxy } from '../ast/Ast';
+import { Variable } from '../ast/Ast';
 
 import {
   NORMAL_VARIABLE,
@@ -93,8 +93,7 @@ class ExpressionScope {
      * 生成一个新的VariableProxy实例
      * 为了方便 这里省去中间步骤
      */
-    // let result = this.parser_.NewRawVariable(name, pos);
-    let result = new VariableProxy(name, NORMAL_VARIABLE, pos);
+    let result = this.parser_.NewRawVariable(name, pos);
     /**
      * 当右值是复杂表达式时 需要进行完整的解析 例如let a = (1 + 1);
      * 所以这里先将声明部分放入待完成容器中

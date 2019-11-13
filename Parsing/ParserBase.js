@@ -814,7 +814,7 @@ export default class ParserBase {
    * 4. 解析完函数体后 如果参数是简单类型 直接走变量提升逻辑
    * 注: 变量提升的实质是在外部作用域的变量表中声明一个新变量 变量名是函数名 值是函数
    * 有两种情况在变量提升中处理
-   * (1) 形参与函数名相同 function fn(fn) { console.log(fn) }; 此时形参覆盖函数名
+   * (1) 形参与函数名相同 function fn(fn) { call(fn) }; 此时形参覆盖函数名
    * (2) 存在var类型的声明(实际上也包括let、const 不过会报错) var fn = 1;function fn(){} 此时函数声明无效
    * 5. 复杂形参
    * 6. 检查是否有重复形参 严格模式会报错
@@ -860,7 +860,7 @@ export default class ParserBase {
     }
     // StatementListT inner_body(pointer_buffer());
     // 这里再次调用了ScopePtrList 需要从上一个list来做slice
-    let inner_body = body.slice();
+    let inner_body = [];
     {
       // BlockState block_state(&scope_, inner_scope);
       // 缓存当前作用域
@@ -941,7 +941,8 @@ export default class ParserBase {
     // 函数表达式才会进
     this.DeclareFunctionNameVar(function_name, function_type, function_scope);
     // 合并作用域
-    // inner_body.MergeInto(body);
+
+    body.push(...inner_body);
 
     // 析构
     this.expression_scope_ = expression_scope_;
@@ -3241,6 +3242,9 @@ export default class ParserBase {
     // 怀疑函数参数的作用域this有毒
     if (pos === null) pos = this.scanner_.location().beg_pos;
     return this.scope_.NewUnresolved(this.ast_node_factory_, name, pos, kind);
+  }
+  NewRawVariable(name, pos) {
+      return this.ast_node_factory_.NewVariableProxy(name, NORMAL_VARIABLE, pos);
   }
 
   /**

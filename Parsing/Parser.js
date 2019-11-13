@@ -765,6 +765,8 @@ class Parser extends ParserBase {
     let old_mode_ = this.mode_;
     this.mode_ = this.allow_lazy_ ? PARSE_LAZILY : PARSE_EAGERLY;
     let function_state = new FunctionState(this.function_state_, this.scope_, function_scope);
+    let outer_scope_ = this.scope_;
+    this.scope_ = function_scope;
 
     let is_wrapped = function_type === kWrapped;
 
@@ -825,6 +827,7 @@ class Parser extends ParserBase {
     // 析构
     this.mode_ = old_mode_;
     this.accept_IN_ = previous_accept_IN_;
+    this.scope_ = outer_scope_;
     return { num_parameters, function_length, has_duplicate_parameters, expected_property_count, suspend_count };
   }
   CheckArityRestrictions(param_count, function_kind, has_rest, formals_start_pos, formals_end_pos) {
@@ -1012,6 +1015,7 @@ class Parser extends ParserBase {
     this.Declare(declaration, variable_name, kind, mode, kCreatedInitialized, this.scope_, false, beg_pos);
     if (this.info_.coverage_enabled()) declaration.var_.set_is_used();
     if (names) names.push(variable_name);
+    console.log(`函数${variable_name.literal_bytes_}解析结果如下\n`, fnc);
     if (kind === SLOPPY_BLOCK_FUNCTION_VARIABLE) {
       let init = this.function_state_.loop_nesting_depth_ > 0 ? 'Token::ASSIGN' : 'Token::INIT';
       let statement = this.ast_node_factory_.NewSloppyBlockFunctionStatement(end_pos, declaration.var_, init);

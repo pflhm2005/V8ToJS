@@ -1,8 +1,5 @@
-import { ZoneObject } from "../../ast/Ast";
-
-export default class Parameter extends ZoneObject {
+export default class Parameter {
   constructor(pattern, initializer, position, initializer_end_position, is_rest) {
-    super();
     // PointerWithPayload
     this.initializer_ = initializer;
     this.is_rest_ = is_rest;

@@ -570,7 +570,7 @@ class DeclarationScope extends Scope {
       let name = sloppy_block_function.name();
       /**
        * 检测函数名是否与参数名冲突
-       * function a(a) {console.log(a)}; a(1); 此时会优先形参，函数名会被过滤掉
+       * function a(a) {call(a)}; a(1); 此时会优先形参，函数名会被过滤掉
        */
       let maybe_parameter = parameter_scope.LookupLocal(name);
       if (maybe_parameter !== null && maybe_parameter.is_parameter()) continue;
