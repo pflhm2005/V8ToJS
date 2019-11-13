@@ -259,7 +259,7 @@ export default class Scanner {
 
           case 'Token::ASSIGN':
             this.Advance();
-            if (this.char === '=') return this.Select('=',' Token::EQ_STRICT', 'Token::EQ');
+            if (this.char === '=') return this.Select('=','Token::EQ_STRICT', 'Token::EQ');
             if (this.char === '>') return this.Select('Token::ARROW');
             return 'Token::ASSIGN';
           

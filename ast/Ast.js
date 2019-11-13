@@ -1169,7 +1169,7 @@ class ObjectLiteralProperty extends LiteralProperty {
     // [ast_value_factory_, key, value, is_computed_name]
     else {
       if (!is_computed_name && key.IsString() &&
-      key.AsRawString().literal_bytes_ === ast_value_factory.proto_string()) {
+      key.AsRawString().literal_bytes_ === '__proto__') {
         this.kind_ = PROTOTYPE;
       } else if (this.value_.AsMaterializedLiteral() !== null) {
         this.kind_ = MATERIALIZED_LITERAL;

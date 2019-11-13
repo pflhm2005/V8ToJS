@@ -648,7 +648,7 @@ export class ClassScope extends Scope {
     this.set_language_mode(kStrict);
   }
   ResolvePrivateNamesPartially() {
-
+    return null;
   }
   DeclareBrandVariable() {
 

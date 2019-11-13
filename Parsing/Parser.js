@@ -29,6 +29,7 @@ import {
   kNoDuplicateParameters,
   REFLECT_APPLY_INDEX,
   kInlineGetImportMetaObject,
+  kLet,
 } from '../enum';
 
 import {
@@ -847,7 +848,7 @@ class Parser extends ParserBase {
     body.push(block);
   }
   BuildRejectPromiseOnException(inner_block) {
-    let result = this.ast_node_factory_.NewBlock(1, true);
+    let result = this.ast_node_factory_.NewBlock(true);
     // TODO
     return result;
   }
@@ -996,8 +997,16 @@ class Parser extends ParserBase {
       this.scope_.GetDeclarationScope().DeclareSloppyBlockFunction(statement);
       return statement;
     }
-    return this.ast_node_factory_.EmptyStatement();
+    return this.ast_node_factory_.empty_statement_;
   }
+  DeclareClass(variable_name, value, names, class_token_pos, end_pos) {
+    let proxy = this.DeclareBoundVariable(variable_name, kLet, class_token_pos);
+    proxy.var_.initializer_position_ = end_pos;
+    if (names) names.push(variable_name);
+    let assignment = this.ast_node_factory_.NewAssignment('Token::INIT', proxy, value, class_token_pos);
+    return this.IgnoreCompletion(this.ast_node_factory_.NewExpressionStatement(assignment, kNoSourcePosition));
+  }
+
   DeclareArrowFunctionFormalParameters(parameters, expr, params_loc) {
     if (expr.IsEmptyParentheses()) return;
     this.AddArrowFunctionFormalParameters(parameters, expr, params_loc.end_pos);
@@ -1130,7 +1139,7 @@ class Parser extends ParserBase {
    * @returns {Statement*}
    */
   RewriteSwitchStatement(switch_statement, scope) {
-    let switch_block = this.ast_node_factory_.NewBlock(2, false);
+    let switch_block = this.ast_node_factory_.NewBlock(false);
     let tag = switch_statement.tag_;
     let tag_variable = this.NewTemporary(this.ast_value_factory_.dot_switch_tag_string());
     let tag_assign = this.ast_node_factory_.NewAssignment('Token::ASSIGN',
@@ -1140,14 +1149,14 @@ class Parser extends ParserBase {
     switch_block.statement_.push(tag_statement);
 
     switch_statement.tag_ = this.ast_node_factory_.NewVariableProxy(tag_variable);
-    let cases_block = this.ast_node_factory_.NewBlock(1, false);
+    let cases_block = this.ast_node_factory_.NewBlock(false);
     cases_block.statement_.push(switch_statement);
     cases_block.scope_ = scope;
     switch_block.statement_.push(cases_block);
     return switch_block;
   }
   IgnoreCompletion(statement) {
-    let block = this.ast_node_factory_.NewBlock(1, true);
+    let block = this.ast_node_factory_.NewBlock(true);
     block.statement_.push(statement);
     return block;
   }
@@ -1160,7 +1169,7 @@ class Parser extends ParserBase {
     this.InitializeVariables(init_statements, NORMAL_VARIABLE, decl);
     return this.ast_node_factory_.NewBlock(true, init_statements);
   }
-  RewriteTryStatement() {}
+  RewriteTryStatement() { }
 
   OpenTemplateLiteral(pos) {
     return new TemplateLiteral(pos);

@@ -6,8 +6,9 @@ import {
   VariableDeclarationParsingScope,
   AccumulationScope,
   ExpressionParsingScope,
+  ArrowHeadParsingScope,
 } from './ExpressionScope';
-import Scope, { FunctionDeclarationScope, ScriptDeclarationScope } from './Scope';
+import Scope, { FunctionDeclarationScope, ScriptDeclarationScope, ClassScope } from './Scope';
 
 import FunctionState from './function/FunctionState';
 import { ClassInfo, ForInfo, CatchInfo } from './Info';
@@ -373,7 +374,7 @@ export default class ParserBase {
     while (this.peek() !== end_token) {
       let stat = this.ParseStatementListItem();
       if (stat === null) return;
-      if (stat.IsEmptyStatement()) continue;
+      // if (stat.IsEmptyStatement()) continue;
       body.push(stat);
     }
     // 析构
@@ -866,7 +867,7 @@ export default class ParserBase {
       if (body_type === kExpression) {
         let expression = this.ParseAssignmentExpression();
         if (IsAsyncFunction(kind)) {
-          let block = this.ast_node_factory_.NewBlock(1, true);
+          let block = this.ast_node_factory_.NewBlock(true);
           this.RewriteAsyncFunctionBody(inner_body, block, expression);
         } else {
           // 根据函数类型快速确定返回类型
@@ -1149,7 +1150,7 @@ export default class ParserBase {
     // 解析class体
     let value = this.ParseClassLiteral(name, this.scanner_.location(), is_strict_reserved, class_token_pos);
     // no_expression_scope.ValidateExpression();
-
+    let end_pos = this.position();
     let result = this.DeclareClass(variable_name, value, names, class_token_pos, end_pos);
     // 析构
     this.expression_scope_ = no_expression_scope.parent_;
@@ -1177,13 +1178,13 @@ export default class ParserBase {
     // class内部默认严格模式
     if (!this.HasCheckedSyntax() && !is_anonymous) {
       if (name_is_strict_reserved) throw new Error(kUnexpectedStrictReserved);
-      if (IsEvalOrArguments(name)) throw new Error(kStrictEvalArguments);
+      if (this.IsEvalOrArguments(name)) throw new Error(kStrictEvalArguments);
     }
 
     let class_scope = this.NewClassScope(this.scope_);
-    // BlockState block_state(&scope_, inner_scope);
+    // BlockState block_state(&scope_, class_scope);
     let outer_scope_ = this.scope_;
-    this.scope_ = inner_scope;
+    this.scope_ = class_scope;
     this.RaiseLanguageMode(kStrict);
 
     let class_info = new ClassInfo();
@@ -1723,7 +1724,7 @@ export default class ParserBase {
       let outer_scope_ = this.scope_;
       this.scope_ = new Scope(null, this.scope_, BLOCK_SCOPE);
       this.scope_.start_position_ = this.scanner_.location().beg_pos;
-      let block = this.ast_node_factory_.NewBlock(1, false);
+      let block = this.ast_node_factory_.NewBlock(false);
       let body = this.ParseFunctionDeclaration();
       block.statement_.push(body, null);
       this.scope_.end_position_ = this.end_position();
@@ -1947,7 +1948,7 @@ export default class ParserBase {
     }
     let for_scope = this.scope_.FinalizeBlockScope();
     if (for_scope !== null) {
-      let block = this.ast_node_factory_.NewBlock(2, false);
+      let block = this.ast_node_factory_.NewBlock(false);
       block.statement_.push(init);
       block.statement_.push(loop);
       block.scope_ = for_scope;

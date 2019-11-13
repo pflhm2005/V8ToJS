@@ -8,7 +8,18 @@ import ParseInfo from './Compile/ParseInfo';
 import { ScriptOriginOptions } from './Compile/Script';
 // 在这里设置待编译字符串
 const source = `
-let a = 1;
+if(true) {
+  const b = 1;
+} else {
+  let obj = {
+    a: 1,
+    b: 2,
+  };
+}
+let ar = [a, obj, 1, true];
+do {
+  fn();
+} while(a === 1);
 `;
 
 let parse_info = new ParseInfo(isolate);
