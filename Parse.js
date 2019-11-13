@@ -8,7 +8,7 @@ import ParseInfo from './Compile/ParseInfo';
 import { ScriptOriginOptions } from './Compile/Script';
 // 在这里设置待编译字符串
 const source = `
-  let a = 1;
+let a = 1;
 `;
 
 let parse_info = new ParseInfo(isolate);

@@ -1,6 +1,5 @@
 import StringHasher from './StringHasher';
 import AstRawString from "./AstRawString";
-import { ZoneObject } from './Ast';
 
 const kMaxOneCharStringValue = 128;
 
@@ -135,9 +134,8 @@ export default class AstValueFactory {
   Internalize() {}
 }
 
-class AstConsString extends ZoneObject {
+class AstConsString {
   constructor() {
-    super();
     this.next_ = null;
     // 链表
     this.segment_ = {

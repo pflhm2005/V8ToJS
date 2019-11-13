@@ -460,7 +460,7 @@ class Parser extends ParserBase {
   }
   InitializeVariables(statements, declaration) {
     let pos = declaration.value_beg_pos;
-    if (pos === kNoSourcePosition) pos = declaration.initializer.position();
+    if (pos === kNoSourcePosition) pos = declaration.initializer.position_;
     let assignment = this.ast_node_factory_.NewAssignment('Token::INIT', declaration.pattern, declaration.initializer, pos);
     statements.push(this.ast_node_factory_.NewExpressionStatement(assignment, pos));
   }

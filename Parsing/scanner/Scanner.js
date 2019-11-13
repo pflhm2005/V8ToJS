@@ -72,6 +72,13 @@ export default class Scanner {
      */
     this.c0_ = null;
     /**
+     * 新增变量
+     * 由于JS中字符与对应的Unicode值不对等
+     * 所以c0_表示Unicode 对应的字符变量为char
+     * 所有变动c0_的方法会同步更新char的值
+     */
+    this.char = '';
+    /**
      * scanner有三个词法描述类 分别代表当前、下一个、下下一个三个Token
      * token_storage_是一个数组 里面装着那个三个类
      */
@@ -142,10 +149,12 @@ export default class Scanner {
   }
   AdvanceUntil(callback) {
     this.c0_ = this.source_.AdvanceUntil(callback);
+    this.char = String.fromCharCode(this.c0_);
   }
   PushBack(ch) {
     this.source_.Back();
     this.c0_ = ch;
+    this.char = String.fromCharCode(this.c0_);
   }
   current_token() { return this.current_.token; }
   peek() { return this.next().token; }
@@ -184,6 +193,7 @@ export default class Scanner {
   }
   Advance() {
     this.c0_ = this.source_.Advance();
+    this.char = String.fromCharCode(this.c0_);
   }
   AddLiteralCharAdvance() {
     this.AddLiteralChar(this.c0_);
@@ -201,12 +211,10 @@ export default class Scanner {
    */
   ScanSingleToken() {
     let token = null;
-    let char = '';
     do {
       this.next().location.beg_pos = this.source_pos();
       if (this.c0_ < kMaxAscii && this.c0_ > 0) {
         token = UnicodeToToken[this.c0_];
-        char = String.fromCharCode(this.c0_);
         switch(token) {
           case 'Token::LPAREN':
           case 'Token::RPAREN':
@@ -228,9 +236,9 @@ export default class Scanner {
           case 'Token::LT':
             // < <= << <<= <!--
             this.Advance();
-            if (char === '=') return this.Select('Token::LTE');
-            if (char === '<') return this.Select('=', 'Token::ASSIGN_SHL', 'Token::SHL');
-            if (char === '!') {
+            if (this.char === '=') return this.Select('Token::LTE');
+            if (this.char === '<') return this.Select('=', 'Token::ASSIGN_SHL', 'Token::SHL');
+            if (this.char === '!') {
               token = this.ScanHtmlComment();
               continue;
             }
@@ -239,41 +247,41 @@ export default class Scanner {
           case 'Token::GT':
             // > >= >> >>= >>> >>>=
             this.Advance();
-            if (char === '=') return this.Select('Token::GTE');
-            if (char === '>') {
+            if (this.char === '=') return this.Select('Token::GTE');
+            if (this.char === '>') {
               // >> >>= >>> >>>=
               this.Advance();
-              if (char === '=') return this.Select('Token::ASSIGN_SAR');
-              if (char === '>') return this.Select('=', 'Token::ASSIGN_SHR', 'Token::SHR');
+              if (this.char === '=') return this.Select('Token::ASSIGN_SAR');
+              if (this.char === '>') return this.Select('=', 'Token::ASSIGN_SHR', 'Token::SHR');
               return 'Token::SAR';
             }
             return 'Token::GT';
 
           case 'Token::ASSIGN':
             this.Advance();
-            if (char === '=') return this.Select('=',' Token::EQ_STRICT', 'Token::EQ');
-            if (char === '>') return this.Select('Token::ARROW');
+            if (this.char === '=') return this.Select('=',' Token::EQ_STRICT', 'Token::EQ');
+            if (this.char === '>') return this.Select('Token::ARROW');
             return 'Token::ASSIGN';
           
           case 'Token::NOT':
             // ! != !==
             this.Advance();
-            if (char === '=') return this.Select('=', 'Token::NE_STRICT', 'Token::NE');
+            if (this.char === '=') return this.Select('=', 'Token::NE_STRICT', 'Token::NE');
             return 'Token::NOT';
 
           case 'Token::ADD':
             // + ++ +=
             this.Advance();
-            if (char === '+') return this.Select('Token::INC');
-            if (char === '=') return this.Select('Token::ASSIGN_ADD');
+            if (this.char === '+') return this.Select('Token::INC');
+            if (this.char === '=') return this.Select('Token::ASSIGN_ADD');
             return 'Token::ADD';
           
           case 'Token::SUB':
             // - -- --> -=
             this.Advance();
-            if (char === '-') {
+            if (this.char === '-') {
               this.Advance();
-              if (char === '>' && this.next().after_line_terminator) {
+              if (this.char === '>' && this.next().after_line_terminator) {
                 // For compatibility with SpiderMonkey, we skip lines that
                 // start with an HTML comment end '-->'.
                 token = this.SkipSingleHTMLComment();
@@ -281,14 +289,14 @@ export default class Scanner {
               }
               return 'Token::DEC';
             }
-            if (char === '=') return this.Select('Token::ASSIGN_SUB');
+            if (this.char === '=') return this.Select('Token::ASSIGN_SUB');
             return 'Token::SUB';
           
           case 'Token::MUL':
             // * *=
             this.Advance();
-            if (char === '*') return this.Select('=', 'Token::ASSIGN_EXP', 'Token::EXP');
-            if (char === '=') return this.Select('Token::ASSIGN_MUL');
+            if (this.char === '*') return this.Select('=', 'Token::ASSIGN_EXP', 'Token::EXP');
+            if (this.char === '=') return this.Select('Token::ASSIGN_MUL');
             return 'Token::MUL';
 
           case 'Token::MOD':
@@ -298,7 +306,7 @@ export default class Scanner {
           case 'Token::DIV':
             // /  // /* /=
             this.Advance();
-            if (char === '/') {
+            if (this.char === '/') {
               let c = this.Peek();
               if (c === '#' || c === '@') {
                 this.Advance();
@@ -309,25 +317,25 @@ export default class Scanner {
               token = this.SkipSingleLineComment();
               continue;
             }
-            if (char === '*') {
+            if (this.char === '*') {
               token = this.SkipMultiLineComment();
               continue;
             }
-            if (char === '=') return this.Select('Token::ASSIGN_DIV');
+            if (this.char === '=') return this.Select('Token::ASSIGN_DIV');
             return 'Token::DIV';
           
           case 'Token::BIT_AND':
             // & && &=
             this.Advance();
-            if (char === '&') return this.Select('Token::AND');
-            if (char === '=') return this.Select('Token::ASSIGN_BIT_AND');
+            if (this.char === '&') return this.Select('Token::AND');
+            if (this.char === '=') return this.Select('Token::ASSIGN_BIT_AND');
             return 'Token::BIT_AND';
           
           case 'Token::BIT_OR':
             // | || |=
             this.Advance();
-            if (char === '|') return this.Select('Token::OR');
-            if (char === '=') return this.Select('Token::ASSIGN_BIT_OR');
+            if (this.char === '|') return this.Select('Token::OR');
+            if (this.char === '=') return this.Select('Token::ASSIGN_BIT_OR');
             return 'Token::BIT_OR';
 
           case 'Token::BIT_XOR':
@@ -338,7 +346,7 @@ export default class Scanner {
             // . Number
             this.Advance();
             if (IsDecimalDigit(this.c0_)) return this.ScanNumber(true);
-            if (char === '.') {
+            if (this.char === '.') {
               if (this.Peek() === '.') {
                 this.Advance();
                 this.Advance();
@@ -798,21 +806,20 @@ export default class Scanner {
     this.next().raw_literal_chars.Start();
     const capture_raw = true;
     while(true) {
-      let char = String.fromCharCode(this.c0_);
       // ``代表空字符串 直接标记为结尾
-      if(char === '`') {
+      if(this.char === '`') {
         this.Advance();
         result = 'Token::TEMPLATE_TAIL';
         break;
       }
       // `xxx${ 返回 
-      else if(char === '$' && this.Peek() === '{') {
+      else if(this.char === '$' && this.Peek() === '{') {
         this.Advance();
         this.Advance();
         break;
       }
       // `\x 转移字符
-      else if(char === '\\') {
+      else if(this.char === '\\') {
         this.Advance();
         if(capture_raw) this.AddRawLiteralChar('\\');
         if(IsLineTerminator(this.c0_)) {
@@ -833,10 +840,10 @@ export default class Scanner {
       else {
         this.Advance();
         // \r、\r\n统一被处理为\n
-        if(char === '\r') {
+        if(this.char === '\r') {
           // \r\n
-          if(char === '\n') this.Advance();
-          char = '\n';
+          if(this.char === '\n') this.Advance();
+          this.char = '\n';
         }
         if(capture_raw) this.AddRawLiteralChar(this.c0_);
         this.AddLiteralChar(this.c0_);
