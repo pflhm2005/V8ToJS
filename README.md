@@ -1,7 +1,14 @@
 # V8record
 记录阅读v8源码过程的笔记，尝试用JavaScript翻译V8引擎
 
-支持所有Token的解析，完成了`let a = 1;let b = {a : 1};function fn(a,b,c){}`简单字面量的解析
+支持所有Token的解析，完成了`let a = 1;let b = {a : 1};if(true){};while(false){}`等简单字面量的解析
+
+下述内容过于复杂，需要走源码编译看过程，暂未实现。
+
+- [ ] template_string 模板字符串 Token解析阶段有点没明白
+- [ ] preParse/lazy-compile 懒编译 针对函数声明代码块的懒编译，过程非常复杂
+- [ ] inner_function 嵌套函数及函数声明有些地方不完善
+- [ ] yield/async 状态保留函数类型有些复杂
 
 ~~目前C++部分比较杂乱 没有时间整理，也没啥看头(已移除)，看JS文件夹里的内容吧~~
 
