@@ -118,6 +118,7 @@ import {
   IsPossiblyEvalField,
   IsTaggedTemplateField,
   Pretenure,
+  DoubleToSmiInteger,
 } from '../util';
 
 import { AstValueFactory } from './AstValueFactory';
@@ -160,7 +161,13 @@ export class AstNodeFactory {
   NewNullLiteral(pos) {
     return new Literal(kNull, null, pos);
   }
-  NewNumberLiteral() {}
+  NewNumberLiteral(number, pos) {
+    let int_value = DoubleToSmiInteger(number);
+    if(int_value !== null) {
+      return this.NewSmiLiteral(int_value, pos);
+    }
+    return new Literal(kHeapNumber, number, pos);
+  }
   NewBooleanLiteral(b, pos) {
     return new Literal(kBoolean, b, pos);
   }

@@ -52,6 +52,7 @@ export const IsUnaryOp = (op) => TokenIsInRange(op, 'ADD', 'VOID');
 export const IsCountOp = (op) => TokenIsInRange(op, 'INC', 'DEC');
 export const IsUnaryOrCountOp = (op) => TokenIsInRange(op, 'ADD', 'DEC');
 export const IsShiftOp = (op) => TokenIsInRange(op, 'SHL', 'SHR');
+export const IsCompareOp = (op) => TokenIsInRange(op, 'EQ', 'IN');
 
 export const IsPropertyOrCall = (op) => TokenIsInRange(op, 'TEMPLATE_SPAN', 'LPAREN');
 export const IsLiteral = (token) => TokenIsInRange(token, 'NULL_LITERAL', 'STRING');

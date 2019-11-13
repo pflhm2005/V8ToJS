@@ -31,3 +31,11 @@ export class ForInfo {
     this.parsing_result = new DeclarationParsingResult();
   }
 }
+
+export class CatchInfo {
+  constructor() {
+    this.pattern = null;
+    this.variable = null;
+    this.scope = null;
+  }
+}

@@ -10,7 +10,7 @@ import {
 import Scope, { FunctionDeclarationScope, ScriptDeclarationScope } from './Scope';
 
 import FunctionState from './function/FunctionState';
-import { ClassInfo, ForInfo } from './Info';
+import { ClassInfo, ForInfo, CatchInfo } from './Info';
 import { FuncNameInferrer } from './function/FuncNameInferrer';
 
 import ParsePropertyInfo from './object/ParsePropertyInfo';
@@ -97,6 +97,7 @@ import {
   IS_POSSIBLY_EVAL,
   kHomeObjectSymbol,
   kNamedExpression,
+  CATCH_SCOPE,
 } from '../enum';
 
 import {
@@ -127,6 +128,7 @@ import {
   IsCallable,
   IsAccessorFunction,
   IsClassConstructor,
+  IsCompareOp,
 } from '../util';
 
 import {
@@ -157,6 +159,7 @@ import {
   kImportMissingSpecifier,
   kInvalidEscapedMetaProperty,
   kUnterminatedTemplateExpr,
+  kNoCatchOrFinally,
 } from '../MessageTemplate';
 import ParserFormalParameters from './function/ParserFormalParameters';
 import NextArrowFunctionInfo from './function/NextArrowFunctionInfo';
@@ -483,7 +486,14 @@ export default class ParserBase {
       case 'Token::THROW':
         return this.ParseThrowStatement();
       case 'Token::TRY': {
-
+        if (labels === null) return this.ParseTryStatement();
+        let statements = [];
+        let result = this.ast_node_factory_.NewBlock(false, labels);
+        // TargetT target(this, result);
+        statement = this.ParseTryStatement();
+        statements.push(statement);
+        result.statement_ = statements;
+        return result;
       }
       case 'Token::WITH':
         return this.ParseWithStatement(labels);
@@ -655,6 +665,13 @@ export default class ParserBase {
       throw new Error('UnexpectedToken');
     }
     return this.GetIdentifier();
+  }
+  ParseNonRestrictedIdentifier() {
+    let result = this.ParseIdentifier();
+    if (is_strict(this.language_mode()) && this.IsEvalOrArguments(result)) {
+      throw new Error(kStrictEvalArguments);
+    }
+    return result;
   }
   MethodKindFor(flags) {
     return this.FunctionKindForImpl(1, flags);
@@ -2056,6 +2073,107 @@ export default class ParserBase {
   }
 
   /**
+   * 解析try语句
+   * TryStatement ::
+   *  'try' Block Catch
+   *  'try' Block Finally
+   *  'try' Block Catch Finally
+   * Catch ::
+   *  'catch' '(' Identifier ')' Block
+   * Finally ::
+   *  'finally' Block
+   */
+  ParseTryStatement() {
+    this.Consume('Token::TRY');
+    let pos = this.position();
+    let try_block = this.ParseBlock(null);
+    let catch_info = new CatchInfo();
+    if (this.peek() !== 'Token::CATCH' && this.peek() !== 'Token::FINALLY') throw new Error(kNoCatchOrFinally);
+
+    let catch_block = null;
+    {
+      if (this.Check('Token::CATCH')) {
+        // 新标准catch后面可以不用指定错误
+        let has_binding = this.Check('Token::LPAREN');
+        if (has_binding) {
+          catch_info.scope = this.NewScope(CATCH_SCOPE);
+          catch_info.scope.start_position_ = this.scanner_.location().beg_pos;
+          {
+            // BlockState catch_block_state(&scope_, catch_info.scope);
+            let outer_scope_ = this.scope_;
+            this.scope_ = catch_info.scope;
+            let catch_statements = [];
+            {
+              // BlockState catch_variable_block_state(zone(), &scope_);
+              let outer_scope_ = this.scope_;
+              this.scope_ = new Scope(null, this.scope_, BLOCK_SCOPE);
+              this.scope_.start_position_ = this.position();
+              // 解析catch(e)这种标识符变量形式
+              if (this.peek_any_identifier()) {
+                let identifier = this.ParseNonRestrictedIdentifier();
+                catch_info.variable = this.DeclareCatchVariableName(catch_info.scope, identifier);
+              }
+              // 解析catch({})这种pattern类型
+              else {
+                catch_info.variable = catch_info.scope.DeclareCatchVariableName(this.ast_value_factory_.dot_catch_string());
+                let decls = this.scope_.declarations;
+                let declaration_it = decls.length;
+                let destructuring = new VariableDeclarationParsingScope(this, kLet, null);
+                catch_info.pattern = this.ParseBindingPattern();
+
+                let initializer_position = this.end_position();
+                let declaration_end = decls.length;
+                for (; declaration_it !== declaration_end; ++declaration_it) {
+                  decls[declaration_it].var_.initializer_position_ = initializer_position;
+                }
+                catch_statements.push(this.RewriteCatchPattern(catch_info));
+              }
+              this.Expect('Token::RPAREN');
+              let inner_block = this.ParseBlock(null);
+              catch_statements.push(inner_block);
+              // 处理catch(e) { let e; }这种重复声明
+              if (this.HasCheckedSyntax()) {
+                let inner_scope = inner_block.scope_;
+                if (inner_scope !== null) {
+                  let conflict = null;
+                  if (catch_info.pattern === null) {
+                    let name = catch_info.variable.raw_name();
+                    if (inner_scope.LookupLocal(name)) conflict = name;
+                  } else {
+                    conflict = inner_scope.FindVariableDeclaredIn(this.scope_, kVar);
+                  }
+                  if (conflict !== null) {
+                    throw new Error('Identifier has already been declared');
+                  }
+                }
+              }
+              catch_info.end_position_ = this.end_position();
+              catch_block = ast_node_factory_.NewBlock(false, catch_statements);
+              catch_block.scope_ = this.scope_.FinalizeBlockScope();
+
+              this.scope_ = outer_scope_;
+            }
+
+            // 析构
+            this.scope_ = outer_scope_;
+          }
+          catch_info.scope.end_position_ = this.end_position();
+        } else {
+          catch_block = this.ParseBlock(null);
+        }
+      }
+    }
+
+    let finally_block = null;
+    {
+      if (this.Check('Token::FINALLY')) {
+        finally_block = this.ParseBlock(null);
+      }
+    }
+    return this.RewriteTryStatement(try_block, catch_block, null, finally_block, null, catch_info, pos);
+  }
+
+  /**
    * 解析with语句
    * 'with' '(' Expression ')' Statement
    */
@@ -2321,8 +2439,26 @@ export default class ParserBase {
     let expression = this.ParseBinaryExpression(4);
     return this.peek() === 'Token::CONDITIONAL' ? this.ParseConditionalContinuation(expression, pos) : expression;
   }
-  // TODO
-  ParseConditionalContinuation() { }
+  ParseConditionalContinuation(expression, pos) {
+    let left = null;
+    {
+      this.Consume('Token::CONDITIONAL');
+      // AcceptINScope scope(this, true);
+      let previous_accept_IN_ = this.accept_IN_;
+      this.accept_IN_ = true;
+      left = this.ParseAssignmentExpression();
+
+      // 析构
+      this.accept_IN_ = previous_accept_IN_;
+    }
+    let right = null;
+    {
+      this.Expect('Token::COLON');
+      right = this.ParseAssignmentExpression();
+    }
+    let expr = this.ast_node_factory_.NewConditional(expression, left, right, pos);
+    return expr;
+  }
   /**
    * Precedence >= 4
    * 处理二元表达式
@@ -2341,8 +2477,39 @@ export default class ParserBase {
     if (prec1 >= prec) return this.ParseBinaryContinuation(x, prec, prec1);
     return x;
   }
-  // TODO
-  ParseBinaryContinuation() { }
+  ParseBinaryContinuation(x, prec, prec1) {
+    do {
+      while (Precedence(this.peek(), this.accept_IN_) === prec1) {
+        let pos = this.peek_position();
+        let y = null;
+        let op = null;
+        {
+          op = this.Next();
+          let is_right_associative = op === 'Token::EXP';
+          let next_prec = is_right_associative ? prec1 : prec1 + 1;
+          y = this.ParseBinaryExpression(next_prec);
+        }
+
+        if (IsCompareOp(op)) {
+          let cmp = op;
+          switch (op) {
+            case 'Token::NE': cmp = 'Token::EQ'; break;
+            case 'Token::NE_STRICT': cmp = 'Token::EQ_STRICT'; break;
+            default: break;
+          }
+          x = this.ast_node_factory_.NewCompareOperation(cmp, x, y, pos);
+          if (cmp !== op) {
+            x = this.ast_node_factory_.NewUnaryOperation('Token::NOT', x, pos);
+          }
+        } else if (!this.ShortcutNumericLiteralBinaryExpression(x, y, op, pos) &&
+          !this.CollapseNaryExpression(x, y, op, pos)) {
+          x = this.ast_node_factory_.NewBinaryOperation(op, x, y, pos);
+        }
+      }
+      --prec1;
+    } while (prec1 >= prec);
+    return x;
+  }
   /**
    * 处理一元表达式 分为下列情况
    * (1)PostfixExpression
@@ -2573,15 +2740,15 @@ export default class ParserBase {
         }
         return this.ParseClassLiteral(name, class_name_location, is_strict_reserved_name, class_token_pos);
       }
-
+      // 这块尚未完善
       case 'Token::TEMPLATE_SPAN':
       case 'Token::TEMPLATE_TAIL':
         return this.ParseTemplateLiteral(null, beg_pos, false);
 
       case 'Token::MOD':
-        if (this.allow_natives_ || this.extension_ !== null) {
-          return this.ParseV8Intrinsic();
-        }
+        // if (this.allow_natives_ || this.extension_ !== null) {
+        //   return this.ParseV8Intrinsic();
+        // }
         break;
 
       default:
@@ -2953,6 +3120,24 @@ export default class ParserBase {
     } while (next === 'Token::TEMPLATE_SPAN');
     return this.CloseTemplateLiteral(ts, start, tag);
   }
+
+  /**
+   * 解析内部JS方法 不支持
+   * '%' Identifier Arguments
+   * 很久以前的数组方法是用JS写的 里面的函数名都是百分比符号开头
+   */
+  // ParseV8Intrinsic() {
+  //   let pos = this.peek_position();
+  //   this.Consume('Token::MOD');
+  //   let name = this.ParseIdentifier();
+  //   // (
+  //   if (this.peek() !== 'Token::LPAREN') throw new Error('UnexpectedToken');
+  //   let args = [];
+  //   let has_spread = this.ParseArguments(args);
+
+  //   if (has_spread) throw new Error(kIntrinsicWithSpread);
+  //   return this.NewV8Intrinsic(name, args, pos);
+  // }
 
   /**
    * 解析new表达式

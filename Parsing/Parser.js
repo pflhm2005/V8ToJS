@@ -40,7 +40,7 @@ import {
   kParamAfterRest,
   kMalformedArrowFunParamList
 } from '../MessageTemplate';
-import { is_strict, is_sloppy, IsDerivedConstructor, IsGetterFunction, IsSetterFunction } from '../util';
+import { is_strict, is_sloppy, IsDerivedConstructor, IsGetterFunction, IsSetterFunction, Divide, DoubleToInt32, ShlWithWraparound, DoubleToUint32 } from '../util';
 import ParserFormalParameters from './function/ParserFormalParameters';
 import { ParameterDeclarationParsingScope } from './ExpressionScope';
 import Parameter from './function/Parameter';
@@ -198,6 +198,56 @@ class Parser extends ParserBase {
     return this.parameters_end_pos_ !== kNoSourcePosition;
   }
 
+  /**
+   * 两个数字字面量的运算直接进行整合
+   * 例如 1 + 2 => 输出3个数字字面量
+   */
+  ShortcutNumericLiteralBinaryExpression(x, y, op, pos) {
+    if (x.IsNumberLiteral() && y.IsNumberLiteral()) {
+      let x_val = x.val();
+      let y_val = y.val();
+      switch (op) {
+        case 'Token:ADD':
+          x = this.ast_node_factory_.NewNumberLiteral(x_val + y_val, pos);
+          return true;
+        case 'Token::SUB':
+          x = this.ast_node_factory_.NewNumberLiteral(x_val - y_val, pos);
+          return true;
+        case 'Token::MUL':
+          x = this.ast_node_factory_.NewNumberLiteral(x_val * y_val, pos);
+          return true;
+        case 'Token::DIV':
+          x = this.ast_node_factory_.NewNumberLiteral(Divide(x_val, y_val), pos);
+          return true;
+        case 'Token::BIT_OR':
+          let value = DoubleToInt32(x_val) | DoubleToInt32(y_val);
+          x = this.ast_node_factory_.NewNumberLiteral(value, pos);
+          return true;
+        case 'Token::BIT_ADD':
+          let value = DoubleToInt32(x_val) & DoubleToInt32(y_val);
+          x = this.ast_node_factory_.NewNumberLiteral(value, pos);
+          return true;
+        case 'Token::BIT_XOR':
+          let value = DoubleToInt32(x_val) ^ DoubleToInt32(y_val);
+          x = this.ast_node_factory_.NewNumberLiteral(value, pos);
+          return true;
+        case 'Token::SHL':
+          let value = ShlWithWraparound(DoubleToInt32(x_val), DoubleToInt32(y_val));
+          x = this.ast_node_factory_.NewNumberLiteral(value, pos);
+          return true;
+        case 'Token::SHR':
+          let shift = DoubleToInt32(y_val) & 0x1f;
+          let value = DoubleToUint32(x_val) >> shift;
+          x = this.ast_node_factory_.NewNumberLiteral(value, pos);
+          return true;
+      }
+    }
+    return false;
+  }
+  CollapseNaryExpression(x, y, op, pos) {
+
+  }
+
   EmptyIdentifierString() { return this.ast_value_factory_.empty_string(); }
   NullExpression() { return Object.create(null); }
   NullIdentifier() { return Object.create(null); }
@@ -326,6 +376,9 @@ class Parser extends ParserBase {
   }
   DeclareIdentifier(name, start_position) {
     return this.expression_scope_.Declare(name, start_position);
+  }
+  DeclareCatchVariableName(scope, name) {
+    return scope.DeclareCatchVariableName(name);
   }
   DeclareBoundVariable(name, mode, pos) {
     let proxy = this.ast_node_factory_.NewVariableProxy(name, NORMAL_VARIABLE, this.position());
@@ -1093,6 +1146,15 @@ class Parser extends ParserBase {
     block.statement_.push(statement);
     return block;
   }
+  /**
+   * 重写catch的复杂参数解构
+   */
+  RewriteCatchPattern(catch_info) {
+    let decl = new Declaration(catch_info.pattern, ast_node_factory_.NewVariableProxy(catch_info.variable));
+    let init_statements = [];
+    this.InitializeVariables(init_statements, NORMAL_VARIABLE, decl);
+    return this.ast_node_factory_.NewBlock(true, init_statements);
+  }
 
   OpenTemplateLiteral(pos) {
     return new TemplateLiteral(pos);
@@ -1100,7 +1162,7 @@ class Parser extends ParserBase {
   AddTemplateSpan(state, should_cook, tail) {
     let end = this.scanner_.location().end_pos - (tail ? 1 : 2);
     let raw = this.scanner_.CurrentRawSymbol(this.ast_value_factory_);
-    if(should_cook) {
+    if (should_cook) {
       let cooked = this.scanner_.CurrentSymbol(this.ast_value_factory_);
       state.AddTemplateSpan(cooked, raw, end);
     } else {
@@ -1112,8 +1174,8 @@ class Parser extends ParserBase {
     let cooked_strings = state.cooked_;
     let raw_strings = state.raw_;
     let expressions = state.expressions_;
-    if(!tag) {
-      if(cooked_strings.length === 1) {
+    if (!tag) {
+      if (cooked_strings.length === 1) {
         return this.ast_node_factory_.NewStringLiteral(cooked_strings[0], pos);
       }
       return this.ast_node_factory_.NewTemplateLiteral(cooked_strings, expressions, pos);
@@ -1126,6 +1188,13 @@ class Parser extends ParserBase {
       return this.ast_node_factory_.NewTaggedTemplate(tag, call_args, pos);
     }
   }
+
+  // NewV8Intrinsic(name, args, pos) {
+  //   if(this.extension_ !== null) {
+  //     this.scope_.GetClosureScope().ForceEagerCompilation();
+  //   }
+  //   if(!name.is_one_byte()) throw new Error(kNotDefined);
+  // }
 }
 
 class TemplateLiteral {

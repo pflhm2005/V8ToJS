@@ -37,6 +37,7 @@ export default class AstValueFactory {
   of_string() { return 'of'; }
   computed_string() { return '<computed>'; }
   meta_string() { return 'meta'; }
+  dot_catch_string() { return '.catch'; }
 
   empty_cons_string() { return this.empty_cons_string_; }
   NewConsString(str1 = null, str2 = null) {

@@ -55,3 +55,7 @@ export const kImportMissingSpecifier = 'import() requires a specifier';
 export const kInvalidEscapedMetaProperty = 'must not contain escaped characters';
 
 export const kUnterminatedTemplateExpr = 'Missing } in template expression';
+export const kIntrinsicWithSpread = 'Intrinsic calls do not support spread arguments';
+export const kNotDefined = '% is not defined';
+
+export const kNoCatchOrFinally = 'Missing catch or finally after try';
