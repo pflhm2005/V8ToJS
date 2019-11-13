@@ -671,7 +671,9 @@ export class Expression extends AstNode {
 }
 
 class FailureExpression extends Expression {
-  super(kNoSourcePosition, _kFailureExpression);
+  constructor() {
+    super(kNoSourcePosition, _kFailureExpression);
+  }
 }
 
 class Call extends Expression {

@@ -219,27 +219,32 @@ class Parser extends ParserBase {
         case 'Token::DIV':
           x = this.ast_node_factory_.NewNumberLiteral(Divide(x_val, y_val), pos);
           return true;
-        case 'Token::BIT_OR':
+        case 'Token::BIT_OR': {
           let value = DoubleToInt32(x_val) | DoubleToInt32(y_val);
           x = this.ast_node_factory_.NewNumberLiteral(value, pos);
           return true;
-        case 'Token::BIT_ADD':
+        }
+        case 'Token::BIT_ADD': {
           let value = DoubleToInt32(x_val) & DoubleToInt32(y_val);
           x = this.ast_node_factory_.NewNumberLiteral(value, pos);
           return true;
-        case 'Token::BIT_XOR':
+        }
+        case 'Token::BIT_XOR': {
           let value = DoubleToInt32(x_val) ^ DoubleToInt32(y_val);
           x = this.ast_node_factory_.NewNumberLiteral(value, pos);
           return true;
-        case 'Token::SHL':
+        }
+        case 'Token::SHL': {
           let value = ShlWithWraparound(DoubleToInt32(x_val), DoubleToInt32(y_val));
           x = this.ast_node_factory_.NewNumberLiteral(value, pos);
           return true;
-        case 'Token::SHR':
+        }
+        case 'Token::SHR': {
           let shift = DoubleToInt32(y_val) & 0x1f;
           let value = DoubleToUint32(x_val) >> shift;
           x = this.ast_node_factory_.NewNumberLiteral(value, pos);
           return true;
+        }
       }
     }
     return false;
@@ -1155,6 +1160,7 @@ class Parser extends ParserBase {
     this.InitializeVariables(init_statements, NORMAL_VARIABLE, decl);
     return this.ast_node_factory_.NewBlock(true, init_statements);
   }
+  RewriteTryStatement() {}
 
   OpenTemplateLiteral(pos) {
     return new TemplateLiteral(pos);
