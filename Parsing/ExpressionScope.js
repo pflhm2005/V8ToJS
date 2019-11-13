@@ -59,6 +59,7 @@ class ExpressionScope {
   CanBeDeclaration() {
     return IsInRange(this.type_, kMaybeArrowParameterDeclaration, kLexicalDeclaration);
   }
+  IsVariableDeclaration() { return IsInRange(this.type_, kVarDeclaration, kLexicalDeclaration); }
   IsVarDeclaration() { return this.type_ === kVarDeclaration; }
   IsLexicalDeclaration() { return this.type_ === kLexicalDeclaration; }
   IsCertainlyDeclaration() { return IsInRange(this.type_, kParameterDeclaration, kLexicalDeclaration); }
@@ -73,14 +74,14 @@ class ExpressionScope {
   AsVariableDeclarationParsingScope(parser, mode, names) { return new VariableDeclarationParsingScope(parser, mode, names); }
 
   // JS不存在向子类强转 调用实例如果是父类一律不作为
-  RecordNonSimpleParameter() {}
+  RecordNonSimpleParameter() { }
   // 这里有方法重写 比较麻烦
   RecordThisUse() {
     let scope = this;
     do {
-      if(scope.IsArrowHeadParsingScope()) scope.uses_this_ = true;
+      if (scope.IsArrowHeadParsingScope()) scope.uses_this_ = true;
       scope = scope.parent_;
-    } while(scope !== null);
+    } while (scope !== null);
   }
 
   /**
@@ -162,7 +163,7 @@ export class ExpressionParsingScope extends ExpressionScope {
   }
 
   MarkIdentifierAsAssigned() {
-    if(this.variable_list_.length === 0) return;
+    if (this.variable_list_.length === 0) return;
     this.variable_list_[this.variable_list_.length - 1].set_is_assigned();
   }
 }
@@ -181,7 +182,7 @@ export class VariableDeclarationParsingScope extends ExpressionScope {
   Declare(name, pos) {
     let kind = NORMAL_VARIABLE;
     // was_added标记是否成功添加HashMap 即第一次声明该变量
-    let { was_added, variable } = this.parser_.DeclareVariable(name, kind, this.mode_, 
+    let { was_added, variable } = this.parser_.DeclareVariable(name, kind, this.mode_,
       Variable.DefaultInitializationFlag(this.mode_), this.parser_.scope_, false, pos);
     if (this.names_) this.names_.push(name);
     /**
@@ -196,7 +197,7 @@ export class VariableDeclarationParsingScope extends ExpressionScope {
       if (this.parser_.IsLet(name.literal_bytes_)) {
         throw new Error(kLetInLexicalBinding);
       }
-    } else {}
+    } else { }
     return variable;
   }
 }
@@ -211,6 +212,16 @@ export class ParameterDeclarationParsingScope extends ExpressionScope {
   }
   duplicate_location() {
     return this.duplicate_loc_;
+  }
+  Declare(name, pos) {
+    let kind = PARAMETER_VARIABLE;
+    let mode = kVar;
+    let { was_added, variable } = this.parser_.DeclareVariable(
+      name, kind, mode, Variable.DefaultInitializationFlag(mode), this.parser_.scope_, false, pos);
+    if (!this.has_duplicate() && !was_added) {
+      this.duplicate_loc_ = new Location(pos, pos + name.length());
+    }
+    return variable;
   }
 }
 
@@ -252,18 +263,18 @@ export class ArrowHeadParsingScope extends ExpressionParsingScope {
   }
   ValidateAndCreateScope() {
     let result = this.parser_.NewFunctionScope(this.kind());
-    if(!this.has_simple_parameter_list_) result.SetHasNonSimpleParameters();
+    if (!this.has_simple_parameter_list_) result.SetHasNonSimpleParameters();
     let kind = PARAMETER_VARIABLE;
     let mode = this.has_simple_parameter_list_ ? kVar : kLet;
-    for(let proxy of this.variable_list_) {
-      this.parser_.DeclareAndBindVariable(proxy, kind, mode, Variable.DefaultInitializationFlag(mode), 
-      result, false, proxy.position());
+    for (let proxy of this.variable_list_) {
+      this.parser_.DeclareAndBindVariable(proxy, kind, mode, Variable.DefaultInitializationFlag(mode),
+        result, false, proxy.position());
     }
     let initializer_position = this.parser_.end_position();
-    for(let declaration of result.declarations()) {
+    for (let declaration of result.declarations()) {
       declaration.var_.initializer_position_ = initializer_position;
     }
-    if(this.uses_this_) result.UsesThis();
+    if (this.uses_this_) result.UsesThis();
     return result;
   }
   kind() {

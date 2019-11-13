@@ -43,8 +43,6 @@ const BitField = (shift, size) => {
   let kShift = shift;
   let kSize = size;
   let kMask = ((1 << kShift) << kSize) - (1 << kShift);
-  let kNumValues = 1 << kSize;
-  let kMax = kNumValues - 1;
   return {
     kNext: shift + size,
     encode(value) {

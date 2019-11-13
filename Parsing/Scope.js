@@ -26,6 +26,8 @@ import {
   TokenEnumList,
   kMaybeAssigned,
   CLASS_SCOPE,
+  kModule,
+  BLOCK_SCOPE,
 } from "../enum";
 import { Variable } from "../ast/AST";
 import {
@@ -205,7 +207,7 @@ export default class Scope extends ZoneObject {
     return true;
   }
   FinalizeBlockScope() {
-    if (this.variables_.occupancy() > 0 || (this.is_declaration_scope_ && calls_sloppy_eval())) {
+    if (this.variables_.occupancy() > 0 || (this.is_declaration_scope_ && this.calls_sloppy_eval())) {
       return this;
     }
     this.outer_scope_.RemoveInnerScope(this);
@@ -374,10 +376,10 @@ export default class Scope extends ZoneObject {
   FindVariableDeclaredIn(scope, mode_limit) {
     let variables = scope.variables_.variables_;
     let l = variables.length;
-    for(let i = 0; i < l; i++) {
-      let name = variables[i];
+    for (let i = 0; i < l; i++) {
+      let name = variables[i].value.name_;
       let variable = this.LookupLocal(name);
-      if(variable !== null && variable.mode() <= mode_limit) return name;
+      if (variable !== null && variable.mode() <= mode_limit) return name;
     }
     return null;
   }
@@ -406,9 +408,9 @@ export default class Scope extends ZoneObject {
   }
   MakeParametersNonSimple() {
     this.SetHasNonSimpleParameters();
-    for (let p of this.variables_) {
+    for (let p of this.variables_.variables_) {
       let variable = p.value;
-      if (variable.is_parameter()) Variable.MakeParameterNonSimple();
+      if (variable.is_parameter()) variable.MakeParameterNonSimple();
     }
   }
   SetHasNonSimpleParameters() {
@@ -430,8 +432,12 @@ export default class Scope extends ZoneObject {
    */
   DeclareParameter(name, mode, is_optional, is_rest, ast_value_factory, position) {
     let variable = null;
-    if (mode === kTemporary) variable = NewTemporary(name);
-    else variable = this.LookupLocal(name);
+    if (mode === kTemporary) {
+      variable = this.NewTemporary(name);
+    }
+    else {
+      variable = this.LookupLocal(name);
+    }
     this.has_rest_ = is_rest;
     variable.initializer_position_ = position;
     this.params_.push(variable);
@@ -471,9 +477,12 @@ export default class Scope extends ZoneObject {
  * 保留该类 但是不作为实例化对象
  */
 class DeclarationScope extends Scope {
-  constructor(zone, outer_scope = null, scope_type = SCRIPT_SCOPE) {
+  constructor(zone = null, outer_scope = null, scope_type = SCRIPT_SCOPE, function_kind) {
     super(zone, outer_scope, scope_type);
     this.sloppy_block_functions_ = [];
+    this.params_ = [];
+    this.function_kind_ = function_kind;
+    this.SetDefaults();
   }
   SetDefaults() {
     this.is_declaration_scope_ = true;
@@ -495,6 +504,9 @@ class DeclarationScope extends Scope {
     this.was_lazily_parsed_ = false;
     this.is_skipped_function_ = false;
     this.preparse_data_builder_ = null;
+  }
+  set_should_eager_compile() {
+    this.should_eager_compile_ = !this.was_lazily_parsed_;
   }
   EnsureRareData() {
     if (this.rare_data_ === null) {
@@ -611,11 +623,8 @@ class DeclarationScope extends Scope {
 
 export class FunctionDeclarationScope extends DeclarationScope {
   constructor(zone = null, outer_scope, scope_type, function_kind = kNormalFunction) {
-    super(zone, outer_scope, scope_type);
-    this.function_kind_ = function_kind;
+    super(zone, outer_scope, scope_type, function_kind);
     this.num_parameters_ = 0;
-    this.params_ = [];
-    this.SetDefaults();
   }
   /**
    * 由于arguments参数仅出现在function中
@@ -634,11 +643,27 @@ export class FunctionDeclarationScope extends DeclarationScope {
 
 export class ScriptDeclarationScope extends DeclarationScope {
   constructor(zone, ast_value_factory) {
-    super(zone);
-    this.function_kind_ = kNormalFunction;
-    this.params_ = [];
-    this.SetDefaults();
+    super(null, null, SCRIPT_SCOPE, kNormalFunction);
     this.receiver_ = this.DeclareDynamicGlobal(ast_value_factory.GetOneByteStringInternal(ast_value_factory.this_string()), THIS_VARIABLE, this);
+  }
+}
+
+class SourceTextModuleDescriptor {
+  constructor() {
+    this.module_requests_ = null;
+    this.special_exports_ = null;
+    this.namespace_imports_ = null;
+    this.regular_exports_ = null;
+    this.regular_imports_ = null;
+  }
+}
+
+export class ModuleScope extends DeclarationScope {
+  constructor(script_scope, avfactory) {
+    super(null, script_scope, MODULE_SCOPE, kModule);
+    this.module_descriptor_ = new SourceTextModuleDescriptor();
+    this.set_language_mode(kStrict);
+    this.DeclareThis(avfactory);
   }
 }
 

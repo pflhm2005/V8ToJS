@@ -1,6 +1,5 @@
 import { 
   kVar,
-  kVariableDeclaration,
   kNoSourcePosition,
 
   kSmi,
@@ -84,6 +83,9 @@ import {
   _kFailureExpression,
   _kTemplateLiteral,
   _kGetTemplateObject,
+  _kVariableDeclaration,
+  kHasDuplicateParameters,
+  kShouldEagerCompile,
 } from "../enum";
 
 import {
@@ -119,6 +121,13 @@ import {
   IsTaggedTemplateField,
   Pretenure,
   DoubleToSmiInteger,
+  VariableKindField,
+  VariableModeField,
+  HasDuplicateParameters,
+  DontOptimizeReasonField,
+  RequiresInstanceMembersInitializer,
+  HasBracesField,
+  OneshotIIFEBit,
 } from '../util';
 
 import { AstValueFactory } from './AstValueFactory';
@@ -600,7 +609,7 @@ class Declaration extends AstNode {
 
 class VariableDeclaration extends Declaration {
   constructor(pos, is_nested = false) {
-    super(pos, kVariableDeclaration);
+    super(pos, _kVariableDeclaration);
     this.bit_field_ = NodeTypeField.update(this.bit_field_, is_nested);
   }
 }
@@ -836,14 +845,14 @@ export class VariableProxy extends Expression {
     this.bit_field_ |= 0;
   }
   set_var(v) { this.var_ = v; }
-  set_is_resolved() { this.bit_field_ = NodeTypeField.update(this.bit_field_, 1); }
+  set_is_resolved() { this.bit_field_ = IsResolvedField.update(this.bit_field_, 1); }
   set_is_assigned() {
     this.bit_field_ = IsAssignedField.update(this.bit_field_, 1);
     if(this.is_resolved()) this.var_.set_maybe_assigned();
   }
   set_maybe_assigned() { this.bit_field_ = MaybeAssignedFlagField.update(this.bit_field_, kMaybeAssigned); }
   is_resolved() { return IsResolvedField.decode(this.bit_field_); }
-  is_assigned() { return NodeTypeField.decode(this.bit_field_); }
+  is_assigned() { return IsAssignedField.decode(this.bit_field_); }
 
   BindTo(variable) {
     this.set_var(variable);
@@ -1034,11 +1043,25 @@ class FunctionLiteral extends Expression {
   constructor(zone = null, name, ast_value_factory, scope, body, expected_property_count,
   parameter_count, function_length, function_syntax_kind, has_duplicate_parameters,
   eager_compile_hint, position, has_braces, function_literal_id, produced_preparse_data = null) {
-    super();
+    super(position, _kFunctionLiteral);
+    this.expected_property_count_ = expected_property_count;
+    this.parameter_count_ = parameter_count;
+    this.function_length_ = function_length;
+    this.function_token_position_ = kNoSourcePosition;
+    this.suspend_count_ = 0;
+    this.function_literal_id_ = function_literal_id;
+    this.raw_name_ = name ? ast_value_factory.NewConsString(name) : null;
     this.scope_ = scope;
     this.raw_name_ = null;
     this.suspend_count_ = 0;
-    this.body_ = body;
+    this.raw_inferred_name_ = ast_value_factory.empty_cons_string();
+    this.produced_preparse_data_ = produced_preparse_data;
+    this.bit_field_ |= FunctionSyntaxKindBits.encode(function_syntax_kind) | 
+    Pretenure.encode(false) | HasDuplicateParameters.encode(has_duplicate_parameters === kHasDuplicateParameters) |
+    DontOptimizeReasonField.encode(0)/* TODO */ | RequiresInstanceMembersInitializer.encode(false) | 
+    HasBracesField.encode(has_braces) | OneshotIIFEBit.encode(false);
+    if(eager_compile_hint === kShouldEagerCompile) this.SetShouldEagerCompile();
+    this.body_ = body || [];
   }
   kind() { return this.scope_.function_kind_; }
   is_anonymous_expression() {
@@ -1058,6 +1081,9 @@ class FunctionLiteral extends Expression {
   }
   set_pretenure() {
     this.bit_field_ = Pretenure.update(this.bit_field_, true);
+  }
+  SetShouldEagerCompile() {
+    this.scope_.set_should_eager_compile();
   }
 }
 

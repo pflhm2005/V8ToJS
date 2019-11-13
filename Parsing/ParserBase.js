@@ -268,13 +268,11 @@ export default class ParserBase {
   NewClassScope(parent) {
     return new ClassScope(null, parent);
   }
-  // TODO
-  NewEvalScope() {
-    return null;
+  NewEvalScope(parent) {
+    return new DeclarationScope(null, parent, EVAL_SCOPE);
   }
-  // TODO
-  NewModuleScope() {
-    return null;
+  NewModuleScope(parent) {
+    return new ModuleScope(parent, this.ast_value_factory_);
   }
   ResetFunctionLiteralId() { this.function_literal_id_ = 0; }
   language_mode() { return this.scope_.language_mode(); }
@@ -761,8 +759,12 @@ export default class ParserBase {
      * 简单 (a, b) => {}
      * 复杂 ({a,b }, [c, d]) => {}
      */
-    if (this.IsIdentifier(pattern)) this.ClassifyParameter(pattern, pos, this.end_position());
-    else parameters.is_simple = false;
+    if (this.IsIdentifier(pattern)) {
+      this.ClassifyParameter(pattern, pos, this.end_position());
+    }
+    else {
+      parameters.is_simple = false;
+    }
 
     let initializer = null;
     // 解析参数默认值

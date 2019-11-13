@@ -1,7 +1,7 @@
 # V8record
 记录阅读v8源码过程的笔记，尝试用JavaScript翻译V8引擎
 
-支持所有Token的解析，完成了`let a = 1;let b = {a : 1};if(true){};while(false){}`等简单字面量的解析
+支持所有Token的解析，完成了`let a = 1;let b = {a : 1};if(true){};while(false){}`等语句解析
 
 下述内容过于复杂，需要走源码编译看过程，暂未实现。
 

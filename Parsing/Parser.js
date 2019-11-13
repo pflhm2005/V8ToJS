@@ -30,6 +30,7 @@ import {
   REFLECT_APPLY_INDEX,
   kInlineGetImportMetaObject,
   kLet,
+  kTemporary,
 } from '../enum';
 
 import {
@@ -618,7 +619,6 @@ class Parser extends ParserBase {
 
     // if (should_post_parallel_task) {}
     if (should_infer_name) this.fni_.AddFunction(function_literal);
-
     // 析构
     // this.pointer_buffer_.length = len;
     return function_literal;
@@ -872,7 +872,7 @@ class Parser extends ParserBase {
       }
 
       // 处理eval 跳过 一般也不会用
-      // let param_scope = this.scope_;
+      let param_scope = this.scope_;
       // if()...
 
       // BlockState block_state(&scope_, param_scope);
@@ -896,6 +896,29 @@ class Parser extends ParserBase {
     if (function_type === kNamedExpression && function_scope.LookupLocal(function_name) === null) {
       function_scope.DeclareFunctionVar(function_name);
     }
+  }
+  InsertShadowingVarBindingInitializers(inner_block) {
+    let inner_scope = inner_block.scope_;
+    let function_scope = inner_scope.outer_scope_;
+    // BlockState block_state(&scope_, inner_scope);
+    let outer_scope_ = this.scope_;
+    this.scope_ = inner_scope;
+    for (let decl of inner_scope.decls_) {
+      if(decl.var_.mode() !== kVar || !decl.IsVariableDeclaration()) {
+        continue;
+      }
+      let name = decl.var_.raw_name();
+      let parameter = function_scope.LookupLocal(name);
+      if (parameter === null) continue;
+      let to = this.NewUnresolved(name);
+      let from = this.ast_node_factory_.NewVariableProxy(parameter);
+      let assignment = this.ast_node_factory_.NewAssignment('Token::ASSIGN', to, from, kNoSourcePosition);
+      let statement = this.ast_node_factory_.NewExpressionStatement(assignment, kNoSourcePosition);
+      inner_block.statements_ = statement;
+    }
+
+    // 析构
+    this.scope_ = outer_scope_;
   }
 
   ParseAndRewriteAsyncGeneratorFunctionBody() { }
@@ -950,7 +973,6 @@ class Parser extends ParserBase {
     parameters.params.push(parameter);
   }
   /**
-   * TODO
    * @param {ParserFormalParameters*} parameters 
    */
   DeclareFormalParameters(parameters) {
@@ -972,8 +994,7 @@ class Parser extends ParserBase {
       scope.DeclareParameter(
         is_simple ? parameter.name() : this.ast_value_factory_.empty_string(),
         is_simple ? kVar : kTemporary,
-        is_optional, parameter.is_rest_, this.ast_value_factory_, parameter.position
-      );
+        is_optional, parameter.is_rest_, this.ast_value_factory_, parameter.position);
     }
   }
   RewriteClassLiteral() {
