@@ -96,9 +96,10 @@ function topLevelFunction() {
 目前采用两种方式模拟
 ```js
 let pointer_buffer_ = [];
-// 1. 这种情况必须保证对象的存活 直接浅拷贝
+// 1. 这种情况必须保证对象的存活
+// 直接生成一个新的数组 C++是为了节省内存才重复使用同一个指针变量 JS不搞这个
 function handle() {
-  let statements = pointer_buffer_.slice();
+  let statements = [];
   // do something
   return new xxx(statements);
 }
@@ -279,7 +280,7 @@ n <<= 30; // 3221225472
 let n = 111;
 n <<= 30; // -1073741824
 ```
-目前大规模的位运算出现在String的Hash值计算，见StringHasher。
+目前大规模的位运算出现在String的Hash值计算，见[StringHasher](https://github.com/pflhm2005/V8ToJS/blob/master/ast/StringHasher.js)。
 
 由于两个数的底层是一致的，只是符号类型不一致，所以只需要最后做一次无符号位移。
 ```js
