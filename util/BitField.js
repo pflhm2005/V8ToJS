@@ -173,6 +173,7 @@ export const IsUsedField = BitField(11, 1);
 export const InitializationFlagField = BitField(12, 1);
 export const ForceHoleInitializationField = BitField(13, 1);
 export const MaybeAssignedFlagField = BitField(14, 1);
+export const IsStaticFlagField = BitField(15, 1);
 
 export const OnAbruptResumeField = BitField(7, 1);
 
@@ -180,3 +181,11 @@ export const ReturnStatementTypeField = BitField(6, 1);
 
 export const IsPossiblyEvalField = BitField(7, 1);
 export const IsTaggedTemplateField = BitField(8, 1);
+
+/**
+ * class
+ */
+export const HasNameStaticProperty = BitField(7, 1);
+export const HasStaticComputedNames = BitField(8, 1);
+export const IsAnonymousExpression = BitField(9, 1);
+export const HasPrivateMethods = BitField(10, 1);

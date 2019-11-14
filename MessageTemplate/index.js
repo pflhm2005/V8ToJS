@@ -59,3 +59,7 @@ export const kIntrinsicWithSpread = 'Intrinsic calls do not support spread argum
 export const kNotDefined = '% is not defined';
 
 export const kNoCatchOrFinally = 'Missing catch or finally after try';
+
+export const kConstructorIsPrivate = 'Class constructor may not be a private method';
+export const kStaticPrototype = "Classes may not have a static property named 'prototype'";
+export const kDuplicateConstructor = 'A class may only have one constructor';

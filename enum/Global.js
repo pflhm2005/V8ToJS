@@ -14,6 +14,9 @@ export const kCreatedInitialized = 1;
 export const kNotAssigned = 0;
 export const kMaybeAssigned = 1;
 
+export const kNotStatic = 0;
+export const kStatic = 1;
+
 export const NORMAL_VARIABLE = 0;
 export const PARAMETER_VARIABLE = 1;
 export const THIS_VARIABLE = 2;

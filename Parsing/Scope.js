@@ -42,8 +42,6 @@ import {
 } from "../util";
 // import ThreadedList from '../base/ThreadedList';
 
-class ZoneObject { };
-
 /**
  * JS不存在HashMap的数据结构
  * 由于不存在指针 所以对象之间的比较十分困难
@@ -74,7 +72,7 @@ class VariableMap {
     }
     return tar;
   }
-  Declare(zone, scope, name, mode, kind, initialization_flag, maybe_assigned_flag, was_added) {
+  Declare(scope, name, mode, kind, initialization_flag, maybe_assigned_flag, was_added) {
     let p = this.LookupOrInsert(name, name.Hash());
     was_added = p.value === null;
     if (was_added) {
@@ -89,9 +87,8 @@ class VariableMap {
   occupancy() { return this.variables_.length; }
 }
 
-export default class Scope extends ZoneObject {
+export default class Scope {
   constructor(zone, outer_scope = null, scope_type = SCRIPT_SCOPE) {
-    super();
     this.zone_ = null;
     this.outer_scope_ = outer_scope;
     // The variables declared in this scope:
@@ -148,7 +145,6 @@ export default class Scope extends ZoneObject {
     this.must_use_preparsed_scope_data_ = false;
   }
 
-  zone() { return this.zone_; }
   set_start_position(statement_pos) { this.start_position_ = statement_pos; }
 
   is_eval_scope() { return this.scope_type_ === EVAL_SCOPE; }
@@ -337,11 +333,11 @@ export default class Scope extends ZoneObject {
     return { was_added, sloppy_mode_block_scope_function_redefinition };
   }
   DeclareCatchVariableName() {
-    let { variable } = this.Declare(null, name, kVar, NORMAL_VARIABLE, kCreatedInitialized, kNotAssigned, false);
+    let { variable } = this.Declare(name, kVar, NORMAL_VARIABLE, kCreatedInitialized, kNotAssigned, false);
     return variable;
   }
   DeclareLocal(name, mode, kind, was_added_param, init_flag) {
-    let { was_added, variable } = this.variables_.Declare(this.zone(), this, name, mode, kind, init_flag, kNotAssigned, was_added_param);
+    let { was_added, variable } = this.variables_.Declare(this, name, mode, kind, init_flag, kNotAssigned, was_added_param);
     if (was_added) this.locals_.push(variable);
 
     // 作用域判断
@@ -361,8 +357,8 @@ export default class Scope extends ZoneObject {
    * @param {MaybeAssignedFlag*} maybe_assigned_flag 
    * @param {bool*} was_added 
    */
-  Declare(zone = null, name, mode, kind, initialization_flag, maybe_assigned_flag, was_added_param) {
-    let { was_added, variable } = this.variables_.Declare(zone, this, name, mode, kind, initialization_flag, maybe_assigned_flag, was_added_param);
+  Declare(name, mode, kind, initialization_flag, maybe_assigned_flag, was_added_param) {
+    let { was_added, variable } = this.variables_.Declare(this, name, mode, kind, initialization_flag, maybe_assigned_flag, was_added_param);
     if (was_added) this.locals_.push(variable);
     return { was_added, variable };
   }
@@ -393,10 +389,10 @@ export default class Scope extends ZoneObject {
     // 生成this变量
     this.DeclareThis(ast_value_factory);
     // 生成.new.target变量
-    this.new_target_ = this.Declare(null, ast_value_factory.GetOneByteStringInternal(
+    this.new_target_ = this.Declare(ast_value_factory.GetOneByteStringInternal(
       ast_value_factory.new_target_string()), kConst, NORMAL_VARIABLE, kCreatedInitialized, kNotAssigned, false).variable;
     if (IsConciseMethod(this.function_kind_) || IsClassConstructor(this.function_kind_) || IsAccessorFunction(this.function_kind_)) {
-      this.EnsureRareData().this_function = this.Declare(null, ast_value_factory.GetOneByteStringInternal(
+      this.EnsureRareData().this_function = this.Declare(ast_value_factory.GetOneByteStringInternal(
         ast_value_factory.this_function_string()), kConst, NORMAL_VARIABLE, kCreatedInitialized, kNotAssigned, false).variable;
     }
   }
@@ -532,7 +528,7 @@ class DeclarationScope extends Scope {
     return result;
   }
   DeclareDynamicGlobal(name, kind, cache) {
-    return cache.variables_.Declare(null, this, name, kDynamicGlobal, kind, kCreatedInitialized, kNotAssigned, false);
+    return cache.variables_.Declare(this, name, kDynamicGlobal, kind, kCreatedInitialized, kNotAssigned, false);
   }
   calls_sloppy_eval() {
     return !this.is_script_scope() && this.scope_calls_eval_ && is_sloppy(this.language_mode());
@@ -631,7 +627,7 @@ export class FunctionDeclarationScope extends DeclarationScope {
    * 所以这个方法可以不用放到Scope上
    */
   DeclareArguments(ast_value_factory) {
-    let { was_added, variable: arguments_ } = this.Declare(null, ast_value_factory.GetOneByteStringInternal(ast_value_factory.arguments_string()), kVar,
+    let { was_added, variable: arguments_ } = this.Declare(ast_value_factory.GetOneByteStringInternal(ast_value_factory.arguments_string()), kVar,
       NORMAL_VARIABLE, kCreatedInitialized, kNotAssigned, false);
     /**
      * 若arguments变量已经被定义 且是通过let、const声明 此时默认的arguments变量为null => function fn(){let arguments = 1;}
@@ -668,15 +664,40 @@ export class ModuleScope extends DeclarationScope {
 }
 
 export class ClassScope extends Scope {
-  constructor(zone = null, outer_scope) {
+  constructor(zone = null, outer_scope, is_anonymous) {
     super(zone, outer_scope, CLASS_SCOPE);
+    this.rare_data_and_is_parsing_heritage_ = {
+      unresolved_private_names: [],
+      private_name_map: [],
+      brand: null,
+    };
+    this.is_anonymous_class_ = is_anonymous;
     this.set_language_mode(kStrict);
+
+    this.class_variable_ = null;
+    this.has_static_private_methods_ = false;
+    this.has_explicit_static_private_methods_access_ = false;
+    this.should_save_class_variable_index_ = false;
+  }
+  EnsureRareData() {
+    return this.rare_data_and_is_parsing_heritage_;
   }
   ResolvePrivateNamesPartially() {
+    let rare_data_ = this.rare_data_and_is_parsing_heritage_;
+    if(rare_data_ === null || !rare_data_.unresolved_private_names.length) {
+      return null;
+    }
     return null;
   }
-  DeclareBrandVariable() {
-
+  DeclareBrandVariable(ast_value_factory, is_statis_flag, class_token_pos) {
+    let { variable: brand } = this.Declare(ast_value_factory.dot_brand_string(), kConst,
+    NORMAL_VARIABLE, kNeedsInitialization, kMaybeAssigned, false);
+    brand.set_is_static_flag();
+    brand.ForceContextAllocation();
+    brand.set_is_used();
+    this.EnsureRareData().brand = brand;
+    brand.initializer_position_ = class_token_pos;
+    return brand;
   }
   GetUnresolvedPrivateNameTail() {
     if (this.rare_data_ === null) return [];
@@ -684,5 +705,16 @@ export class ClassScope extends Scope {
   }
   AddUnresolvedPrivateName(proxy) {
     this.EnsureRareData().unresolved_private_names.push(proxy);
+  }
+  should_save_class_variable_index() {
+    return this.should_save_class_variable_index_ || this.has_explicit_static_private_methods_access_ || 
+    (this.has_static_private_methods_ && this.inner_scope_calls_eval_);
+  }
+  DeclareClassVariable(ast_value_factory, name, class_token_pos) {
+    let { variable } = this.Declare(name === null ? ast_value_factory.dot_string() : name,
+    kConst, NORMAL_VARIABLE, kNeedsInitialization, kMaybeAssigned, false);
+    this.class_variable_ = variable;
+    this.class_variable_.initializer_position_ = class_token_pos;
+    return this.class_variable_;
   }
 }

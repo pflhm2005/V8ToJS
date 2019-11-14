@@ -99,6 +99,7 @@ import {
   kHomeObjectSymbol,
   kNamedExpression,
   CATCH_SCOPE,
+  kNotStatic,
 } from '../enum';
 
 import {
@@ -161,6 +162,9 @@ import {
   kInvalidEscapedMetaProperty,
   kUnterminatedTemplateExpr,
   kNoCatchOrFinally,
+  kConstructorIsPrivate,
+  kStaticPrototype,
+  kDuplicateConstructor,
 } from '../MessageTemplate';
 import ParserFormalParameters from './function/ParserFormalParameters';
 import NextArrowFunctionInfo from './function/NextArrowFunctionInfo';
@@ -265,8 +269,8 @@ export default class ParserBase {
   NewScriptScope() {
     return new ScriptDeclarationScope(null, this.ast_value_factory_);
   }
-  NewClassScope(parent) {
-    return new ClassScope(null, parent);
+  NewClassScope(parent, is_anonymous) {
+    return new ClassScope(null, parent, is_anonymous);
   }
   NewEvalScope(parent) {
     return new DeclarationScope(null, parent, EVAL_SCOPE);
@@ -974,7 +978,7 @@ export default class ParserBase {
   UseThis() {
     let closure_scope = this.scope_.GetClosureScope();
     let receiver_scope = closure_scope.GetReceiverScope();
-    let variable = receiver_scope.receiver();
+    let variable = receiver_scope.receiver_;
     variable.set_is_used();
     if (closure_scope === receiver_scope) this.expression_scope_.RecordThisUse();
     else {
@@ -1184,7 +1188,7 @@ export default class ParserBase {
       if (this.IsEvalOrArguments(name)) throw new Error(kStrictEvalArguments);
     }
 
-    let class_scope = this.NewClassScope(this.scope_);
+    let class_scope = this.NewClassScope(this.scope_, is_anonymous);
     // BlockState block_state(&scope_, class_scope);
     let outer_scope_ = this.scope_;
     this.scope_ = class_scope;
@@ -1192,7 +1196,6 @@ export default class ParserBase {
 
     let class_info = new ClassInfo();
     class_info.is_anonymous = is_anonymous;
-    this.DeclareClassVariable(name, class_info, class_token_pos);
 
     this.scope_.set_start_position(this.end_position());
     if (this.Check('Token::EXTENDS')) {
@@ -1216,7 +1219,7 @@ export default class ParserBase {
 
     this.Expect('Token::LBRACE');
 
-    let has_extends = !class_info.extends;
+    let has_extends = !class_info.extends === null;
     /**
      * 解析class内部结构
      * static? identifier () {}
@@ -1245,7 +1248,8 @@ export default class ParserBase {
       let is_field = property_kind === _FIELD;
       // V8_UNLIKELY
       if (prop_info.is_private) {
-        class_info.requires_brand |= is_field;
+        class_info.requires_brand |= (!is_field && !prop_info.is_static);
+        class_info.has_private_methods |= property_kind === _METHOD;
         this.DeclarePrivateClassMember(class_scope, prop_info.name, property,
           property_kind, prop_info.is_static, class_info);
         this.InferFunctionName();
@@ -1271,9 +1275,20 @@ export default class ParserBase {
     let end_pos = this.end_position();
     class_scope.end_position_ = end_pos;
 
-    let unresolvable = class_scope.ResolvePrivateNamesPartially();
-    if (unresolvable !== null) throw new Error(kInvalidPrivateFieldResolution);
-    if (class_info.requires_brand) class_scope.DeclareBrandVariable(this.ast_value_factory_, kNoSourcePosition);
+    // let unresolvable = class_scope.ResolvePrivateNamesPartially();
+    // if (unresolvable !== null) throw new Error(kInvalidPrivateFieldResolution);
+    if (class_info.requires_brand) {
+      class_scope.DeclareBrandVariable(this.ast_value_factory_, kNotStatic, kNoSourcePosition);
+    }
+
+    let should_save_class_variable_index = class_scope.should_save_class_variable_index();
+    if (!is_anonymous || should_save_class_variable_index) {
+      this.DeclareClassVariable(class_scope, name, class_info, class_token_pos);
+    }
+    if (should_save_class_variable_index) {
+      class_info.class_variable_.set_is_used();
+      class_info.class_variable_.ForceContextAllocation();
+    }
 
     let result = this.RewriteClassLiteral(class_scope, name, class_info, class_token_pos, end_pos);
     // 析构
@@ -1328,7 +1343,9 @@ export default class ParserBase {
       name_expression = this.ParseProperty(prop_info);
     }
 
-    if (!class_info.has_name_static_property && prop_info.is_static && this.IsName(prop_info.name)) class_info.has_name_static_property = true;
+    if (!class_info.has_name_static_property && prop_info.is_static && this.IsName(prop_info.name)) {
+      class_info.has_name_static_property = true;
+    }
 
     switch (prop_info.kind) {
       /**
@@ -1346,13 +1363,15 @@ export default class ParserBase {
 
         let result = this.ast_node_factory_.NewClassLiteralProperty(name_expression, initializer, _FIELD,
           prop_info.is_static, prop_info.is_computed_name, prop_info.is_private);
-        this.SetFunctionNameFromPropertyName(result, prop_info.name);
+        this.SetFunctionNameFromClassPropertyName(result, prop_info.name);
         return result;
       }
       // 普通方法
       case kMethod: {
-        if (!prop_info.is_computed_name) this.CheckClassMethodName(prop_info.name, kMethod,
-          prop_info.function_flags, prop_info.is_static, prop_info.has_seen_constructor);
+        if (!prop_info.is_computed_name) {
+          this.CheckClassMethodName(prop_info.name, kMethod,
+            prop_info.function_flags, prop_info.is_static, class_info);
+        }
         let kind = this.MethodKindFor(prop_info.function_flags);
         // static constructor属于普通的静态属性声明
         if (!prop_info.is_static && this.IsConstructor(prop_info.name)) {
@@ -1363,14 +1382,15 @@ export default class ParserBase {
           name_token_position, kAccessorOrMethod, this.language_mode(), null);
         let result = this.ast_node_factory_.NewClassLiteralProperty(name_expression, value, _METHOD,
           prop_info.is_static, prop_info.is_computed_name, prop_info.is_private);
-        this.SetFunctionNameFromPropertyName(result, prop_info.name);
+        this.SetFunctionNameFromClassPropertyName(result, prop_info.name);
         return result;
       }
       case kAccessorGetter:
       case kAccessorSetter: {
         let is_get = prop_info.kind === kAccessorGetter;
         if (!prop_info.is_computed_name) {
-          this.CheckClassMethodName(prop_info.name, prop_info.kind, kIsNormal, prop_info.is_static, class_info.has_seen_constructor);
+          this.CheckClassMethodName(
+            prop_info.name, prop_info.kind, kIsNormal, prop_info.is_static, class_info);
           name_expression = this.ast_node_factory_.NewStringLiteral(prop_info.name, name_expression.position_);
         }
         let kind = is_get ? kGetterFunction : kSetterFunction;
@@ -1381,7 +1401,7 @@ export default class ParserBase {
           prop_info.is_computed_name, prop_info.is_private);
 
         let prefix = is_get ? this.ast_value_factory_.get_space_string() : this.ast_value_factory_.set_space_string();
-        this.SetFunctionNameFromPropertyName(result, prop_info.name, prefix);
+        this.SetFunctionNameFromClassPropertyName(result, prop_info.name, prefix);
         return result;
       }
       // class内部不支持对象简写和...展开
@@ -1404,6 +1424,22 @@ export default class ParserBase {
         return _FIELD;
       default:
         this.UNREACHABLE();
+    }
+  }
+  CheckClassMethodName(name, type, flags, is_static, class_info) {
+    let avf = this.ast_value_factory_;
+    if (name.literal_bytes_ === avf.private_constructor_string()) {
+      throw new Error(kConstructorIsPrivate);
+    } else if (is_static) {
+      if (name.literal_bytes_ === avf.prototype_string()) {
+        throw new Error(kStaticPrototype);
+      }
+    } else if (name.literal_bytes_ === avf.constructor_string()) {
+      if (class_info.has_seen_constructor) {
+        throw new Error(kDuplicateConstructor);
+      }
+      class_info.has_seen_constructor = true;
+      return;
     }
   }
 
@@ -2377,7 +2413,6 @@ export default class ParserBase {
 
       return expression;
     }
-
     /**
      * V8_LIKELY
      * 多元运算表达式才会继续走
@@ -3244,7 +3279,7 @@ export default class ParserBase {
     return this.scope_.NewUnresolved(this.ast_node_factory_, name, pos, kind);
   }
   NewRawVariable(name, pos) {
-      return this.ast_node_factory_.NewVariableProxy(name, NORMAL_VARIABLE, pos);
+    return this.ast_node_factory_.NewVariableProxy(name, NORMAL_VARIABLE, pos);
   }
 
   /**
@@ -3473,7 +3508,7 @@ export default class ParserBase {
          * @returns {ObjectLiteralProperty}
          */
         let result = this.ast_node_factory_.NewObjectLiteralProperty(name_expression, value, prop_info.is_computed_name);
-        this.SetFunctionNameFromPropertyName(result, name);
+        this.SetFunctionNameFromObjectPropertyName(result, name);
         // 析构
         this.accept_IN_ = previous_accept_IN_;
         return result;
@@ -3509,7 +3544,7 @@ export default class ParserBase {
         }
         let result = this.ast_node_factory_.NewObjectLiteralProperty(name_expression, value, COMPUTED, false);
         // 只有匿名函数等等才会进入这里
-        this.SetFunctionNameFromPropertyName(result, name);
+        this.SetFunctionNameFromObjectPropertyName(result, name);
         return result;
       }
       // { a(){}, a*(){} }对象方法的简写模式解析
@@ -3534,7 +3569,7 @@ export default class ParserBase {
         let result = this.ast_node_factory_.NewObjectLiteralProperty(name_expression, value, is_get ? GETTER : SETTER, prop_info.is_computed_name);
 
         let prefix = is_get ? this.ast_value_factory_.get_space_string() : this.ast_value_factory_.set_space_string();
-        this.SetFunctionNameFromPropertyName(result, name, prefix);
+        this.SetFunctionNameFromObjectPropertyName(result, name, prefix);
         return result;
       }
 
@@ -3757,25 +3792,6 @@ export default class ParserBase {
     else throw new Error('UnexpectedToken');
 
     return result;
-  }
-  /**
-   * 这里重载了 差异只有一个子类强转 不管
-   * @param {ObjectLiteralProperty} property 键值对对象
-   * @param {AstRawString*} name 键值
-   * @param {AstRawString*} prefix 如果是getter/setter则会有prefix标记传进来
-   */
-  SetFunctionNameFromPropertyName(property, name, prefix = null) {
-    // 设置prototype不做处理
-    if (property.IsPrototype()) return;
-    /**
-     * 匿名函数
-     */
-    if (property.NeedsSetFunctionName()) {
-      name = null;
-      prefix = null;
-    }
-    let value = property.value_;
-    this.SetFunctionName(value, name, prefix);
   }
 
   ExpectContextualKeyword(name, fullname = null, pos = -1) {

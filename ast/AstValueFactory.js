@@ -22,6 +22,7 @@ export default class AstValueFactory {
   dot_result_string() { return '.result'; }
   dot_generator_object_string() { return '.generator_object'; }
   dot_switch_tag_string() { return '.switch_tag'; }
+  dot_brand_string() { return '.brand'; }
   prototype_string() { return 'prototype'; }
   proto_string() { return '__proto__'; }
   empty_string() { return ''; }
@@ -37,6 +38,7 @@ export default class AstValueFactory {
   computed_string() { return '<computed>'; }
   meta_string() { return 'meta'; }
   dot_catch_string() { return '.catch'; }
+  private_constructor_string() { return '#constructor'; }
 
   empty_cons_string() { return this.empty_cons_string_; }
   NewConsString(str1 = null, str2 = null) {

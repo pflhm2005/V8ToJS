@@ -31,6 +31,11 @@ import {
   kInlineGetImportMetaObject,
   kLet,
   kTemporary,
+  kDefaultDerivedConstructor,
+  kDefaultBaseConstructor,
+  kStrict,
+  kAnonymousExpression,
+  kAccessorOrMethod,
 } from '../enum';
 
 import {
@@ -155,7 +160,7 @@ class Parser extends ParserBase {
     info.script_scope_ = script_scope;
     this.original_scope_ = script_scope;
   }
-  ParseWrapped() { }
+  ParseWrapped() {}
 
   parse_lazily() { return this.mode_ === PARSE_LAZILY; }
   // 判断是否可以懒编译这个函数字面量
@@ -198,6 +203,9 @@ class Parser extends ParserBase {
   }
   ParsingDynamicFunctionDeclaration() {
     return this.parameters_end_pos_ !== kNoSourcePosition;
+  }
+  InferFunctionName() {
+    this.fni_.Infer();
   }
 
   /**
@@ -907,7 +915,7 @@ class Parser extends ParserBase {
     let outer_scope_ = this.scope_;
     this.scope_ = inner_scope;
     for (let decl of inner_scope.decls_) {
-      if(decl.var_.mode() !== kVar || !decl.IsVariableDeclaration()) {
+      if (decl.var_.mode() !== kVar || !decl.IsVariableDeclaration()) {
         continue;
       }
       let name = decl.var_.raw_name();
@@ -1000,16 +1008,6 @@ class Parser extends ParserBase {
         is_optional, parameter.is_rest_, this.ast_value_factory_, parameter.position);
     }
   }
-  RewriteClassLiteral() {
-
-  }
-
-  DeclareClassVariable(name, class_info, class_token_pos) {
-    if (name !== null) {
-      let proxy = this.DeclareBoundVariable(name, kConst, class_token_pos);
-      class_info.variable = proxy.var_;
-    }
-  }
   DeclareFunction(variable_name, fnc, mode, kind, beg_pos, end_pos, names) {
     let declaration = this.ast_node_factory_.NewFunctionDeclaration(fnc, beg_pos);
     this.Declare(declaration, variable_name, kind, mode, kCreatedInitialized, this.scope_, false, beg_pos);
@@ -1024,12 +1022,148 @@ class Parser extends ParserBase {
     }
     return this.ast_node_factory_.empty_statement_;
   }
+
+  // TODO
+  DeclarePrivateClassMember() { }
+  DeclarePublicClassField() { }
+  DeclarePublicClassMethod(class_name, property, is_construtor, class_info) {
+    if (is_construtor) {
+      class_info.constructor = property.value_;
+      class_info.constructor.raw_name_ = class_name !== null ? this.ast_value_factory_.NewConsString(class_name) : null;
+      return;
+    }
+    class_info.public_members.push(property);
+  }
+  DeclareClassVariable(scope, name, class_info, class_token_pos) {
+    let class_variable = scope.DeclareClassVariable(this.ast_value_factory_, name, class_token_pos);
+    let declaration = this.ast_node_factory_.NewVariableDeclaration(class_token_pos);
+    scope.decls_.push(declaration);
+    declaration.set_var(class_variable);
+  }
   DeclareClass(variable_name, value, names, class_token_pos, end_pos) {
     let proxy = this.DeclareBoundVariable(variable_name, kLet, class_token_pos);
     proxy.var_.initializer_position_ = end_pos;
     if (names) names.push(variable_name);
     let assignment = this.ast_node_factory_.NewAssignment('Token::INIT', proxy, value, class_token_pos);
     return this.IgnoreCompletion(this.ast_node_factory_.NewExpressionStatement(assignment, kNoSourcePosition));
+  }
+  /**
+   * 返回一个class字面量AstNode
+   */
+  RewriteClassLiteral(block_scope, name, class_info, pos, end_pos) {
+    let has_extends = class_info.extends !== null;
+    let has_default_construtor = class_info.constructor === null;
+    if (has_default_construtor) {
+      class_info.constructor = this.DefaultConstructor(name, has_extends, pos, end_pos);
+    }
+    if (name !== null) {
+      block_scope.class_variable_.initializer_position_ = end_pos;
+    }
+    let static_fields_initializer = null;
+    if (class_info.has_static_class_fields) {
+      static_fields_initializer = this.CreateInitializerFunction(
+        '<static_fields_initializer>', class_info.static_fields_scope, class_info.static_fields);
+    }
+
+    let instance_members_initializer_function = null;
+    if (class_info.has_instance_members) {
+      instance_members_initializer_function = this.CreateInitializerFunction(
+        '<instance_members_initializer>', class_info.instance_members_scope, class_info.instance_fields);
+      class_info.constructor.set_requires_instance_members_initializer(true);
+      class_info.constructor.add_expected_properties(class_info.instance_fields.length);
+    }
+    let class_literal = this.ast_node_factory_.NewClassLiteral(
+      block_scope, class_info.extends, class_info.constructor, class_info.public_members,
+      class_info.private_members, static_fields_initializer, instance_members_initializer_function,
+      pos, end_pos, class_info.has_name_static_property, class_info.has_static_computed_names,
+      class_info.is_anonymous, class_info.has_private_methods);
+    this.AddFunctionForNameInference(class_info.constructor);
+    return class_literal;
+  }
+  DefaultConstructor(name, call_super, pos, end_pos) {
+    let expected_property_count = 0;
+    const parameter_count = 0;
+
+    let kind = call_super ? kDefaultDerivedConstructor : kDefaultBaseConstructor;
+    let function_scope = this.NewFunctionScope(kind);
+    this.SetLanguageMode(function_scope, kStrict);
+
+    function_scope.start_position_ = pos;
+    function_scope.end_position_ = pos;
+    let body = [];
+    {
+      // FunctionState function_state(&function_state_, &scope_, function_scope);
+      let function_state = new FunctionState(this.function_state_, this.scope_, function_scope);
+      let outer_scope_ = this.scope_;
+      this.scope_ = function_scope;
+      if (call_super) {
+        let constructor_args_name = this.ast_value_factory_.empty_string();
+        let is_rest = true;
+        let is_optional = false;
+        let constructor_args = function_scope.DeclareParameter(
+          constructor_args_name, kTemporary, is_optional, is_rest, this.ast_value_factory_, pos);
+      
+        let call = null;
+        {
+          let args = [];
+          let spread_args = this.ast_node_factory_.NewSpread(
+            this.ast_node_factory_.NewVariableProxy(constructor_args), pos, pos);
+          args.push(spread_args);
+          let super_call_ref = this.NewSuperCallReference(pos);
+          call = this.ast_node_factory_.NewCall(super_call_ref, args, pos);
+        }
+        body.push(this.ast_node_factory_.NewReturnStatement(call, pos));
+      }
+      expected_property_count = function_state.expected_property_count_;
+
+      this.scope_ = outer_scope_;
+    }
+    let function_literal = this.ast_node_factory_.NewFunctionLiteral(
+      name, function_scope, body, expected_property_count, parameter_count,
+      parameter_count, kNoDuplicateParameters, kAnonymousExpression, this.default_eager_compile_hint_,
+      pos, true, this.GetNextFunctionLiteralId());
+    return function_literal;
+  }
+  NewSuperCallReference(pos) {
+    let new_target_proxy = this.NewUnresolved(this.ast_value_factory_.new_target_string(), pos);
+    let this_function_proxy = this.NewUnresolved(this.ast_value_factory_.this_function_string(), pos);
+    return this.ast_node_factory_.NewSuperCallReference(new_target_proxy, this_function_proxy, pos);
+  }
+  CreateInitializerFunction(name, scope, fields) {
+    let statements = [];
+    let stmt = this.ast_node_factory_.NewInitializeClassMembersStatement(fields, kNoSourcePosition);
+    statements.push(stmt);
+    let result = this.ast_node_factory_.NewFunctionLiteral(
+      this.ast_value_factory_.GetOneByteString(name), scope, statements, 0, 0, 0,
+      kNoDuplicateParameters, kAccessorOrMethod, kShouldEagerCompile,
+      scope.start_position_, false, this.GetNextFunctionLiteralId());
+    return result;
+  }
+  /**
+   * @param {ObjectLiteralProperty} property 键值对对象
+   * @param {AstRawString*} name 键值
+   * @param {AstRawString*} prefix 如果是getter/setter则会有prefix标记传进来
+   */
+  SetFunctionNameFromObjectPropertyName(property, name, prefix = null) {
+    // 设置prototype不做处理
+    if (property.IsPrototype()) return;
+    /**
+     * 匿名函数
+     */
+    if (property.NeedsSetFunctionName()) {
+      name = null;
+      prefix = null;
+    }
+    let value = property.value_;
+    this.SetFunctionName(value, name, prefix);
+  }
+  SetFunctionNameFromClassPropertyName(property, name, prefix = null) {
+    if (property.NeedsSetFunctionName()) {
+      name = null;
+      prefix = null;
+    }
+    let value = property.value_;
+    this.SetFunctionName(value, name, prefix);
   }
 
   DeclareArrowFunctionFormalParameters(parameters, expr, params_loc) {

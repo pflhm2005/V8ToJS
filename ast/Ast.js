@@ -1,4 +1,4 @@
-import { 
+import {
   kVar,
   kNoSourcePosition,
 
@@ -135,6 +135,11 @@ import {
   InitializationFlagField,
   IsUsedField,
   ForceHoleInitializationField,
+  IsStaticFlagField,
+  HasNameStaticProperty,
+  HasStaticComputedNames,
+  IsAnonymousExpression,
+  HasPrivateMethods,
 } from '../util';
 
 import { AstValueFactory } from './AstValueFactory';
@@ -179,7 +184,7 @@ export class AstNodeFactory {
   }
   NewNumberLiteral(number, pos) {
     let int_value = DoubleToSmiInteger(number);
-    if(int_value !== null) {
+    if (int_value !== null) {
       return this.NewSmiLiteral(int_value, pos);
     }
     return new Literal(kHeapNumber, number, pos);
@@ -237,7 +242,7 @@ export class AstNodeFactory {
      * 所以这里调整一下构造参数顺序 根据kind来判断是哪一个
      */
     // [ast_value_factory_, key, value, is_computed_name]
-    if(args.length === 3) return new ObjectLiteralProperty(this.ast_value_factory_, ...args);
+    if (args.length === 3) return new ObjectLiteralProperty(this.ast_value_factory_, ...args);
     // 修正后[kind, key, value, is_computed_name]
     return new ObjectLiteralProperty(args[2], args[0], args[1], args[3]);
   }
@@ -299,7 +304,7 @@ export class AstNodeFactory {
   }
 
   NewAwait(expression, pos) {
-    if(!expression) expression = this.NewUndefinedLiteral(pos);
+    if (!expression) expression = this.NewUndefinedLiteral(pos);
     return new Await(expression, pos);
   }
   /**
@@ -347,17 +352,28 @@ export class AstNodeFactory {
   }
   // 返回一个函数字面量 整个JS的顶层是一个函数
   NewScriptOrEvalFunctionLiteral(scope, body, expected_property_count, parameter_count) {
-    return new FunctionLiteral(null, this.ast_value_factory_.empty_string(), this.ast_value_factory_, scope,
-    body, expected_property_count, parameter_count, parameter_count, kAnonymousExpression,
-    kNoDuplicateParameters, kShouldLazyCompile, 0, false, kFunctionLiteralIdTopLevel);
+    return new FunctionLiteral(this.ast_value_factory_.empty_string(), this.ast_value_factory_, scope,
+      body, expected_property_count, parameter_count, parameter_count, kAnonymousExpression,
+      kNoDuplicateParameters, kShouldLazyCompile, 0, false, kFunctionLiteralIdTopLevel);
   }
   NewFunctionLiteral(name, scope, body, expected_property_count, parameter_count,
     function_length, has_duplicate_parameters, function_type, eager_compile_hint,
     position, has_braces, function_literal_id, produced_preparse_data = null) {
-    return new FunctionLiteral(null, name, this.ast_value_factory_, scope, body, expected_property_count,
+    return new FunctionLiteral(name, this.ast_value_factory_, scope, body, expected_property_count,
       parameter_count, function_length, function_type, has_duplicate_parameters,
       eager_compile_hint, position, has_braces, function_literal_id, produced_preparse_data);
   }
+  NewClassLiteral(scope, extend, constructor, public_members, private_members,
+    static_fields_initializer, instance_members_initializer_function,
+    start_position, end_position, has_name_static_property, has_static_computed_names,
+    is_anonymous, has_private_methods) {
+    return new ClassLiteral(
+      scope, extend, constructor, public_members, private_members,
+      static_fields_initializer, instance_members_initializer_function,
+      start_position, end_position, has_name_static_property,
+      has_static_computed_names, is_anonymous, has_private_methods);
+  }
+
   NewCall(expression, args, pos, possibly_eval = NOT_EVAL) {
     return new Call(expression, args, pos, possibly_eval);
   }
@@ -384,6 +400,10 @@ export class AstNodeFactory {
   }
   NewImportCallExpression(args, pos) {
     return new ImportCallExpression(args, pos);
+  }
+
+  NewSpread(expression, pos, expr_pos) {
+    return new Spread(expression, pos, expr_pos);
   }
 }
 
@@ -412,7 +432,7 @@ class AstNode {
 
   node_type() { return NodeTypeField.decode(this.bit_field_); }
   AsMaterializedLiteral() {
-    switch(this.node_type()) {
+    switch (this.node_type()) {
       case _kRegExpLiteral:
       case _kObjectLiteral:
       case _kArrayLiteral:
@@ -635,8 +655,8 @@ export class Expression extends AstNode {
   UNIMPLEMENTED() { throw new Error('unimplemented code'); }
   UNREACHABLE() { throw new Error('unreachable code'); }
   IsAnonymousFunctionDefinition() {
-    return (this.IsFunctionLiteral() && this.IsAnonymousFunctionDefinition()) || 
-    (this.IsClassLiteral() && this.IsAnonymousFunctionDefinition());
+    return (this.IsFunctionLiteral() && this.IsAnonymousFunctionDefinition()) ||
+      (this.IsClassLiteral() && this.IsAnonymousFunctionDefinition());
   }
   IsConciseMethodDefinition() {
     return this.IsFunctionLiteral() && IsConciseMethod(this.kind());
@@ -662,7 +682,7 @@ export class Expression extends AstNode {
   type() { return TypeField.decode(this.bit_field_); }
   ToBooleanIsFalse() { return !this.ToBooleanIsTrue(); }
   ToBooleanIsTrue() {
-    switch(this.type()) {
+    switch (this.type()) {
       case kSmi:
         return this.val() !== 0;
       case kHeapNumber:
@@ -689,6 +709,14 @@ export class Expression extends AstNode {
 class FailureExpression extends Expression {
   constructor() {
     super(kNoSourcePosition, _kFailureExpression);
+  }
+}
+
+class Spread extends Expression {
+  constructor(expression, pos, expr_pos) {
+    super(pos, _kSpread);
+    this.expr_pos_ = expr_pos;
+    this.expression_ = expression;
   }
 }
 
@@ -793,7 +821,7 @@ class CompoundAssignment extends Assignment {
  * 字面量类
  * 实际上有很多种类 同时提供Asxxx方法进行转换 这里统一用一个
  */
-class Literal extends Expression{
+class Literal extends Expression {
   /**
    * 源码构造函数只用了2个参数 由于重载的存在 所以类型已经确定了
    * JS手动传进来
@@ -815,30 +843,30 @@ class Literal extends Expression{
      * 因此用一个数组来保存各种类型的值 用val()来获取对应的值
      */
     this.val_ = new Array(6).fill(null);
-    if(type !== kNull || val !== kUndefined || val !== kTheHole) this.val_[type] = val;
-    
+    if (type !== kNull || val !== kUndefined || val !== kTheHole) this.val_[type] = val;
+
     this.bit_field_ = NodeTypeField.update(this.bit_field_, type);
   }
   // add
   val() {
     return this.val_[this.type];
   }
-  AsLiteral() {}
+  AsLiteral() { }
   IsString() { return this.type = kString; }
   IsPropertyName() {
-    if(this.type !== kString) return true;
+    if (this.type !== kString) return true;
     return !AstValueFactory.GetOneByteString(this.val()).AsArrayIndex().is_array_index;
   }
   AsRawString() { return this.val(); }
   AsRawPropertyName() { return this.val(); }
   Hash() {
-    return this.IsString() ? 
-    this.AsRawString().Hash() : 
-    this.ComputeLongHash(this.double_to_uint64(this.AsNumber()));
+    return this.IsString() ?
+      this.AsRawString().Hash() :
+      this.ComputeLongHash(this.double_to_uint64(this.AsNumber()));
   }
-  ComputeLongHash() {}
-  double_to_uint64() {}
-  AsNumber() {}
+  ComputeLongHash() { }
+  double_to_uint64() { }
+  AsNumber() { }
 }
 
 export class VariableProxy extends Expression {
@@ -849,16 +877,16 @@ export class VariableProxy extends Expression {
 
     this.var_ = null;
 
-    this.bit_field_ |= IsAssignedField.encode(false) | 
-    IsResolvedField.encode(false) |
-    IsRemovedFromUnresolvedField.encode(false) |
-    HoleCheckModeField.encode(kElided);
+    this.bit_field_ |= IsAssignedField.encode(false) |
+      IsResolvedField.encode(false) |
+      IsRemovedFromUnresolvedField.encode(false) |
+      HoleCheckModeField.encode(kElided);
   }
   set_var(v) { this.var_ = v; }
   set_is_resolved() { this.bit_field_ = IsResolvedField.update(this.bit_field_, 1); }
   set_is_assigned() {
     this.bit_field_ = IsAssignedField.update(this.bit_field_, 1);
-    if(this.is_resolved()) this.var_.set_maybe_assigned();
+    if (this.is_resolved()) this.var_.set_maybe_assigned();
   }
   set_maybe_assigned() { this.bit_field_ = MaybeAssignedFlagField.update(this.bit_field_, kMaybeAssigned); }
   is_resolved() { return IsResolvedField.decode(this.bit_field_); }
@@ -979,14 +1007,14 @@ class ArrayLiteral extends AggregateLiteral {
 }
 
 class ObjectLiteral extends AggregateLiteral {
- constructor(properties, boilerplate_properties, pos, has_rest_property) {
+  constructor(properties, boilerplate_properties, pos, has_rest_property) {
     super(pos, _kObjectLiteral);
     this.boilerplate_properties_ = boilerplate_properties;
     this.properties = properties;
-    this.bit_field_ |= HasElementsField.encode(false) | 
-                      HasRestPropertyField.encode(has_rest_property) | 
-                      FastElementsField.encode(false) | 
-                      HasNullPrototypeField.encode(false);
+    this.bit_field_ |= HasElementsField.encode(false) |
+      HasRestPropertyField.encode(has_rest_property) |
+      FastElementsField.encode(false) |
+      HasNullPrototypeField.encode(false);
   }
   CalculateEmitStore(zone = null) {
     // ZoneAllocationPolicy allocator(zone);
@@ -1023,7 +1051,7 @@ class ObjectLiteral extends AggregateLiteral {
       else {
         let later_kind = entry.value.kind_;
         let complementary_accessors = (property.kind_ === GETTER && later_kind === SETTER) ||
-        (property.kind_ === SETTER && later_kind === GETTER);
+          (property.kind_ === SETTER && later_kind === GETTER);
         if (!complementary_accessors) {
           property.emit_store_ = false;
           if (later_kind === GETTER || later_kind === SETTER) entry.value = property;
@@ -1038,21 +1066,35 @@ class ObjectLiteral extends AggregateLiteral {
  * class { content... }
  */
 export const _METHOD = 0; // fn() {}
-export const _GETTER = 0; // get fn() {}
-export const _SETTER = 0; // set fn() {}
-export const _FIELD = 0;  // fn = 1;
+export const _GETTER = 1; // get fn() {}
+export const _SETTER = 2; // set fn() {}
+export const _FIELD = 3;  // fn = 1;
 
 class ClassLiteral extends Expression {
-  constructor() {
-    super();
-    this.constructor_ = null;
+  constructor(scope, extend, constructor, public_members, private_members,
+    static_fields_initializer, instance_members_initializer_function,
+    start_position, end_position, has_name_static_property,
+    has_static_computed_names, is_anonymous, has_private_methods) {
+    super(start_position, _kClassLiteral);
+    this.end_position_ = end_position;
+    this.scope_ = scope;
+    this.extends_ = extend;
+    this.constructor_ = constructor;
+    this.public_members_ = public_members;
+    this.private_members_ = private_members;
+    this.static_fields_initializer_ = static_fields_initializer;
+    this.instance_members_initializer_function_ = instance_members_initializer_function;
+    this.bit_field_ |= HasNameStaticProperty.encode(has_name_static_property) | 
+      HasStaticComputedNames.encode(has_static_computed_names) |
+      IsAnonymousExpression.encode(is_anonymous) |
+      HasPrivateMethods.encode(has_private_methods);
   }
 }
 
 class FunctionLiteral extends Expression {
-  constructor(zone = null, name, ast_value_factory, scope, body, expected_property_count,
-  parameter_count, function_length, function_syntax_kind, has_duplicate_parameters,
-  eager_compile_hint, position, has_braces, function_literal_id, produced_preparse_data = null) {
+  constructor(name, ast_value_factory, scope, body, expected_property_count,
+    parameter_count, function_length, function_syntax_kind, has_duplicate_parameters,
+    eager_compile_hint, position, has_braces, function_literal_id, produced_preparse_data = null) {
     super(position, _kFunctionLiteral);
     this.expected_property_count_ = expected_property_count;
     this.parameter_count_ = parameter_count;
@@ -1066,11 +1108,11 @@ class FunctionLiteral extends Expression {
     this.suspend_count_ = 0;
     this.raw_inferred_name_ = ast_value_factory.empty_cons_string();
     this.produced_preparse_data_ = produced_preparse_data;
-    this.bit_field_ |= FunctionSyntaxKindBits.encode(function_syntax_kind) | 
-    Pretenure.encode(false) | HasDuplicateParameters.encode(has_duplicate_parameters === kHasDuplicateParameters) |
-    DontOptimizeReasonField.encode(0)/* TODO */ | RequiresInstanceMembersInitializer.encode(false) | 
-    HasBracesField.encode(has_braces) | OneshotIIFEBit.encode(false);
-    if(eager_compile_hint === kShouldEagerCompile) this.SetShouldEagerCompile();
+    this.bit_field_ |= FunctionSyntaxKindBits.encode(function_syntax_kind) |
+      Pretenure.encode(false) | HasDuplicateParameters.encode(has_duplicate_parameters === kHasDuplicateParameters) |
+      DontOptimizeReasonField.encode(0)/* TODO */ | RequiresInstanceMembersInitializer.encode(false) |
+      HasBracesField.encode(has_braces) | OneshotIIFEBit.encode(false);
+    if (eager_compile_hint === kShouldEagerCompile) this.SetShouldEagerCompile();
     this.body_ = body || [];
   }
   kind() { return this.scope_.function_kind_; }
@@ -1083,6 +1125,9 @@ class FunctionLiteral extends Expression {
   set_raw_name(name) {
     this.raw_name_ = name;
   }
+  set_requires_instance_members_initializer(value) {
+    this.bit_field_ = RequiresInstanceMembersInitializer.update(this.bit_field_, value);
+  }
   AllowsLazyCompilation() {
     return this.scope_.AllowsLazyCompilation();
   }
@@ -1094,6 +1139,9 @@ class FunctionLiteral extends Expression {
   }
   SetShouldEagerCompile() {
     this.scope_.set_should_eager_compile();
+  }
+  add_expected_properties(number_properties) {
+    this.expected_property_count_ += number_properties;
   }
 }
 
@@ -1139,23 +1187,22 @@ export class Variable {
     this.index_ = -1;
     this.initializer_position_ = kNoSourcePosition;
     this.bit_field_ = MaybeAssignedFlagField.encode(maybe_assigned_flag) |
-    InitializationFlagField.encode(initialization_flag) | 
-    VariableModeField.encode(mode) |
-    IsUsedField.encode(false) | 
-    ForceContextAllocationField.encode(false) |
-    ForceHoleInitializationField.encode(false) |
-    LocationField.encode(UNALLOCATED) | 
-    VariableKindField.encode(kind);
+      InitializationFlagField.encode(initialization_flag) |
+      VariableModeField.encode(mode) |
+      IsUsedField.encode(false) |
+      ForceContextAllocationField.encode(false) |
+      ForceHoleInitializationField.encode(false) |
+      LocationField.encode(UNALLOCATED) |
+      VariableKindField.encode(kind);
   }
   mode() { return VariableModeField.decode(this.bit_field_); }
   location() { return LocationField.decode(this.bit_field_); }
   set_is_used() { this.bit_field_ = NodeTypeField.update(this.bit_field_, true); }
   set_maybe_assigned() { this.bit_field_ = NodeTypeField.update(this.bit_field_, kMaybeAssigned); }
+  set_is_static_flag(is_static_flag) { this.bit_field_ = IsStaticFlagField.update(this.bit_field_, is_static_flag); }
+  ForceContextAllocation() { this.bit_field_ = ForceContextAllocationField.update(this.bit_field_, true); }
   is_parameter() { return VariableKindField.decode(this.bit_field_) === PARAMETER_VARIABLE; }
 
-  ForceContextAllocation() {
-    this.bit_field_ = ForceContextAllocationField.update(this.bit_field_, true);
-  }
   MakeParameterNonSimple() {
     this.bit_field_ = VariableModeField.update(this.bit_field_, kLet);
     this.bit_field_ = InitializationFlagField.update(this.bit_field_, kNeedsInitialization);
@@ -1201,14 +1248,14 @@ class ObjectLiteralProperty extends LiteralProperty {
   constructor(ast_value_factoryOrKind, key, value, is_computed_name) {
     super(key, value, is_computed_name);
     // [kind, key, value, is_computed_name]
-    if(typeof ast_value_factoryOrKind === 'number') {
+    if (typeof ast_value_factoryOrKind === 'number') {
       this.kind_ = ast_value_factoryOrKind;
       this.emit_store_ = true;
     }
     // [ast_value_factory_, key, value, is_computed_name]
     else {
       if (!is_computed_name && key.IsString() &&
-      key.AsRawString().literal_bytes_ === '__proto__') {
+        key.AsRawString().literal_bytes_ === '__proto__') {
         this.kind_ = PROTOTYPE;
       } else if (this.value_.AsMaterializedLiteral() !== null) {
         this.kind_ = MATERIALIZED_LITERAL;
