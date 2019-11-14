@@ -1270,6 +1270,27 @@ class Parser extends ParserBase {
   }
 
   /**
+   * @returns {ThisExpression*}
+   */
+  ThisExpression() {
+    this.UseThis();
+    return this.ast_node_factory_.ThisExpression();
+  }
+  // 标记了作用域有this
+  UseThis() {
+    let closure_scope = this.scope_.GetClosureScope();
+    let receiver_scope = closure_scope.GetReceiverScope();
+    let variable = receiver_scope.receiver_;
+    variable.set_is_used();
+    if (closure_scope === receiver_scope) this.expression_scope_.RecordThisUse();
+    else {
+      closure_scope.has_this_reference_ = true;
+      variable.ForceContextAllocation();
+    }
+    return variable;
+  }
+
+  /**
    * 这个方法主要处理派生类构造函数的返回
    * 派生类构造函数返回只能是undefined或者类(当然一般不会出现返回语句）
    * 当返回是undefined(即未指定返回) 就会返回this
@@ -1343,6 +1364,9 @@ class Parser extends ParserBase {
       state.AddTemplateSpan(null, raw, end);
     }
   }
+  AddTemplateExpression(state, expression) {
+    state.AddExpression(expression);
+  }
   CloseTemplateLiteral(state, start, tag) {
     let pos = state.pos_;
     let cooked_strings = state.cooked_;
@@ -1372,7 +1396,7 @@ class Parser extends ParserBase {
 }
 
 class TemplateLiteral {
-  constructor() {
+  constructor(pos) {
     this.cooked_ = [];
     this.raw_ = [];
     this.expressions_ = [];

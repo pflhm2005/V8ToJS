@@ -967,26 +967,6 @@ export default class ParserBase {
     if (!allow_duplicates) parameters.ValidateDuplicate(this);
     // if(is_strict(language_mode)) parameters.ValidateStrictMode(this);
   }
-  /**
-   * @returns {ThisExpression*}
-   */
-  ThisExpression() {
-    this.UseThis();
-    return this.ast_node_factory_.ThisExpression();
-  }
-  // 标记了作用域有this
-  UseThis() {
-    let closure_scope = this.scope_.GetClosureScope();
-    let receiver_scope = closure_scope.GetReceiverScope();
-    let variable = receiver_scope.receiver_;
-    variable.set_is_used();
-    if (closure_scope === receiver_scope) this.expression_scope_.RecordThisUse();
-    else {
-      closure_scope.has_this_reference_ = true;
-      variable.ForceContextAllocation();
-    }
-    return variable;
-  }
 
   CheckFunctionName(language_mode, function_name, function_name_validity, function_name_loc) {
     if (function_name === null) return;
@@ -3120,8 +3100,13 @@ export default class ParserBase {
     if (tagged) {
       this.allow_eval_cache_ = false;
     }
+    // 判断是否有转义 这里暂不考虑
     let is_valid = true;
     // let forbid_illegal_escapes = !tagged;
+    /**
+     * 如果直接是TEMPLATE_TAIL
+     * 说明这个模板字符串没有插值 相当于普通字符串
+     */
     if (this.peek() === 'Token::TEMPLATE_TAIL') {
       this.Consume('Token::TEMPLATE_TAIL');
       let pos = this.position();
@@ -3143,12 +3128,17 @@ export default class ParserBase {
       // AcceptINScope scope(this, true);
       let previous_accept_IN_ = this.accept_IN_;
       this.accept_IN_ = true;
+      // ${expr} 解析中间的表达式
       let expression = this.ParseExpressionCoverGrammar();
       this.AddTemplateExpression(ts, expression);
-      // ${}
+      // }
       if (this.peek() !== 'Token::RBRACE') {
         throw new Error(kUnterminatedTemplateExpr);
       }
+      /**
+       * `string${expr}从这里开始继续解析
+       * 继续解析模板字符串
+       */
       next = this.scanner_.ScanTemplateContinuation();
       pos = this.position();
 

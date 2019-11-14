@@ -883,6 +883,22 @@ export default class Scanner {
       return ast_value_factory.GetOneByteString(this.next_literal_one_byte_string());
     }
   }
+  CurrentRawSymbol(ast_value_factory) {
+    if (this.is_raw_literal_one_byte()) {
+      return ast_value_factory.GetOneByteString(this.raw_literal_one_byte_string());
+    }
+  }
+
+  is_literal_one_byte() {
+    return this.current().literal_chars.is_one_byte();
+  }
+  is_next_literal_one_byte() {
+    return this.next().literal_chars.is_one_byte();
+  }
+  is_raw_literal_one_byte() {
+    return this.current().raw_literal_chars.is_one_byte();
+  }
+
   /**
    * 太麻烦 不实现了
    * 返回一个doubleValue
@@ -892,12 +908,7 @@ export default class Scanner {
     return Number(this.literal_one_byte_string()) || (0xfff << 51);
     // return StringToDouble(this.literal_one_byte_string(), ALLOW_HEX | ALLOW_OCTAL | ALLOW_IMPLICIT_OCTAL | ALLOW_BINARY);
   }
-  is_literal_one_byte() {
-    return this.current().literal_chars.is_one_byte();
-  }
-  is_next_literal_one_byte() {
-    return this.next().literal_chars.is_one_byte();
-  }
+
   /**
    * @returns {String} 当前Token的字符串
    */
@@ -912,6 +923,10 @@ export default class Scanner {
   }
   NextLiteralExactlyEquals(string) {
     return this.next_literal_one_byte_string() === string;
+  }
+
+  raw_literal_one_byte_string() {
+    return this.current().raw_literal_chars.one_byte_literal();
   }
 }
 
