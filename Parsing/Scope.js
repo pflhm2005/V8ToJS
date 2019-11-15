@@ -528,7 +528,7 @@ class DeclarationScope extends Scope {
     return result;
   }
   DeclareDynamicGlobal(name, kind, cache) {
-    return cache.variables_.Declare(this, name, kDynamicGlobal, kind, kCreatedInitialized, kNotAssigned, false);
+    return cache.variables_.Declare(this, name, kDynamicGlobal, kind, kCreatedInitialized, kNotAssigned, false).variable;
   }
   calls_sloppy_eval() {
     return !this.is_script_scope() && this.scope_calls_eval_ && is_sloppy(this.language_mode());

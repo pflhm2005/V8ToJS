@@ -2401,7 +2401,8 @@ export default class ParserBase {
       if (expression.is_parenthesized()) throw new Error(kInvalidDestructuringTarget);
       this.expression_scope_.MarkIdentifierAsAssigned();
     } else if (expression.IsProperty()) {
-      throw new Error(kInvalidPropertyBindingPattern);
+      // throw new Error(kInvalidPropertyBindingPattern);
+      // this.expression_scope_.ValidateAsExpression();
     }
     // 解构赋值
     else if (expression.IsPattern() && op === 'Token::ASSIGN') {
@@ -2455,8 +2456,41 @@ export default class ParserBase {
      * 二元表达式的优先级为4以上
      * 这里只是单纯的想解析单个非三元表达式 所以传了一个最高优先级的值4
      */
-    let expression = this.ParseBinaryExpression(4);
+    let expression = this.ParseLogicalExpression();
     return this.peek() === 'Token::CONDITIONAL' ? this.ParseConditionalContinuation(expression, pos) : expression;
+  }
+  /**
+   * 处理逻辑表达式
+   * || &&
+   */
+  ParseLogicalExpression() {
+    let expression = this.ParseBinaryExpression(6);
+    if (this.peek() === 'Token::AND' || this.peek() === 'Token::OR') {
+      let prec1 = Precedence(this.peek(), this.accept_IN_);
+      expression = this.ParseBinaryContinuation(expression, 4, prec1);
+    } else if (this.peek() === 'Token::NULLISH') {
+      expression = this.ParseCoalesceExpression(expression);
+    }
+    return expression;
+  }
+  /**
+   * 解析合并表达式
+   * CoalesceExpressionHead ?? BitwiseORExpression
+   */
+  ParseCoalesceExpression(expression) {
+    let first_nullish = true;
+    while (this.peek() === 'Token::NULLISH') {
+      this.Consume('Token::NULLISH');
+      let pos = this.peek_position();
+      let y = this.ParseBinaryExpression(6);
+      if (first_nullish) {
+        expression = this.ast_node_factory_.NewBinaryOperation('Token::NULLISH', expression, y, pos);
+        first_nullish = false;
+      } else {
+        this.CollapseNaryExpression(expression, y, 'Token::NULLISH', pos, null);
+      }
+    }
+    return expression;
   }
   ParseConditionalContinuation(expression, pos) {
     let left = null;

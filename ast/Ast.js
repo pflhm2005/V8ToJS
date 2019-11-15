@@ -941,6 +941,9 @@ class BinaryOperation extends Expression {
     op = TokenEnumList.indexOf(op);
     this.bit_field_ |= OperatorField.encode(op);
   }
+  op() {
+    return OperatorField.decode(this.bit_field_);
+  }
 }
 
 class NaryOperation extends Expression {
@@ -964,6 +967,9 @@ class NaryOperation extends Expression {
   }
   subsequent(index) {
     return this.subsequent_[index].expression;
+  }
+  op() {
+    return OperatorField.decode(this.bit_field_);
   }
 }
 

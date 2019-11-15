@@ -39,6 +39,7 @@ export const TokenMapping = [
   { token: 'ASSIGN_SUB', key: '-=', precedence: 12 },
   // 二元运算符
   { token: 'COMMA', key: ',', precedence: 1 },
+  { token: 'NULLISH', key: '??', precedence: 3 },
   { token: 'OR', key: '||', precedence: 4 },
   { token: 'AND', key: '&&', precedence: 5 },
 

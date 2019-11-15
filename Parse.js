@@ -12,6 +12,14 @@ function fn(a, b, c){
   let v = 1;
   if(true) log(123);
 }
+class cls {
+  constructor() {
+    this.a = 1;
+  }
+  fnc() {
+    while(true) do();
+  }
+}
 `;
 
 let parse_info = new ParseInfo(isolate);

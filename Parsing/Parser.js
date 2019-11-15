@@ -47,7 +47,7 @@ import {
   kParamAfterRest,
   kMalformedArrowFunParamList
 } from '../MessageTemplate';
-import { is_strict, is_sloppy, IsDerivedConstructor, IsGetterFunction, IsSetterFunction, Divide, DoubleToInt32, ShlWithWraparound, DoubleToUint32 } from '../util';
+import { is_strict, is_sloppy, IsDerivedConstructor, IsGetterFunction, IsSetterFunction, Divide, DoubleToInt32, ShlWithWraparound, DoubleToUint32, IsBinaryOp } from '../util';
 import ParserFormalParameters from './function/ParserFormalParameters';
 import { ParameterDeclarationParsingScope } from './ExpressionScope';
 import Parameter from './function/Parameter';
@@ -260,7 +260,22 @@ class Parser extends ParserBase {
     return false;
   }
   CollapseNaryExpression(x, y, op, pos) {
+     if (IsBinaryOp(op) || op === 'Token::EXP') return false;
 
+     let nary = null;
+     if (x.IsBinaryOperation()) {
+       if (x.op() !== op) return false;
+       nary = this.ast_node_factory_.NewNaryOperation(op, x.left_, 2);
+       nary.AddSubsequent(x.right_, x.position_);
+     } else if (x.IsNaryOperation()) {
+       if (x.op() !== op) return false;
+     } else {
+       return false;
+     }
+
+     nary.AddSubsequent(y, pos);
+     nary.clear_parenthesized();
+     return true;
   }
 
   EmptyIdentifierString() { return this.ast_value_factory_.empty_string(); }
