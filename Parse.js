@@ -16,9 +16,7 @@ class cls {
   constructor() {
     this.a = 1;
   }
-  fnc() {
-    while(true) do();
-  }
+  fnc() {}
 }
 `;
 
