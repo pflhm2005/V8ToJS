@@ -1,6 +1,6 @@
-import Parser from '../Parsing/Parser';
-import Scanner from '../Parsing/scanner/Scanner';
-import Stream from '../Parsing/scanner/Stream';
+import Parser from './Parser';
+import Scanner from './scanner/Scanner';
+import Stream from './scanner/Stream';
 import { kYes } from '../enum';
 
 export default class Parsing {

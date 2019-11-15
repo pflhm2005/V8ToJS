@@ -12,6 +12,9 @@ export default class AstValueFactory {
     this.string_end_ = [];
     this.cons_string_ar = [];
     this.empty_cons_string_ = this.NewConsString();
+
+    this.strings_ = null;
+    this.cons_strings_ = null;
   }
 
   dot_string() { return '.'; }
@@ -133,7 +136,13 @@ export default class AstValueFactory {
     return string;
   }
 
-  Internalize() {}
+  Internalize(isolate) {
+    for (let current = this.strings_; current !== null;) {
+      let next = current.next_;
+      current.Internalize(isolate);
+      current = next;
+    }
+  }
 }
 
 class AstConsString {

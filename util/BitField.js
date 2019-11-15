@@ -109,6 +109,7 @@ export const IsPrefixField = BitField(7, 1);
 export const CountOperationTokenField = BitField(8, 7);
 
 export const AssignmentTokenField = BitField(7, 7);
+export const AssignmentLookupHoistingModeField = BitField(8, 1);
 
 export const TypeField = BitField(7, 4);
 

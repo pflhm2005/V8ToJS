@@ -14,7 +14,8 @@ import {
   kDefaultDerivedConstructor,
   kSloppy,
   kStrict,
-  kModule
+  kModule,
+  kDefaultBaseConstructor
 } from "../enum";
 import { TokenIsInRange, IsInRange } from './Identifier';
 
@@ -71,3 +72,5 @@ export const IsValidIdentifier = (token, language_mode, is_generator, disallow_a
   if (token === 'Token::YIELD') return !is_generator && is_sloppy(language_mode);
   return IsStrictReservedWord(token) && is_sloppy(language_mode);
 }
+
+export const IsBaseConstructor = (kind) => IsInRange(kind, kBaseConstructor, kDefaultBaseConstructor);

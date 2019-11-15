@@ -10,7 +10,7 @@ import {
   TYPE_NORMAL,
 } from "../enum";
 
-import Compiler from "./Complier";
+import Compiler from "../Compile/Complier";
 
 function GetScriptDetails(isolate, resource_name, resource_line_offset, resource_column_offset, source_map_url, host_defined_options) {
   let script_details = new ScriptDetails();
@@ -105,6 +105,7 @@ export default class Script {
   is_wrapped() {
     return false;
   }
+  FindSharedFunctionInfo(isolate, fun) {}
   static Compile(context, source, origin = null) {
     if (origin) {
       let script_source = new Source(source, origin);

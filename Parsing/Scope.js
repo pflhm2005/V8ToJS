@@ -42,6 +42,9 @@ import {
 } from "../util";
 // import ThreadedList from '../base/ThreadedList';
 
+const kThisFunction = 0;
+const kGeneratorObject = 0;
+
 /**
  * JS不存在HashMap的数据结构
  * 由于不存在指针 所以对象之间的比较十分困难
@@ -443,7 +446,6 @@ export default class Scope {
     return variable;
   }
 
-  static DeclarationScope() { }
   NeedsContext() { return this.num_heap_slots_ > 0; }
   GetArgumentsType() {
     return this.is_sloppy(this.language_mode()) && this.has_simple_parameters_ ? kMappedArguments : kUnmappedArguments;
@@ -518,6 +520,18 @@ class DeclarationScope extends Scope {
   }
   parameter(index) {
     return this.params_[index];
+  }
+  // rest参数只会出现在最后一位
+  rest_parameter() {
+    return this.has_rest_ ? this.params_[this.params_.length - 1] : null;
+  }
+  this_function_var() {
+    let this_function = this.GetRareVariable(kThisFunction);
+    return this_function;
+  }
+  GetRareVariable(id) {
+    if (this.rare_data_ === null) return null;
+    return this.rare_data_.this_function;
   }
   RecordSuperPropertyUsage() {
     this.scope_uses_super_property_ = true;
@@ -627,13 +641,17 @@ export class FunctionDeclarationScope extends DeclarationScope {
    * 所以这个方法可以不用放到Scope上
    */
   DeclareArguments(ast_value_factory) {
-    let { was_added, variable: arguments_ } = this.Declare(ast_value_factory.GetOneByteStringInternal(ast_value_factory.arguments_string()), kVar,
+    let { was_added, variable } = this.Declare(ast_value_factory.GetOneByteStringInternal(ast_value_factory.arguments_string()), kVar,
       NORMAL_VARIABLE, kCreatedInitialized, kNotAssigned, false);
+    this.arguments_ = variable;
     /**
-     * 若arguments变量已经被定义 且是通过let、const声明 此时默认的arguments变量为null => function fn(){let arguments = 1;}
+     * 若arguments变量已经被定义 且是通过let、const声明
+     * 此时默认的arguments变量为null => function fn(){let arguments = 1;}
      * 但是如果是通过var定义arguments 此时会依然生成该变量
      */
-    if (!was_added && IsLexicalVariableMode(arguments_.mode())) arguments_ = null;
+    if (!was_added && IsLexicalVariableMode(this.arguments_.mode())) {
+      this.arguments_ = null;
+    }
   }
 }
 
@@ -666,7 +684,7 @@ export class ModuleScope extends DeclarationScope {
 export class ClassScope extends Scope {
   constructor(zone = null, outer_scope, is_anonymous) {
     super(zone, outer_scope, CLASS_SCOPE);
-    this.rare_data_and_is_parsing_heritage_ = {
+    this.rare_data_ = {
       unresolved_private_names: [],
       private_name_map: [],
       brand: null,
@@ -680,10 +698,13 @@ export class ClassScope extends Scope {
     this.should_save_class_variable_index_ = false;
   }
   EnsureRareData() {
-    return this.rare_data_and_is_parsing_heritage_;
+    return this.rare_data_;
+  }
+  brand() {
+    return this.rare_data_.brand;
   }
   ResolvePrivateNamesPartially() {
-    let rare_data_ = this.rare_data_and_is_parsing_heritage_;
+    let rare_data_ = this.rare_data_;
     if(rare_data_ === null || !rare_data_.unresolved_private_names.length) {
       return null;
     }

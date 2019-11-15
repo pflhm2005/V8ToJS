@@ -1,6 +1,5 @@
-import Parsing from "./Parsing";
+import Parsing from "../Parsing/Parsing";
 import ParseInfo from "./ParseInfo";
-import Scope from "../Parsing/Scope";
 import Interpreter from "./Interpreter";
 import { FLAG_stress_lazy_source_positions } from "./Flag";
 import { FLAG_use_strict } from "./Flag";
@@ -62,7 +61,11 @@ export default class Compiler {
   static Analyze(parse_info) {
 
   }
-  static GetSharedFunctionInfo() {}
+  static GetSharedFunctionInfo(literal, script, isolate) {
+    let maybe_existing = script.FindSharedFunctionInfo(isolate, literal);
+
+
+  }
 }
 
 class IsCompiledScope {
@@ -105,35 +108,37 @@ function CompileToplevel(parse_info, isolate, is_compiled_scope) {
  * @param {IsCompiledScope*} is_compiled_scope 
  */
 function GenerateUnoptimizedCodeForToplevel(isolate, parse_info, allocator, is_compiled_scope) {
-  EnsureSharedFunctionInfosArrayOnScript(parse_info, isolate);
+  // EnsureSharedFunctionInfosArrayOnScript(parse_info, isolate);
   parse_info.ast_value_factory_.Internalize(isolate);
 
-  if (!Compiler.Analyze(parse_info)) return null;
-  Scope.DeclarationScope(parse_info, isolate);
+  // if (!Compiler.Analyze(parse_info)) return null;
+  // DeclarationScope::AllocateScopeInfos(parse_info, isolate);
 
   let script = parse_info.script_;
   let tope_level = isolate.factory_.NewSharedFunctionInfoForLiteral(parse_info.literal_, script, true);
 
   // 不知道这个while的意义 可能是多线程吧
-  // let functions_to_compile = [];
-  // functions_to_compile.push(parse_info.literal_);
-  // while(functions_to_compile.length) {
-  //   let literal = functions_to_compile.pop();
-  //   // more...
-  // }
-  let literal = parse_info.literal_;
-  let shared_info = Compiler.GetSharedFunctionInfo(literal, script, isolate);
-  // if (shared_info.is_compiled()) 
-  // 处理asm
-  // if (UseAsmWasm(literal, parse_info.is_asm_wasm_broken())) {}
+  let functions_to_compile = [];
+  functions_to_compile.push(parse_info.literal_);
+  while(functions_to_compile.length) {
+    let literal = functions_to_compile.pop();
+    // let shared_info = Compiler.GetSharedFunctionInfo(literal, script, isolate);
+    // if (shared_info.is_compiled()) continue;
+    // 处理asm
+    // if (UseAsmWasm(literal, parse_info.is_asm_wasm_broken())) {}
 
-  let job = Interpreter.NewCompilationJob(parse_info, literal, allocator, null);
-  if (job.ExecuteJob() === FAILED) return null;
+    let job = Interpreter.NewCompilationJob(parse_info, literal, allocator, functions_to_compile);
+    if (job.ExecuteJob() === FAILED ||
+      FinalizeUnoptimizedCompilationJob(job.get(), shared_info, isolate) === FAILED) {
+      return null;
+    }
 
-  // if (FLAG_stress_lazy_source_positions) ...
-  
-  if (shared_info.is_identical_to(tope_level)) is_compiled_scope = shared_info.is_compiled_scope();
-
+    if (FLAG_stress_lazy_source_positions) {}
+    
+    if (shared_info.is_identical_to(tope_level)) {
+      is_compiled_scope = shared_info.is_compiled_scope();
+    }
+  }
   parse_info.ResetCharacterStream();
   return tope_level;
 }
@@ -141,3 +146,5 @@ function GenerateUnoptimizedCodeForToplevel(isolate, parse_info, allocator, is_c
 function FinalizeScriptCompilation() {
 
 }
+
+function EnsureSharedFunctionInfosArrayOnScript(parse_info, isolate){}

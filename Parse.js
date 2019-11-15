@@ -3,7 +3,7 @@
  * 需安装babel-node工具
  */
 import Parsing from './Compile/Parsing';
-import isolate from './Compile/Isolate';
+import isolate from './Execution/Isolate';
 import ParseInfo from './Compile/ParseInfo';
 import { ScriptOriginOptions } from './Compile/Script';
 // 在这里设置待编译字符串

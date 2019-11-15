@@ -23,3 +23,11 @@ export const IS_POSSIBLY_EVAL = 0;
 export const NOT_EVAL = 1;
 
 export const kHomeObjectSymbol = 0;
+
+export const kBody = 0;
+export const kCatch = 1;
+export const kContinuation = 2;
+export const kElse = 3;
+export const kFinally = 4;
+export const kRight = 5;
+export const kThen = 6;

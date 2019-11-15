@@ -12,11 +12,6 @@ import {
   kNull,
   kTheHole,
 
-  kLiteral,
-  kAssignment,
-  kCompoundAssignment,
-  kExpressionStatement,
-
   _kVariableProxy,
 
   TARGET_FOR_ANONYMOUS,
@@ -88,6 +83,8 @@ import {
   kShouldEagerCompile,
   kElided,
   UNALLOCATED,
+  _kCompoundAssignment,
+  _kExpressionStatement,
 } from "../enum";
 
 import {
@@ -140,6 +137,7 @@ import {
   HasStaticComputedNames,
   IsAnonymousExpression,
   HasPrivateMethods,
+  AssignmentLookupHoistingModeField,
 } from '../util';
 
 import { AstValueFactory } from './AstValueFactory';
@@ -260,8 +258,11 @@ export class AstNodeFactory {
    */
   NewAssignment(op, target, value, pos) {
     if (op !== 'Token::INIT' && target.IsVariableProxy()) target.set_is_assigned();
-    if (op === 'Token::ASSIGN' || op === 'Token::INIT') return new Assignment(kAssignment, op, target, value, pos);
-    else return new CompoundAssignment(op, target, value, pos, this.NewBinaryOperation(BinaryOpForAssignment(op), target, value, pos + 1));
+    if (op === 'Token::ASSIGN' || op === 'Token::INIT') {
+      return new Assignment(_kAssignment, op, target, value, pos);
+    } else {
+      return new CompoundAssignment(op, target, value, pos, this.NewBinaryOperation(BinaryOpForAssignment(op), target, value, pos + 1));
+    }
   }
   NewExpressionStatement(expression, pos) {
     return new ExpressionStatement(expression, pos);
@@ -464,7 +465,7 @@ class DebuggerStatement extends Statement {
 
 class ExpressionStatement extends Statement {
   constructor(expression, pos) {
-    super(pos, kExpressionStatement);
+    super(pos, _kExpressionStatement);
     this.expression_ = expression;
   }
 }
@@ -800,6 +801,12 @@ class Assignment extends Expression {
     op = TokenEnumList.indexOf(op);
     this.bit_field_ |= AssignmentTokenField.encode(op);
   }
+  op() {
+    return AssignmentTokenField.decode(this.bit_field_);
+  }
+  lookup_hoisting_mode() {
+    return AssignmentLookupHoistingModeField.decode(this.bit_field_);
+  }
 }
 
 class Throw extends Expression {
@@ -811,7 +818,7 @@ class Throw extends Expression {
 
 class CompoundAssignment extends Assignment {
   constructor(op, target, value, pos, binary_operation) {
-    super(kCompoundAssignment, op, target, value, pos);
+    super(_kCompoundAssignment, op, target, value, pos);
     // BinaryOperation* binary_operation_;
     this.binary_operation_ = binary_operation;
   }
@@ -830,7 +837,7 @@ class Literal extends Expression {
    * @param {Number} pos 位置
    */
   constructor(type, val, pos) {
-    super(pos, kLiteral);
+    super(pos, _kLiteral);
     /**
      * 每一种字面量只会有唯一的值 不可能同时是字符串与数字
      * 因此源码在这里用了union来优化内存的使用
@@ -1111,7 +1118,6 @@ class FunctionLiteral extends Expression {
     this.raw_name_ = name ? ast_value_factory.NewConsString(name) : null;
     this.scope_ = scope;
     this.raw_name_ = null;
-    this.suspend_count_ = 0;
     this.raw_inferred_name_ = ast_value_factory.empty_cons_string();
     this.produced_preparse_data_ = produced_preparse_data;
     this.bit_field_ |= FunctionSyntaxKindBits.encode(function_syntax_kind) |
@@ -1151,6 +1157,17 @@ class FunctionLiteral extends Expression {
   }
   language_mode() {
     return this.scope_.language_mode();
+  }
+  start_position() {
+    return this.scope_.start_position_;
+  }
+  requires_brand_initialization() {
+    let outer = this.scope_.outer_scope_;
+    if (!outer.is_class_scope()) return false;
+    return outer.brand() !== null;
+  }
+  requires_instance_members_initializer() {
+    return RequiresInstanceMembersInitializer.decode(this.bit_field_);
   }
 }
 

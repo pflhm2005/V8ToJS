@@ -1,4 +1,4 @@
-import BytecodeGenerator from "./BytecodeGenerator";
+import BytecodeGenerator from "../Codegen/BytecodeGenerator";
 import { SUCCEEDED, FAILED } from "./Complier";
 
 const kReadyToPrepare = 0;
@@ -34,8 +34,12 @@ class CompilationJob {
     this.state_ = initial_state;
   }
   UpdateState(status, next_state) {
-    if (status === SUCCEEDED) this.state_ = next_state;
-    else this.state_ = kFailed;
+    if (status === SUCCEEDED) {
+      this.state_ = next_state;
+    }
+    else {
+      this.state_ = kFailed;
+    }
     return status;
   }
 }
@@ -50,9 +54,6 @@ class UnoptimizedCompilationJob extends CompilationJob {
   }
   ExecuteJob() {
     return this.UpdateState(this.ExecuteJobImpl(), kReadyToFinalize);
-  }
-  ExecuteJobImpl() {
-
   }
   FinalizeJob() {
 
@@ -100,10 +101,13 @@ class UnoptimizedCompilationInfo {
     return this.literal_.scope_;
   }
   num_parameters_including_this() {
-    return this.scope().num_parameters() + 1;
+    return this.scope().num_parameters_ + 1;
   }
   SourcePositionRecordingMode() {
     if (this.collect_source_positions()) return RECORD_SOURCE_POSITIONS;
     return this.literal_.AllowsLazyCompilation() ? RECORD_SOURCE_POSITIONS : LAZY_SOURCE_POSITIONS;
+  }
+  collect_type_profile() {
+    return this.GetFlag(kCollectTypeProfile);
   }
 }

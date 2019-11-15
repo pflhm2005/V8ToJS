@@ -186,6 +186,10 @@ export default class ParseInfo {
     //   AllocateSourceRangeMap();
     // }
   }
+
+  scope() {
+    return this.literal_.scope_;
+  }
 }
 
 class ConsumedPreparseData {}
