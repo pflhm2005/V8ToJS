@@ -1149,6 +1149,9 @@ class FunctionLiteral extends Expression {
   add_expected_properties(number_properties) {
     this.expected_property_count_ += number_properties;
   }
+  language_mode() {
+    return this.scope_.language_mode();
+  }
 }
 
 // 延迟执行的字面量类型

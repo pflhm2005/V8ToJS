@@ -2461,7 +2461,7 @@ export default class ParserBase {
   }
   /**
    * 处理逻辑表达式
-   * || &&
+   * ||、&&、??
    */
   ParseLogicalExpression() {
     let expression = this.ParseBinaryExpression(6);

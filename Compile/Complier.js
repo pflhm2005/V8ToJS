@@ -4,7 +4,7 @@ import Scope from "../Parsing/Scope";
 import Interpreter from "./Interpreter";
 import { FLAG_stress_lazy_source_positions } from "./Flag";
 import { FLAG_use_strict } from "./Flag";
-import { kEagerCompile } from "../enum";
+import { kEagerCompile, kConsumeCodeCache } from "../enum";
 
 export const SUCCEEDED = 0;
 export const FAILED = 0;
@@ -52,13 +52,11 @@ export default class Compiler {
       if (origin_options.IsModule()) parse_info.set_module();
       parse_info.extension_ = extension;
       parse_info.set_eager(compile_options === kEagerCompile);
-
       parse_info.set_language_mode(language_mode);
       maybe_result = CompileToplevel(parse_info, isolate, is_compiled_scope);
       
       if (extension === null) compilation_cache.PutScript(source, isolate.native_context(), language_mode, maybe_result);
     }
-
     return maybe_result;
   }
   static Analyze(parse_info) {
@@ -85,15 +83,15 @@ class ScriptCompileTimerScope {
 
 function NewScript(isolate, parse_info, source, script_details, origin_options, natives) {
   let script = parse_info.CreateScript(isolate, source, origin_options, natives);
-  // more
+  // TODO
   return script;
 }
 
 // 太复杂了 只展示主要步骤
 function CompileToplevel(parse_info, isolate, is_compiled_scope) {
-  // more
-  if (parse_info.literal_ === null && Parsing.ParseProgram(parse_info, isolate)) return;
-  // more
+  // TODO
+  if (parse_info.literal_ === null && !Parsing.ParseProgram(parse_info, isolate)) return null;
+  // TODO
   let shared_info = GenerateUnoptimizedCodeForToplevel(isolate, parse_info, null, is_compiled_scope);
   FinalizeScriptCompilation(isolate, parse_info);
   return shared_info;

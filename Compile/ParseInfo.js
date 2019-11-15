@@ -84,6 +84,7 @@ export default class ParseInfo {
     this.ast_value_factory_ = null;
     
     this.function_name_ = null;
+    this.max_function_literal_id_ = 0;
    
     this.source_range_map_ = null;
     this.literal_ = null;
@@ -105,6 +106,7 @@ export default class ParseInfo {
     this.SetFlag(kAllowHarmonyNullish, FLAG_harmony_nullish);
     this.SetFlag(kAllowHarmonyPrivateMethods, FLAG_harmony_private_methods);
   }
+
   is_eval() { return this.GetFlag(kEval); }
   is_module() { return this.GetFlag(kModule); }
   set_module(v) { this.SetFlag(kModule); }

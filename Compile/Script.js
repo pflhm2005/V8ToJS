@@ -45,6 +45,8 @@ class ScriptCompiler {
   }
 }
 
+class UnboundScript{}
+
 class ScriptData {
   constructor(data = '', length = 0) {
     this.data_ = data;

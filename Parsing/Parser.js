@@ -113,23 +113,30 @@ class Parser extends ParserBase {
     let result = null;
     {
       let outer = this.original_scope_;
-      if (info.is_eval()) outer = this.NewEvalScope(outer);
-      else if (this.parsing_module_) outer = this.NewModuleScope(info.script_scope_);
+      if (info.is_eval()) {
+        outer = this.NewEvalScope(outer);
+      }
+      else if (this.parsing_module_) {
+        outer = this.NewModuleScope(info.script_scope_);
+      }
       // C++赋值深拷贝
       let scope = outer;
-      scope.set_start_position(0);
+      scope.start_position_ = 0;
       /**
        * C++空指针nullptr依然是引用传递 不同于JS的null
        * 有时候变量会在我不注意时初始化
        * 比如这里的参数是作为引用传递进去 顺便被初始化了
        */
+      this.function_state_ = new FunctionState(null, this.scope_, scope);
       let outer_scope_ = this.scope_;
       this.scope_ = scope;
-      this.function_state_ = new FunctionState(null, this.scope_, scope);
       // 这里暂时不知道是新的内存空间还是旧的
       let body = [];
+      //TODO
       if (this.parsing_module_) { }
-      else if (info.is_wrapped_as_function()) this.ParseWrapped(isolate, info, body, scope, null);
+      else if (info.is_wrapped_as_function()) {
+        this.ParseWrapped(isolate, info, body, scope, null);
+      }
       else {
         this.scope_.set_language_mode(info.is_strict_mode());
         this.ParseStatementList(body, 'Token::EOS');
@@ -138,14 +145,15 @@ class Parser extends ParserBase {
       this.scope_.end_position_ = this.peek_position();
 
       let parameter_count = this.parsing_module_ ? 1 : 0;
-      result = this.ast_node_factory_.NewScriptOrEvalFunctionLiteral(scope, body, this.function_state_.expected_property_count_, parameter_count);
+      result = this.ast_node_factory_.NewScriptOrEvalFunctionLiteral(
+        scope, body, this.function_state_.expected_property_count_, parameter_count);
       result.suspend_count_ = this.function_state_.suspend_count_;
 
       // 析构
       this.scope_ = outer_scope_;
     }
 
-    // info.max_function_literal_id_ = this.function_literal_id_;
+    info.max_function_literal_id_ = this.function_literal_id_;
     // RecordFunctionLiteralSourceRange(result);
     // 析构
     this.mode_ = old_mode_;
@@ -153,14 +161,15 @@ class Parser extends ParserBase {
   }
   DeserializeScopeChain(isolate, info, maybe_outer_scope_info_, mode) {
     this.InitializeEmptyScopeChain(info);
-    // this.original_scope_ = Scope.DeserializeScopeChain(isolate, null, maybe_outer_scope_info_, info.script_scope_, this.ast_value_factory_, mode);
+    // this.original_scope_ = Scope.DeserializeScopeChain(
+    // isolate, null, maybe_outer_scope_info_, info.script_scope_, this.ast_value_factory_, mode);
   }
   InitializeEmptyScopeChain(info) {
     let script_scope = this.NewScriptScope();
     info.script_scope_ = script_scope;
     this.original_scope_ = script_scope;
   }
-  ParseWrapped() {}
+  ParseWrapped() { }
 
   parse_lazily() { return this.mode_ === PARSE_LAZILY; }
   // 判断是否可以懒编译这个函数字面量
@@ -260,22 +269,22 @@ class Parser extends ParserBase {
     return false;
   }
   CollapseNaryExpression(x, y, op, pos) {
-     if (IsBinaryOp(op) || op === 'Token::EXP') return false;
+    if (IsBinaryOp(op) || op === 'Token::EXP') return false;
 
-     let nary = null;
-     if (x.IsBinaryOperation()) {
-       if (x.op() !== op) return false;
-       nary = this.ast_node_factory_.NewNaryOperation(op, x.left_, 2);
-       nary.AddSubsequent(x.right_, x.position_);
-     } else if (x.IsNaryOperation()) {
-       if (x.op() !== op) return false;
-     } else {
-       return false;
-     }
+    let nary = null;
+    if (x.IsBinaryOperation()) {
+      if (x.op() !== op) return false;
+      nary = this.ast_node_factory_.NewNaryOperation(op, x.left_, 2);
+      nary.AddSubsequent(x.right_, x.position_);
+    } else if (x.IsNaryOperation()) {
+      if (x.op() !== op) return false;
+    } else {
+      return false;
+    }
 
-     nary.AddSubsequent(y, pos);
-     nary.clear_parenthesized();
-     return true;
+    nary.AddSubsequent(y, pos);
+    nary.clear_parenthesized();
+    return true;
   }
 
   EmptyIdentifierString() { return this.ast_value_factory_.empty_string(); }
@@ -1117,7 +1126,7 @@ class Parser extends ParserBase {
         let is_optional = false;
         let constructor_args = function_scope.DeclareParameter(
           constructor_args_name, kTemporary, is_optional, is_rest, this.ast_value_factory_, pos);
-      
+
         let call = null;
         {
           let args = [];
