@@ -1,8 +1,31 @@
 import BytecodeArrayWriter from "./BytecodeArrayWriter";
-import { kNoSourcePosition } from "../enum";
+import {
+  kNoSourcePosition,
+} from "../enum";
 import { FLAG_ignition_reo } from "../Compile/Flag";
 import BytecodeRegisterAllocator from "./BytecodeRegisterAllocator";
 import BytecodeRegisterOptimizer from "./BytecodeRegisterOptimizer";
+
+const kNone = 0;
+const kRead = 1 << 0;
+const kWrite = 1 << 1;
+const kReadWrite = kRead | kWrite;
+
+const kFlag8 = 1;
+const kIntrinsicId = 2;
+const kRuntimeId = 3;
+const kNativeContextIndex = 4;
+const kIdx = 5;
+const kUImm = 6;
+const kRegCount = 7;
+const kImm = 8;
+const kReg = 9;
+const kRegList = 10;
+const kRegPair = 11;
+const kRegOut = 12;
+const kRegOutList = 13;
+const kRegOutPair = 14;
+const kRegOutTriple = 15;
 
 export default class BytecodeArrayBuilder {
   constructor(parameter_count, locals_count, feedback_vector_spec, source_position_mode) {
@@ -41,6 +64,19 @@ export default class BytecodeArrayBuilder {
   LoadAccumulatorWithRegister() {
     
   }
+
+  LoadConstantPoolEntry(entry) {
+    this.OutputLdaConstant(entry);
+    return this;
+  }
+  OutputLdaConstant(entry) {
+    let node = new BytecodeNode(this.CreateLdaConstantNode(entry));
+    this.write(node);
+  }
+  CreateLdaConstantNode(entry) {
+    return BytecodeNodeBuilder.make(this, entry, kLdaConstant, kWrite, kIdx);
+  }
+
   RemainderOfBlockIsDead() {
     return this.bytecode_array_writer_.exit_seen_in_block_;
   }
@@ -69,6 +105,13 @@ class ConstantArrayBuilder {
   // TODO
   InsertDeferred() {
     return -1;
+  }
+}
+
+class BytecodeNodeBuilder{
+  static make(builder, operands, bytecode, accumulator_use, operand_types) {
+    builder.PrepareToOutputBytecode();
+    return BytecodeNode.Create(builder.CurrentSourcePosition(bytecode), operands);
   }
 }
 
