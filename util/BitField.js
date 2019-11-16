@@ -190,3 +190,10 @@ export const HasNameStaticProperty = BitField(7, 1);
 export const HasStaticComputedNames = BitField(8, 1);
 export const IsAnonymousExpression = BitField(9, 1);
 export const HasPrivateMethods = BitField(10, 1);
+
+/**
+ * runtime
+ */
+export const AllocateDoubleAlignFlag = BitField(0, 1);
+export const AllowLargeObjectAllocationFlag = BitField(0, 1);
+export const DeclareGlobalsEvalFlag = BitField(0, 1);

@@ -11,3 +11,4 @@ export const FLAG_harmony_private_methods = false;
 export const FLAG_stress_lazy_source_positions = false;
 export const FLAG_max_lazy = false;
 export const FLAG_trace = false;
+export const FLAG_ignition_reo = true;

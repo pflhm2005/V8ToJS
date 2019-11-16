@@ -1223,8 +1223,9 @@ export class Variable {
   }
   mode() { return VariableModeField.decode(this.bit_field_); }
   location() { return LocationField.decode(this.bit_field_); }
-  set_is_used() { this.bit_field_ = NodeTypeField.update(this.bit_field_, true); }
-  set_maybe_assigned() { this.bit_field_ = NodeTypeField.update(this.bit_field_, kMaybeAssigned); }
+  set_is_used() { this.bit_field_ = IsUsedField.update(this.bit_field_, true); }
+  is_used() { return IsUsedField.decode(this.bit_field_); }
+  set_maybe_assigned() { this.bit_field_ = MaybeAssignedFlagField.update(this.bit_field_, kMaybeAssigned); }
   set_is_static_flag(is_static_flag) { this.bit_field_ = IsStaticFlagField.update(this.bit_field_, is_static_flag); }
   ForceContextAllocation() { this.bit_field_ = ForceContextAllocationField.update(this.bit_field_, true); }
   is_parameter() { return VariableKindField.decode(this.bit_field_) === PARAMETER_VARIABLE; }

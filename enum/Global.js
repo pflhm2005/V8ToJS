@@ -183,3 +183,6 @@ export const CONTEXT = 3;
 export const LOOKUP = 4;
 export const MODULE = 5;
 export const kLastVariableLocation = MODULE;
+
+export const INSIDE_TYPEOF = 0;
+export const NOT_INSIDE_TYPEOF = 1;

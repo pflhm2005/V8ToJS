@@ -1,8 +1,23 @@
-import { kElided, kRestParameter, kTraceEnter, kBody, LOCAL, _kBlock, _kVariableDeclaration, _kExpressionStatement, _kAssignment } from "../enum";
+import { 
+  kElided, 
+  kRestParameter, 
+  kTraceEnter,
+  kBody, 
+  LOCAL, 
+  _kBlock, 
+  _kVariableDeclaration, 
+  _kExpressionStatement,
+  _kAssignment, 
+  UNALLOCATED,
+  NOT_INSIDE_TYPEOF,
+  INSIDE_TYPEOF,
+} from "../enum";
 import Register from "./Register";
-import { IsResumableFunction, IsBaseConstructor } from "../util";
+import { IsResumableFunction, IsBaseConstructor, DeclareGlobalsEvalFlag } from "../util";
 import { FLAG_trace } from "../Compile/Flag";
 import BytecodeArrayBuilder from "./BytecodeArrayBuilder";
+import GlobalDeclarationsBuilder from "./GlobalDeclarationsBuilder";
+import FeedbackSlot from "../util/FeedbackSlot";
 
 // This kind means that the slot points to the middle of other slot
 // which occupies more than one feedback vector element.
@@ -53,9 +68,8 @@ export default class BytecodeGenerator {
   constructor(info, ast_string_constants, eager_inner_literals) {
     this.zone_ = null;
     this.builder_ = new BytecodeArrayBuilder(
-      null, info.num_parameters_including_this(), 
-      info.scope().num_stack_slots_, info.feedback_vector_spec_, 
-      info.SourcePositionRecordingMode());
+      info.num_parameters_including_this(), info.scope().num_stack_slots_, 
+      info.feedback_vector_spec_, info.SourcePositionRecordingMode());
     this.info_ = info;
     this.ast_string_constants_ = ast_string_constants;
     this.closure_scope_ = info.scope();
@@ -93,7 +107,8 @@ export default class BytecodeGenerator {
 
     let incoming_context = new ContextScope(this, this.closure_scope_);
     let control = new ControlScopeForTopLevel(this);
-    let register_scope = new RegisterAllocationScope(this);
+    // RegisterAllocationScope register_scope(this);
+    // let outer_next_register_index_ = this.register_allocator().next_register_index_;
 
     this.AllocateTopLevelRegisters();
     // 状态函数
@@ -109,6 +124,7 @@ export default class BytecodeGenerator {
     } else {
       this.GenerateBytecodeBody();
     }
+    this.register_allocator().ReleaseRegisters(outer_next_register_index_);
   }
   GenerateBytecodeBody() {
     // 构建argument对象
@@ -139,7 +155,7 @@ export default class BytecodeGenerator {
     // 记录函数作用域数量
     this.BuildIncrementBlockCoverageCounterIfEnabled(literal, kBody);
 
-    // 构造函数内部变量声明
+    // 构建函数内部变量声明
     this.VisitDeclarations(this.closure_scope_.decls_);
 
     // 构建import语法
@@ -166,6 +182,30 @@ export default class BytecodeGenerator {
       this.BuildReturn();
     }
   }
+  BuildPrivateBrandInitialization() {}
+  BuildInstanceMemberInitialization() {}
+
+  /**
+   * 处理语法树解析
+   */
+  Visit(node) {
+    // if (CheckStackOverflow()) return;
+    this.VisitNoStackOverflowCheck(node);
+  }
+  VisitNoStackOverflowCheck(node) {
+    let node_type = node.node_type();
+    switch(node_type) {
+      case _kVariableDeclaration:
+        return this.VisitVariableDeclaration(node);
+      case _kExpressionStatement:
+        return this.VisitExpressionStatement(node);
+      case _kBlock:
+        return this.VisitBlock(node);
+      case _kAssignment:
+        return this.VisitAssignment(node);
+    }
+  }
+
   VisitArgumentsObject(variable) {
     if (variable === null) return;
     this.builder_.CreateArguments(this.closure_scope_.GetArgumentsType());
@@ -196,14 +236,37 @@ export default class BytecodeGenerator {
     if (this.block_coverage_builder_ === null) return;
     this.block_coverage_builder_.IncrementBlockCounter(node, kind);
   }
-  VisitDeclarations() {
+  VisitDeclarations(declarations) {
+    // RegisterAllocationScope register_scope(this);
+    for (let decl of declarations) {
+      // RegisterAllocationScope register_scope(this);
+      this.Visit(decl);
+    }
+    if (this.globals_builder_.empty()) return;
+    this.globals_builder_.set_constant_pool_entry(this.builder_.AllocateDeferredConstantPoolEntry());
+    let encoded_flags = DeclareGlobalsEvalFlag.encode(this.info_.is_eval());
 
+    let args = this.register_allocator().NewRegisterList(3);
+    this.builder_
+    .LoadConstantPoolEntry(this.globals_builder_.constant_pool_entry_)
+    .StoreAccumulatorInRegister(args.get(0))
+    .LoadLiteral(Smi.FromInt(encoded_flags))
+    .StoreAccumulatorInRegister(args.get(1))
+    .MoveRegister(Register.function_closure(), args.get(2))
+    .CallRuntime(kDeclareGlobals, args);
+
+    //
+    this.global_declarations_.push(this.globals_builder_);
+    this.globals_builder_ = new GlobalDeclarationsBuilder();
   }
+  register_allocator() {
+    return this.builder_.register_allocator_;
+  }
+  
   VisitModuleNamespaceImports() {
     if (!this.closure_scope_.is_module_scope()) return;
   }
-  BuildPrivateBrandInitialization() {}
-  BuildInstanceMemberInitialization() {}
+
   VisitStatements(statements) {
     for (let i = 0; i < statements.length; i++) {
       let stmt = statements[i];
@@ -211,30 +274,33 @@ export default class BytecodeGenerator {
       if (this.builder_.RemainderOfBlockIsDead()) break;
     }
   }
-  Visit(node) {
-    // if (CheckStackOverflow()) return;
-    this.VisitNoStackOverflowCheck(node);
-  }
-  VisitNoStackOverflowCheck(node) {
-    let node_type = node.node_type();
-    switch(node_type) {
-      case _kVariableDeclaration:
-        return this.VisitVariableDeclaration(node);
-      case _kExpressionStatement:
-        return this.VisitExpressionStatement(node);
-      case _kBlock:
-        return this.VisitBlock(node);
-      case _kAssignment:
-        return this.VisitAssignment(node);
-    }
-  }
   BuildReturn() {
 
   }
 
   VisitVariableDeclaration(decl) {
-    // let variable = decl;
-    // console.log(variable);
+    let variable = decl.var_;
+    if (!variable.is_used()) return;
+    switch (variable.location()) {
+      case UNALLOCATED: {
+        let slot = this.GetCachedLoadGlobalICSlot(NOT_INSIDE_TYPEOF, variable);
+        this.globals_builder_.AddUndefinedDeclaration(variable.name_, slot);
+        break;
+      }
+    }
+  }
+  GetCachedLoadGlobalICSlot(typeof_mode, variable) {
+    let slot_kind = typeof_mode === INSIDE_TYPEOF ? kLoadGlobalInsideTypeof : kLoadGlobalNotInsideTypeof;
+    let slot = new FeedbackSlot(this.feedback_slot_cache_.Get(slot_kind, variable));
+    if (!slot.IsInvalid()) {
+      return slot;
+    }
+    slot = this.feedback_spec().AddLoadGlobalICSlot(typeof_mode);
+    this.feedback_slot_cache_.Put(slot_kind, variable, this.feedback_index(slot));
+    return slot;
+  }
+  feedback_index(slot) {
+    return slot.id_;
   }
 
   VisitExpressionStatement(stmt) {
@@ -276,6 +342,9 @@ export default class BytecodeGenerator {
   function_kind() {
     return this.info_.literal_.kind();
   }
+  feedback_spec() {
+    return this.info_.feedback_vector_spec_;
+  }
   InitializeAstVisitor(stack_limit) {
     this.stack_limit = stack_limit;
     this.stack_overflow_ = false;
@@ -297,12 +366,100 @@ export default class BytecodeGenerator {
     }
   }
 }
-class FeedbackSlotCache {}
-class GlobalDeclarationsBuilder {}
+class FeedbackSlotCache {
+  constructor() {
+    this.map_ = [];
+  }
+  Put(slot_kind, node, slot_index, index = 0) {
+    let key = {
+      slot_kind,
+      node,
+      index,
+    };
+    let entry = {
+      slot_index,
+      key,
+    }
+    this.map_.push(entry);
+  }
+  Get(slot_kind, node, index = 0) {
+    let iter = this.map_.find(v => {
+      v.node === node &&
+      v.index === index &&
+      v.slot_kind === slot_kind
+    });
+    if (iter !== undefined) {
+      return iter.slot_index;
+    }
+    return -1;
+  }
+}
+
+export class FeedbackVectorSpec {
+  constructor() {
+    this.slot_kinds_ = [];
+    this.num_closure_feedback_cells_ = 0;
+  }
+  AddLoadGlobalICSlot(typeof_mode) {
+    return this.AddSlot(typeof_mode === INSIDE_TYPEOF
+      ? kLoadGlobalInsideTypeof : kLoadGlobalNotInsideTypeof);
+  }
+  AddSlot(kind) {
+    let slot = this.slots();
+    let entries_per_slot = FeedbackMetadata.GetSlotSize(kind);
+    this.append(kind);
+    for(let i = 1; i < entries_per_slot; i++) {
+      this.append(kInvalid);
+    }
+    return new FeedbackSlot(slot);
+  }
+  append(kind) {
+    this.slot_kinds_.push(kind);
+  }
+  slots() {
+    return this.slot_kinds_.length;
+  }
+}
+
+class FeedbackMetadata {
+  static GetSlotSize(kind) {
+    switch(kind) {
+      case kForIn:
+      case kInstanceOf:
+      case kCompareOp:
+      case kBinaryOp:
+      case kLiteral:
+      case kTypeProfile:
+        return 1;
+      
+      case kCall:
+      case kCloneObject:
+      case kLoadProperty:
+      case kLoadGlobalInsideTypeof:
+      case kLoadGlobalNotInsideTypeof:
+      case kLoadKeyed:
+      case kHasKeyed:
+      case kStoreNamedSloppy:
+      case kStoreNamedStrict:
+      case kStoreOwnNamed:
+      case kStoreGlobalSloppy:
+      case kStoreGlobalStrict:
+      case kStoreKeyedSloppy:
+      case kStoreKeyedStrict:
+      case kStoreInArrayLiteral:
+      case kStoreDataPropertyInLiteral:
+        return 2;
+
+      case kInvalid:
+      case kKindsNumber:
+        throw new Error('UNREACHABLE');
+    }
+    return 1;
+  }
+}
 
 class SharedFeedbackSlot {}
 class BlockCoverageBuilder {}
 
 class ContextScope {}
 class ControlScopeForTopLevel {}
-class RegisterAllocationScope {}

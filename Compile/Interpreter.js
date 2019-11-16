@@ -1,4 +1,4 @@
-import BytecodeGenerator from "../Codegen/BytecodeGenerator";
+import BytecodeGenerator, { FeedbackVectorSpec } from "../Codegen/BytecodeGenerator";
 import { SUCCEEDED, FAILED } from "./Complier";
 
 const kReadyToPrepare = 0;
@@ -81,7 +81,7 @@ class UnoptimizedCompilationInfo {
     this.flags_ = 0;
     this.zone_ = zone;
     // this.feedback_vector_spec_ = new FeedbackVectorSpec(zone);
-    this.feedback_vector_spec_ = null;
+    this.feedback_vector_spec_ = new FeedbackVectorSpec();
     this.literal_ = literal;
     this.source_range_map_ = parse_info.source_range_map_;
     if (parse_info.is_eval()) this.SetFlag(kIsEval);
@@ -96,7 +96,9 @@ class UnoptimizedCompilationInfo {
   }
   collect_source_positions() { return this.GetFlag(kCollectSourcePositions); }
   has_source_range_map() { return this.source_range_map_ !== null; }
-
+  is_eval() {
+    return this.GetFlag(kIsEval);
+  }
   scope() {
     return this.literal_.scope_;
   }
