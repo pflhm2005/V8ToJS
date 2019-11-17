@@ -168,6 +168,7 @@ class Parser extends ParserBase {
     let script_scope = this.NewScriptScope();
     info.script_scope_ = script_scope;
     this.original_scope_ = script_scope;
+    if (info.is_repl_mode()) script_scope.set_is_repl_mode_scope();
   }
   ParseWrapped() { }
 

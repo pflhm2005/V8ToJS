@@ -4,6 +4,8 @@ import Interpreter from "./Interpreter";
 import { FLAG_stress_lazy_source_positions } from "./Flag";
 import { FLAG_use_strict } from "./Flag";
 import { kEagerCompile, kConsumeCodeCache } from "../enum";
+import Rewriter from "./Rewriter";
+import { DeclarationScope } from "../Parsing/Scope";
 
 export const SUCCEEDED = 0;
 export const FAILED = 0;
@@ -59,12 +61,12 @@ export default class Compiler {
     return maybe_result;
   }
   static Analyze(parse_info) {
-
+    if (!Rewriter.Rewrite(parse_info)) return false;
+    if (!DeclarationScope.Analyze(parse_info)) return false;
+    return true;
   }
   static GetSharedFunctionInfo(literal, script, isolate) {
     let maybe_existing = script.FindSharedFunctionInfo(isolate, literal);
-
-
   }
 }
 
@@ -111,7 +113,7 @@ function GenerateUnoptimizedCodeForToplevel(isolate, parse_info, allocator, is_c
   // EnsureSharedFunctionInfosArrayOnScript(parse_info, isolate);
   parse_info.ast_value_factory_.Internalize(isolate);
 
-  // if (!Compiler.Analyze(parse_info)) return null;
+  if (!Compiler.Analyze(parse_info)) return null;
   // DeclarationScope::AllocateScopeInfos(parse_info, isolate);
 
   let script = parse_info.script_;

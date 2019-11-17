@@ -14,7 +14,7 @@ import {
 } from "../enum";
 import Register from "./Register";
 import { IsResumableFunction, IsBaseConstructor, DeclareGlobalsEvalFlag } from "../util";
-import { FLAG_trace } from "../Compile/Flag";
+import { FLAG_trace } from "../Compiler/Flag";
 import BytecodeArrayBuilder from "./BytecodeArrayBuilder";
 import GlobalDeclarationsBuilder from "./GlobalDeclarationsBuilder";
 import FeedbackSlot from "../util/FeedbackSlot";

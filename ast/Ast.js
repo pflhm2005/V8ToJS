@@ -561,6 +561,15 @@ class Block extends BreakableStatement {
     this.scope_ = null;
     this.bit_field_ |= IgnoreCompletionField.encode(Number(ignore_completion_value)) | IsLabeledField.encode(Number(labels !== null));
   }
+  ignore_completion_value() {
+    return IgnoreCompletionField.decode(this.bit_field_);
+  }
+  labels() {
+    if (IsLabeledField.decode(this.bit_field_)) {
+      return this.labels_;
+    }
+    return null;
+  }
   // 这里用的内存拷贝
   // InitializeStatements(statements, zone = null) {
   //   this.statement_ = statements;

@@ -58,6 +58,8 @@ const kAllowHarmonyPrivateMethods = 1 << 26;
 const kIsOneshotIIFE = 1 << 27;
 const kCollectSourcePositions = 1 << 28;
 const kAllowHarmonyNullish = 1 << 29;
+const kAllowHarmonyTopLevelAwait = 1 << 30;
+const kREPLMode = 1 << 31;
 
 export default class ParseInfo {
   constructor(isolate) {
@@ -81,7 +83,6 @@ export default class ParseInfo {
     this.parameters_end_pos_ = kNoSourcePosition;
     this.function_literal_id_ = kFunctionLiteralIdInvalid;
     this.character_stream_ = null;
-    this.ast_value_factory_ = null;
     
     this.function_name_ = null;
     this.max_function_literal_id_ = 0;
@@ -105,6 +106,7 @@ export default class ParseInfo {
     this.SetFlag(kAllowHarmonyOptionalChaining, FLAG_harmony_optional_chaining);
     this.SetFlag(kAllowHarmonyNullish, FLAG_harmony_nullish);
     this.SetFlag(kAllowHarmonyPrivateMethods, FLAG_harmony_private_methods);
+    this.SetFlag(kAllowHarmonyTopLevelAwait, FLAG_harmony_top_level_await);
   }
 
   is_eval() { return this.GetFlag(kEval); }
@@ -126,6 +128,8 @@ export default class ParseInfo {
 
   set_allow_eval_cache(v) { this.SetFlag(kAllowEvalCache, v); }
   coverage_enabled() { return this.GetFlag(kCoverageEnabled); }
+
+  is_repl_mode() { return this.GetFlag(kREPLMode); }
 
   collect_type_profile() { return this.GetFlag(kCollectTypeProfile); }
   might_always_opt() { return this.GetFlag(kMightAlwaysOpt); }

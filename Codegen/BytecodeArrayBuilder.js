@@ -2,7 +2,7 @@ import BytecodeArrayWriter from "./BytecodeArrayWriter";
 import {
   kNoSourcePosition,
 } from "../enum";
-import { FLAG_ignition_reo } from "../Compile/Flag";
+import { FLAG_ignition_reo } from "../Compiler/Flag";
 import BytecodeRegisterAllocator from "./BytecodeRegisterAllocator";
 import BytecodeRegisterOptimizer from "./BytecodeRegisterOptimizer";
 
@@ -86,7 +86,6 @@ export default class BytecodeArrayBuilder {
 }
 
 const kUninitializedPosition = -1;
-const kNone = 0;
 const kExpression = 0;
 const kStatement = 0;
 

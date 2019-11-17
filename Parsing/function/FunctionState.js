@@ -1,4 +1,4 @@
-import { FLAG_max_lazy } from '../../Compile/Flag';
+import { FLAG_max_lazy } from '../../Compiler/Flag';
 
 const kNoReason = 0;
 

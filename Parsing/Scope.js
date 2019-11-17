@@ -29,7 +29,7 @@ import {
   kModule,
   BLOCK_SCOPE,
 } from "../enum";
-import { Variable } from "../ast/AST";
+import { Variable, AstNodeFactory } from "../ast/AST";
 import {
   IsConciseMethod,
   IsClassConstructor,
@@ -118,8 +118,6 @@ export default class Scope {
     // base::ThreadedList<Variable> locals_;
     this.locals_ = [];
 
-    this.unresolved_list_ = [];
-
     this.SetDefaults();
     if (outer_scope) this.outer_scope_.AddInnerScope(this);
   }
@@ -131,21 +129,31 @@ export default class Scope {
   SetDefaults() {
     this.inner_scope_ = null;
     this.sibling_ = null;
+    this.unresolved_list_ = [];
+
     this.start_position_ = kNoSourcePosition;
     this.end_position_ = kNoSourcePosition;
-    this.num_stack_slots_ = 0;
-    this.num_heap_slots_ = 0;
 
     this.calls_eval_ = false;
     this.sloppy_eval_can_extend_vars_ = false;
     this.scope_nonlinear_ = false;
     this.is_hidden_ = false;
     this.is_debug_evaluate_scope_ = false;
+
     this.inner_scope_calls_eval_ = false;
     this.force_context_allocation_for_parameters_ = false;
 
     this.is_declaration_scope_ = false;
+
+    this.private_name_lookup_skips_outer_class_ = false;
+
     this.must_use_preparsed_scope_data_ = false;
+    this.is_repl_mode_scope_ = false;
+
+    this.num_stack_slots_ = 0;
+    this.num_heap_slots_ = 0;
+
+    this.set_language_mode(kSloppy);
   }
 
   set_start_position(statement_pos) { this.start_position_ = statement_pos; }
@@ -161,6 +169,7 @@ export default class Scope {
   is_class_scope() { return this.scope_type_ === CLASS_SCOPE; }
 
   set_language_mode(language_mode) { this.is_strict_ = this.is_strict(language_mode); }
+  set_is_repl_mode_scope() { this.is_repl_mode_scope_ = true; }
   language_mode() { return this.is_strict_ ? kStrict : kSloppy; }
   is_sloppy(language_mode) { return language_mode === kSloppy; }
   is_strict(language_mode) { return language_mode !== kSloppy; }
@@ -245,6 +254,13 @@ export default class Scope {
       }
     }
     return false;
+  }
+  GetScriptScope() {
+    let scope = this;
+    while(!scope.is_script_scope()) {
+      scope = scope.outer_scope_;
+    }
+    return scope;
   }
   // 这里形成一个作用域链
   GetDeclarationScope() {
@@ -474,7 +490,7 @@ export default class Scope {
 /**
  * 保留该类 但是不作为实例化对象
  */
-class DeclarationScope extends Scope {
+export class DeclarationScope extends Scope {
   constructor(zone = null, outer_scope = null, scope_type = SCRIPT_SCOPE, function_kind) {
     super(zone, outer_scope, scope_type);
     this.sloppy_block_functions_ = [];
@@ -503,6 +519,32 @@ class DeclarationScope extends Scope {
     this.is_skipped_function_ = false;
     this.preparse_data_builder_ = null;
   }
+  static Analyze(info) {
+    let scope = info.literal_.scope_;
+    if (info.maybe_outer_scope_info_ !== null) {
+      // TODO
+    }
+
+    if (scope.is_eval_scope() && is_sloppy(scope.language_mode())) {
+      let factory = new AstNodeFactory(info.ast_value_factory_);
+      scope.HoistSloppyBlockFunctions(factory);
+    }
+
+    scope.set_should_eager_compile();
+    if (scope.must_use_preparsed_scope_data_) {
+      // TODO
+    }
+    if (!scope.AllocateVariables(info)) return false;
+    scope.GetScriptScope().RewriteReplGlobalVariables();
+    return true;
+  }
+  AllocateVariables(info) {
+    // if (this.is_module_scope()) this.AllocateModuleVariables();
+  }
+  RewriteReplGlobalVariables() {
+    
+  }
+
   set_should_eager_compile() {
     this.should_eager_compile_ = !this.was_lazily_parsed_;
   }
