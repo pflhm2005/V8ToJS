@@ -1,16 +1,22 @@
-import { 
-  kElided, 
-  kRestParameter, 
+import {
+  kElided,
+  kRestParameter,
   kTraceEnter,
-  kBody, 
-  LOCAL, 
-  _kBlock, 
-  _kVariableDeclaration, 
+  kBody,
+  LOCAL,
+  _kBlock,
+  _kVariableDeclaration,
   _kExpressionStatement,
-  _kAssignment, 
+  _kAssignment,
   UNALLOCATED,
   NOT_INSIDE_TYPEOF,
   INSIDE_TYPEOF,
+  kNewScriptContext,
+  kPushModuleContext,
+  MIN_CONTEXT_SLOTS,
+  EVAL_SCOPE,
+  FUNCTION_SCOPE,
+  CONTEXT,
 } from "../enum";
 import Register from "./Register";
 import { IsResumableFunction, IsBaseConstructor, DeclareGlobalsEvalFlag } from "../util";
@@ -18,6 +24,7 @@ import { FLAG_trace } from "../Compiler/Flag";
 import BytecodeArrayBuilder from "./BytecodeArrayBuilder";
 import GlobalDeclarationsBuilder from "./GlobalDeclarationsBuilder";
 import FeedbackSlot from "../util/FeedbackSlot";
+import ValueResultScope from "./ValueResultScope";
 
 // This kind means that the slot points to the middle of other slot
 // which occupies more than one feedback vector element.
@@ -31,8 +38,8 @@ const kStoreKeyedSloppy = 3;
 const kLastSloppyKind = kStoreKeyedSloppy;
 
 // Strict and language mode unaware kinds.
-const  kCall = 4;
-const  kLoadProperty = 5;
+const kCall = 4;
+const kLoadProperty = 5;
 const kLoadGlobalNotInsideTypeof = 6;
 const kLoadGlobalInsideTypeof = 7;
 const kLoadKeyed = 8;
@@ -50,32 +57,48 @@ const kLiteral = 19;
 const kForIn = 20;
 const kInstanceOf = 21;
 const kCloneObject = 23;
+// Last value indicating number of kinds.
+const kKindsNumber = 24
+// The handler will (likely) rethrow the exception.
+const UNCAUGHT = 0;
+// The exception will be caught by the handler.
+const CAUGHT = 1;
+// The exception will be caught and cause a promise rejection.
+const PROMISE = 2;
+/**
+ * The exception will be caught, but both the exception and
+ * the catching are part of a desugaring and should therefore
+ * not be visible to the user (we won't notify the debugger of
+ * such exceptions).
+ */
+const DESUGARING = 3;
+/**
+ * The exception will be caught and cause a promise rejection
+ * in the desugaring of an async function, so special
+ * async/await handling in the debugger can take place.
+ */
+const ASYNC_AWAIT = 4;
 
-const kKindsNumber = 24  // Last value indicating number of kinds.
-
-const UNCAUGHT = 0;     // The handler will (likely) rethrow the exception.
-const CAUGHT = 1;       // The exception will be caught by the handler.
-const PROMISE = 2;      // The exception will be caught and cause a promise rejection.
-const DESUGARING = 3;   // The exception will be caught, but both the exception and
-                        // the catching are part of a desugaring and should therefore
-                        // not be visible to the user (we won't notify the debugger of
-                        // such exceptions).
-const ASYNC_AWAIT = 4;  // The exception will be caught and cause a promise rejection
-                        // in the desugaring of an async function, so special
-                        // async/await handling in the debugger can take place.
+const kPageSizeBits = 18;
+const kMaxRegularHeapObjectSize = (1 << (kPageSizeBits - 1));
+// TODO
+const kTodoHeaderSize = 0;
+const kSystemPointerSizeLog2 = 2;
+const kTaggedSize = 1 << kSystemPointerSizeLog2;
+const kMaximumSlots = (kMaxRegularHeapObjectSize - kTodoHeaderSize) / kTaggedSize - 1;
 
 export default class BytecodeGenerator {
   constructor(info, ast_string_constants, eager_inner_literals) {
     this.zone_ = null;
     this.builder_ = new BytecodeArrayBuilder(
-      info.num_parameters_including_this(), info.scope().num_stack_slots_, 
+      info.num_parameters_including_this(), info.scope().num_stack_slots_,
       info.feedback_vector_spec_, info.SourcePositionRecordingMode());
     this.info_ = info;
     this.ast_string_constants_ = ast_string_constants;
     this.closure_scope_ = info.scope();
     this.current_scope_ = info.scope();
     this.eager_inner_literals_ = eager_inner_literals;
-    
+
     this.feedback_slot_cache_ = new FeedbackSlotCache();
     this.globals_builder_ = new GlobalDeclarationsBuilder();
     this.block_coverage_builder_ = null;
@@ -121,10 +144,24 @@ export default class BytecodeGenerator {
       let local_function_context = new ContextScope(this, this.closure_scope_);
       this.BuildLocalActivationContextInitialization();
       this.GenerateBytecodeBody();
+      // 析构
+      let outer_ = local_function_context.outer_;
+      if (outer_) {
+        this.builder_.PopContext(outer_);
+        outer_.register_ = local_function_context.register_;
+      }
+      this.execution_context_ = outer_;
     } else {
       this.GenerateBytecodeBody();
     }
     this.register_allocator().ReleaseRegisters(outer_next_register_index_);
+    // 析构
+    let outer_ = incoming_context.outer_;
+    if (outer_) {
+      this.builder_.PopContext(outer_);
+      outer_.register_ = incoming_context.register_;
+    }
+    this.execution_context_ = outer_;
   }
   GenerateBytecodeBody() {
     // 构建argument对象
@@ -150,8 +187,8 @@ export default class BytecodeGenerator {
     }
 
     // TODO
-    if (this.info_.collect_type_profile()) {}
-    
+    if (this.info_.collect_type_profile()) { }
+
     // 记录函数作用域数量
     this.BuildIncrementBlockCoverageCounterIfEnabled(literal, kBody);
 
@@ -182,8 +219,68 @@ export default class BytecodeGenerator {
       this.BuildReturn();
     }
   }
-  BuildPrivateBrandInitialization() {}
-  BuildInstanceMemberInitialization() {}
+  BuildNewLocalActivationContext() {
+    let value_execution_result = new ValueResultScope(this);
+
+    let scope = this.closure_scope_;
+
+    if (scope.is_script_scope()) {
+      let scope_reg = this.register_allocator().NewRegister();
+      this.builder_.LoadLiteral(scope)
+        .StoreAccumulatorInRegister(scope_reg)
+        .CallRuntime(kNewScriptContext, scope_reg);
+    } else if (scope.is_module_scope()) {
+      let args = this.register_allocator().NewRegisterList(2);
+      this.builder_.MoveRegister(this.builder_.Parameter(0), args.get(0))
+        .LoadLiteral(scope)
+        .StoreAccumulatorInRegister(args.get(1))
+        .CallRuntime(kPushModuleContext, args);
+    } else {
+      let slot_count = scope.num_heap_slots_ - MIN_CONTEXT_SLOTS;
+      if (slot_count <= kMaximumSlots) {
+        switch (scope.scope_type_) {
+          case EVAL_SCOPE:
+            this.builder_.CreateEvalContext(scope, slot_count);
+            break;
+          case FUNCTION_SCOPE:
+            this.builder_.CreateFunctionContext(scope, slot_count);
+            break;
+          default:
+            throw new Error('UNREACHABLE');
+        }
+      } else {
+        let arg = this.register_allocator().NewRegister();
+        this.builder_.LoadLiteral(scope).StoreAccumulatorInRegister(arg)
+          .CallRuntime(kNewFunctionContext, arg);
+      }
+    }
+    // 析构
+    this.execution_result_ = value_execution_result.outer_;
+    value_execution_result = null;
+  }
+  BuildLocalActivationContextInitialization() {
+    let scope = this.closure_scope_;
+    if (scope.has_this_declaration_ && scope.receiver_.IsContextSlot()) {
+      let variable = scope.receiver_;
+      let receiver = this.builder_.Receiver();
+
+      this.builder_.LoadAccumulatorWithRegister(receiver)
+        .StoreContextSlot(this.execution_context_.register_, variable.index_, 0);
+    }
+
+    let num_parameters = scope.num_parameters_;
+    for (let i = 0; i < num_parameters; i++) {
+      let variable = scope.params_[i];
+      if (!variable.IsContextSlot()) continue;
+
+      let parameter = this.builder_.Parameter(i);
+      this.builder_.LoadAccumulatorWithRegister(parameter)
+        .StoreContextSlot(this.execution_context_.register_, variable.index_, 0);
+    }
+  }
+
+  BuildPrivateBrandInitialization() { }
+  BuildInstanceMemberInitialization() { }
 
   /**
    * 处理语法树解析
@@ -194,7 +291,7 @@ export default class BytecodeGenerator {
   }
   VisitNoStackOverflowCheck(node) {
     let node_type = node.node_type();
-    switch(node_type) {
+    switch (node_type) {
       case _kVariableDeclaration:
         return this.VisitVariableDeclaration(node);
       case _kExpressionStatement:
@@ -225,7 +322,7 @@ export default class BytecodeGenerator {
     if (variable == null) return;
     if (IsResumableFunction(this.info_.literal_.kind())) return;
     if (variable.location() === LOCAL) return;
-    
+
     this.builder_.LoadAccumulatorWithRegister(this.incoming_new_target_or_generator_);
     this.BuildVariableAssignment(variable, 'Token::INIT', kElided);
   }
@@ -248,12 +345,12 @@ export default class BytecodeGenerator {
 
     let args = this.register_allocator().NewRegisterList(3);
     this.builder_
-    .LoadConstantPoolEntry(this.globals_builder_.constant_pool_entry_)
-    .StoreAccumulatorInRegister(args.get(0))
-    .LoadLiteral(Smi.FromInt(encoded_flags))
-    .StoreAccumulatorInRegister(args.get(1))
-    .MoveRegister(Register.function_closure(), args.get(2))
-    .CallRuntime(kDeclareGlobals, args);
+      .LoadConstantPoolEntry(this.globals_builder_.constant_pool_entry_)
+      .StoreAccumulatorInRegister(args.get(0))
+      .LoadLiteral(Smi.FromInt(encoded_flags))
+      .StoreAccumulatorInRegister(args.get(1))
+      .MoveRegister(Register.function_closure(), args.get(2))
+      .CallRuntime(kDeclareGlobals, args);
 
     //
     this.global_declarations_.push(this.globals_builder_);
@@ -262,7 +359,7 @@ export default class BytecodeGenerator {
   register_allocator() {
     return this.builder_.register_allocator_;
   }
-  
+
   VisitModuleNamespaceImports() {
     if (!this.closure_scope_.is_module_scope()) return;
   }
@@ -287,6 +384,12 @@ export default class BytecodeGenerator {
         this.globals_builder_.AddUndefinedDeclaration(variable.name_, slot);
         break;
       }
+      case CONTEXT:
+        if (variable.binding_needs_init()) {
+          this.builder_.LoadTheHole()
+            .StoreContextSlot(this.execution_context_.register_, variable.index_, 0);
+        }
+        break;
     }
   }
   GetCachedLoadGlobalICSlot(typeof_mode, variable) {
@@ -349,20 +452,17 @@ export default class BytecodeGenerator {
     this.stack_limit = stack_limit;
     this.stack_overflow_ = false;
   }
-  AllocateTopLevelRegisters() {}
+  AllocateTopLevelRegisters() { }
   BuildGeneratorPrologue() {
 
   }
-  BuildLocalActivationContextInitialization() {
 
-  }
-  
   BuildVariableAssignment(variable, op, hole_check_mode) {
     let mode = variable.mode();
     let assignment_register_scope = new RegisterAllocationScope(this);
     // BytecodeLabel end_label;
-    switch(variable.location()) {
-      
+    switch (variable.location()) {
+
     }
   }
 }
@@ -385,8 +485,8 @@ class FeedbackSlotCache {
   Get(slot_kind, node, index = 0) {
     let iter = this.map_.find(v => {
       v.node === node &&
-      v.index === index &&
-      v.slot_kind === slot_kind
+        v.index === index &&
+        v.slot_kind === slot_kind
     });
     if (iter !== undefined) {
       return iter.slot_index;
@@ -408,7 +508,7 @@ export class FeedbackVectorSpec {
     let slot = this.slots();
     let entries_per_slot = FeedbackMetadata.GetSlotSize(kind);
     this.append(kind);
-    for(let i = 1; i < entries_per_slot; i++) {
+    for (let i = 1; i < entries_per_slot; i++) {
       this.append(kInvalid);
     }
     return new FeedbackSlot(slot);
@@ -423,7 +523,7 @@ export class FeedbackVectorSpec {
 
 class FeedbackMetadata {
   static GetSlotSize(kind) {
-    switch(kind) {
+    switch (kind) {
       case kForIn:
       case kInstanceOf:
       case kCompareOp:
@@ -431,7 +531,7 @@ class FeedbackMetadata {
       case kLiteral:
       case kTypeProfile:
         return 1;
-      
+
       case kCall:
       case kCloneObject:
       case kLoadProperty:
@@ -458,8 +558,8 @@ class FeedbackMetadata {
   }
 }
 
-class SharedFeedbackSlot {}
-class BlockCoverageBuilder {}
+class SharedFeedbackSlot { }
+class BlockCoverageBuilder { }
 
-class ContextScope {}
-class ControlScopeForTopLevel {}
+class ContextScope { }
+class ControlScopeForTopLevel { }

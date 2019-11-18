@@ -212,3 +212,7 @@ export const kDebugger = 180;
 export const kIncBlockCounter = 181;
 export const kAbort = 182;
 export const kIllegal = 183;
+
+export const _kAny = 0;
+export const _kBoolean = 1;
+export const _kString = 2;

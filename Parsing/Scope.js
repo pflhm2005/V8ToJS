@@ -28,6 +28,11 @@ import {
   CLASS_SCOPE,
   kModule,
   BLOCK_SCOPE,
+  kDynamicLocal,
+  MODULE,
+  MIN_CONTEXT_EXTENDED_SLOTS,
+  MIN_CONTEXT_SLOTS,
+  LOCAL,
 } from "../enum";
 import { Variable, AstNodeFactory } from "../ast/AST";
 import {
@@ -40,10 +45,17 @@ import {
   is_sloppy,
   IsArrowFunction
 } from "../util";
+import { kInvalidPrivateFieldResolution } from "../MessageTemplate";
 // import ThreadedList from '../base/ThreadedList';
 
 const kThisFunction = 0;
-const kGeneratorObject = 0;
+const kGeneratorObject = 1;
+
+const kParsedScope = 0;
+const kDeserializedScope = 1;
+
+const kContinue = 0;
+const kDescend = 1;
 
 /**
  * JS不存在HashMap的数据结构
@@ -57,10 +69,19 @@ class VariableMap {
      * 这里暂时用数组代替
      */
     this.variables_ = [];
+    this.kIndex = 0;
   }
   Start() {
     if (!this.variables_.length) return null;
     return this.variables_[0];
+  }
+  Next() {
+    this.kIndex++;
+    if (this.variables_.length === this.kIndex) {
+      this.kIndex = 0;
+      return null;
+    }
+    return this.variables_[this.kIndex];
   }
   Lookup(name) {
     let tar = this.variables_.find(v => v.hash === name.Hash());
@@ -91,8 +112,7 @@ class VariableMap {
 }
 
 export default class Scope {
-  constructor(zone, outer_scope = null, scope_type = SCRIPT_SCOPE) {
-    this.zone_ = null;
+  constructor(outer_scope = null, scope_type = SCRIPT_SCOPE) {
     this.outer_scope_ = outer_scope;
     // The variables declared in this scope:
     //
@@ -102,7 +122,6 @@ export default class Scope {
     this.variables_ = new VariableMap();
     this.scope_type_ = scope_type;
     this.scope_info_ = null;
-
     this.is_strict_ = kSloppy;
     this.scope_calls_eval_ = false;
     /**
@@ -118,15 +137,7 @@ export default class Scope {
     // base::ThreadedList<Variable> locals_;
     this.locals_ = [];
 
-    this.SetDefaults();
-    if (outer_scope) this.outer_scope_.AddInnerScope(this);
-  }
-  AddInnerScope(inner_scope) {
-    inner_scope.sibling_ = this.inner_scope_;
-    this.inner_scope_ = inner_scope;
-    inner_scope.outer_scope_ = this;
-  }
-  SetDefaults() {
+    // this.SetDefaults();
     this.inner_scope_ = null;
     this.sibling_ = null;
     this.unresolved_list_ = [];
@@ -154,6 +165,12 @@ export default class Scope {
     this.num_heap_slots_ = 0;
 
     this.set_language_mode(kSloppy);
+    if (outer_scope) this.outer_scope_.AddInnerScope(this);
+  }
+  AddInnerScope(inner_scope) {
+    inner_scope.sibling_ = this.inner_scope_;
+    this.inner_scope_ = inner_scope;
+    inner_scope.outer_scope_ = this;
   }
 
   set_start_position(statement_pos) { this.start_position_ = statement_pos; }
@@ -173,10 +190,28 @@ export default class Scope {
   language_mode() { return this.is_strict_ ? kStrict : kSloppy; }
   is_sloppy(language_mode) { return language_mode === kSloppy; }
   is_strict(language_mode) { return language_mode !== kSloppy; }
+  ForceContextForLanguageMode() {
+    if ((this.scope_type_ === FUNCTION_SCOPE) || (this.scope_type_ === SCRIPT_SCOPE)) {
+      return false;
+    }
+    return (this.language_mode() > this.outer_scope_.language_mode());
+  }
+
+  ContextHeaderLength() {
+    return this.HasContextExtensionSlot() ? MIN_CONTEXT_EXTENDED_SLOTS : MIN_CONTEXT_SLOTS;
+  }
+  HasContextExtensionSlot() {
+    switch(this.scope_type_) {
+      case MODULE_SCOPE:
+      case WITH_SCOPE:
+        return true;
+      default:
+        return this.sloppy_eval_can_extend_vars_;
+    }
+  }
   /**
    * 初始化origin_scope_ 即最外层作用域
    * @param {Isolate*} isolate 
-   * @param {Zone*} zone null
    * @param {ScopeInfo} scope_info null
    * @param {DeclarationScope*} script_scope null
    * @param {AstValueFactory*} ast_value_factory 
@@ -257,7 +292,7 @@ export default class Scope {
   }
   GetScriptScope() {
     let scope = this;
-    while(!scope.is_script_scope()) {
+    while (!scope.is_script_scope()) {
       scope = scope.outer_scope_;
     }
     return scope;
@@ -368,7 +403,6 @@ export default class Scope {
   }
   /**
    * 声明一个特殊变量
-   * @param {Zone*} zone 内存地址
    * @param {AstRawString*} name 变量名
    * @param {VariableMode*} mode 声明类型
    * @param {VariableKind*} kind 变量类型
@@ -456,7 +490,7 @@ export default class Scope {
     this.has_rest_ = is_rest;
     variable.initializer_position_ = position;
     this.params_.push(variable);
-    if (!is_rest)++this.num_parameters_;
+    if (!is_rest) ++this.num_parameters_;
     if (name === ast_value_factory.arguments_string()) this.has_arguments_parameter_ = true;
     variable.set_is_used();
     return variable;
@@ -491,8 +525,8 @@ export default class Scope {
  * 保留该类 但是不作为实例化对象
  */
 export class DeclarationScope extends Scope {
-  constructor(zone = null, outer_scope = null, scope_type = SCRIPT_SCOPE, function_kind) {
-    super(zone, outer_scope, scope_type);
+  constructor(outer_scope = null, scope_type = SCRIPT_SCOPE, function_kind) {
+    super(outer_scope, scope_type);
     this.sloppy_block_functions_ = [];
     this.params_ = [];
     this.function_kind_ = function_kind;
@@ -539,12 +573,222 @@ export class DeclarationScope extends Scope {
     return true;
   }
   AllocateVariables(info) {
-    // if (this.is_module_scope()) this.AllocateModuleVariables();
+    if (this.is_module_scope()) this.AllocateModuleVariables();
+
+    // let private_name_scope_iter = new PrivateNameScopeIterator(this);
+    // if (!private_name_scope_iter.Done() && !private_name_scope_iter.GetScope().ResolvePrivateNames()) {
+    //   return false;
+    // }
+
+    if (!this.ResolveVariablesRecursively(info)) {
+      return false;
+    }
+
+    if (!this.was_lazily_parsed_) this.AllocateVariablesRecursively();
+
+    return true;
   }
-  RewriteReplGlobalVariables() {
-    
+  ResolveVariablesRecursively(info) {
+    if (this.WasLazilyParsed(this)) {
+      // TODO
+    } else {
+      for (let proxy of this.unresolved_list_) {
+        this.ResolveVariable(info, proxy);
+      }
+      for (let scope = this.inner_scope_; scope !== null; scope = scope.sibling_) {
+        if (!scope.ResolveVariablesRecursively(info)) return false;
+      }
+    }
+    return true;
+  }
+  ResolveVariable(info, proxy) {
+    let variable = this.Lookup(kParsedScope, proxy, this, null);
+    this.ResolveTo(info, proxy, variable);
+  }
+  Lookup(mode, proxy, scope, outer_scope_end, entry_point = null, force_context_allocation = false) {
+    if (mode === kDeserializedScope) {
+      let variable = entry_point.variables_.Lookup(proxy.raw_name());
+      if (variable !== null) return variable;
+    }
+
+    while (true) {
+      if (mode === kDeserializedScope && scope.is_debug_evaluate_scope_) {
+        return entry_point.NonLocal(proxy.raw_name(), kDynamic);
+      }
+
+      let variable = mode === kParsedScope ?
+        scope.LookupLocal(proxy.raw_name()) : scope.LookupInScopeInfo(proxy.raw_name(), entry_point);
+
+      if (variable !== null && !(scope.is_eval_scope() && variable.mode() === kDynamic)) {
+        if (mode === kParsedScope && force_context_allocation && !variable.is_dynamic()) {
+          variable.ForceContextAllocation();
+        }
+        return variable;
+      }
+
+      if (scope.outer_scope_ === outer_scope_end) break;
+
+      if (scope.is_with_scope()) {
+        return this.LookupWith(proxy, scope, outer_scope_end, entry_point, force_context_allocation);
+      }
+
+      if (scope.is_declaration_scope_ && scope.sloppy_eval_can_extend_vars_) {
+        return this.LookupSloppyEval(proxy, scope, outer_scope_end, entry_point, force_context_allocation);
+      }
+
+      force_context_allocation |= scope.is_function_scope();
+      scope = scope.outer_scope_;
+
+      if (mode === kParsedScope && scope.scripe_info_ !== null) {
+        return this.Lookup(kDeserializedScope, proxy, scope, outer_scope_end, scope);
+      }
+    }
+    if (mode === kParsedScope && !scope.is_script_scope()) {
+      return null;
+    }
+
+    return scope.DeclareDynamicGlobal(proxy.raw_name(), NORMAL_VARIABLE, mode === kDeserializedScope ? entry_point : scope);
+  }
+  LookupWith() { }
+  LookupSloppyEval() { }
+  ResolveTo(info, proxy, variable) {
+    this.UpdateNeedsHoleCheck(variable, proxy, this);
+    proxy.BindTo(variable);
+  }
+  UpdateNeedsHoleCheck(variable, proxy, scope) {
+    if (variable.mode() === kDynamicLocal) {
+      return this.UpdateNeedsHoleCheck(variable.local_if_not_shadowed_, proxy, scope);
+    }
+    if (Variable.initialization_flag() === kCreatedInitialized) return;
+
+    if (variable.location() === MODULE && !variable.IsExport()) {
+      return this.SetNeedsHoleCheck(variable, proxy);
+    }
+
+    if (variable.scope_.GetClosureScope() !== scope.GetClosureScope()) {
+      return this.SetNeedsHoleCheck(variable, proxy);
+    }
+
+    if (variable.scope_.scope_nonlinear_ || variable.initializer_position_ >= proxy.position_) {
+      return this.SetNeedsHoleCheck(variable, proxy);
+    }
+  }
+  SetNeedsHoleCheck(variable, proxy) {
+    proxy.set_needs_hole_check();
+    variable.ForceHoleInitialization();
   }
 
+  AllocateVariablesRecursively() {
+    this.ForEach((scope) => {
+      if (this.WasLazilyParsed(scope)) return kContinue;
+
+      if (scope.is_declaration_scope_) {
+        if (scope.is_function_scope()) {
+          scope.AllocateParameterLocals();
+        }
+        scope.AllocateReceiver();
+      }
+      scope.AllocateNonParameterLocalsAndDeclaredGlobals();
+
+      let must_have_context = scope.is_with_scope() || scope.is_module_scope() ||
+        scope.is_asm_module_ || scope.ForceContextForLanguageMode() || 
+        (scope.is_function_scope() && scope.sloppy_eval_can_extend_vars_) ||
+        (scope.is_block_scope() && scope.is_declaration_scope_ && scope.sloppy_eval_can_extend_vars_);
+
+      if (scope.num_heap_slots_ === scope.ContextHeaderLength() && !must_have_context) {
+        scope.num_heap_slots_ = 0;
+      }
+
+      return kDescend;
+    });
+  }
+  AllocateParameterLocals() {}
+  AllocateReceiver() {
+    if (!this.has_this_declaration_) return;
+    this.AllocateParameter(this.receiver_, -1);
+  }
+  AllocateNonParameterLocalsAndDeclaredGlobals() {
+    for (let local of this.locals_) {
+      this.AllocateNonParameterLocal(local);
+    }
+    if (this.is_declaration_scope_) {
+      this.AllocateLocals();
+    }
+  }
+  AllocateNonParameterLocal(variable) {
+    if (variable.IsUnallocated() && this.MustAllocate(variable)) {
+      if (this.MustAllocateInContext(variable)) {
+        this.AllocateHeapSlot(variable);
+      } else {
+        this.AllocateStackSlot(variable);
+      }
+    }
+  }
+  AllocateLocals() {
+    if (this.function_ !== null && this.MustAllocate(this.function_)) {
+      this.AllocateNonParameterLocal(this.function_);
+    } else {
+      this.function_ = null;
+    }
+  }
+  AllocateHeapSlot(variable) {
+    variable.AllocateTo(CONTEXT, this.num_heap_slots_++);
+  }
+  AllocateStackSlot(variable) {
+    if (this.is_block_scope()) {
+      this.outer_scope_.GetDeclarationScope().AllocateStackSlot(variable);
+    } else {
+      variable.AllocateTo(LOCAL, this.num_stack_slots_++);
+    }
+  }
+  MustAllocate(variable) {
+    if (!variable.name_.IsEmpty() && (this.inner_scope_calls_eval_ || this.is_catch_scope() || this.is_script_scope())) {
+      variable.set_is_used();
+      if (this.inner_scope_calls_eval_ && !variable.is_this()) variable.SetMaybeAssigned();
+
+      return !variable.IsGlobalObjectProperty() && variable.is_used();
+    }
+  }
+  MustAllocateInContext(variable) {
+    let mode = variable.mode();
+    if (mode === kTemporary) return false;
+    if (this.is_catch_scope()) return true;
+    if (this.is_script_scope() || this.is_eval_scope()) {
+      if (IsLexicalVariableMode(mode)) {
+        return true;
+      }
+    }
+    return variable.has_forced_context_allocation() || this.inner_scope_calls_eval_;
+  }
+  ForEach(callback) {
+    let scope = this;
+    while (true) {
+      let iteration = callback(scope);
+      if ((iteration === kDescend) && scope.inner_scope_ !== null) {
+        scope = scope.inner_scope_;
+      } else {
+        while (scope.sibling_ === null) {
+          if (scope === this) return;
+          scope = scope.outer_scope_;
+        }
+        if (scope === this) return;
+        scope = scope.sibling_;
+      }
+    }
+  }
+
+  RewriteReplGlobalVariables() {
+    if (!this.is_repl_mode_scope_) return;
+    let vars = this.variables_.variables_;
+    for (let p = this.variables_.Start(); p !== null; p = this.variables_.Next()) {
+      let variable = p.value;
+      variable.RewriteLocationForRepl();
+    }
+  }
+
+  WasLazilyParsed(scope) {
+    return scope.is_declaration_scope_ && scope.was_lazily_parsed_;
+  }
   set_should_eager_compile() {
     this.should_eager_compile_ = !this.was_lazily_parsed_;
   }
@@ -674,8 +918,8 @@ export class DeclarationScope extends Scope {
 }
 
 export class FunctionDeclarationScope extends DeclarationScope {
-  constructor(zone = null, outer_scope, scope_type, function_kind = kNormalFunction) {
-    super(zone, outer_scope, scope_type, function_kind);
+  constructor(outer_scope, scope_type, function_kind = kNormalFunction) {
+    super(outer_scope, scope_type, function_kind);
     this.num_parameters_ = 0;
   }
   /**
@@ -698,8 +942,8 @@ export class FunctionDeclarationScope extends DeclarationScope {
 }
 
 export class ScriptDeclarationScope extends DeclarationScope {
-  constructor(zone, ast_value_factory) {
-    super(null, null, SCRIPT_SCOPE, kNormalFunction);
+  constructor(ast_value_factory) {
+    super(null, SCRIPT_SCOPE, kNormalFunction);
     this.receiver_ = this.DeclareDynamicGlobal(ast_value_factory.GetOneByteStringInternal(ast_value_factory.this_string()), THIS_VARIABLE, this);
   }
 }
@@ -716,7 +960,7 @@ class SourceTextModuleDescriptor {
 
 export class ModuleScope extends DeclarationScope {
   constructor(script_scope, avfactory) {
-    super(null, script_scope, MODULE_SCOPE, kModule);
+    super(script_scope, MODULE_SCOPE, kModule);
     this.module_descriptor_ = new SourceTextModuleDescriptor();
     this.set_language_mode(kStrict);
     this.DeclareThis(avfactory);
@@ -724,12 +968,16 @@ export class ModuleScope extends DeclarationScope {
 }
 
 export class ClassScope extends Scope {
-  constructor(zone = null, outer_scope, is_anonymous) {
-    super(zone, outer_scope, CLASS_SCOPE);
+  constructor(outer_scope, is_anonymous) {
+    super(outer_scope, CLASS_SCOPE);
     this.rare_data_ = {
       unresolved_private_names: [],
       private_name_map: [],
       brand: null,
+    };
+    this.rare_data_and_is_parsing_heritage_ = {
+      Pointer: this.rare_data_,
+      Payload: false,
     };
     this.is_anonymous_class_ = is_anonymous;
     this.set_language_mode(kStrict);
@@ -739,6 +987,12 @@ export class ClassScope extends Scope {
     this.has_explicit_static_private_methods_access_ = false;
     this.should_save_class_variable_index_ = false;
   }
+  GetRareData() {
+    return this.rare_data_and_is_parsing_heritage_.Pointer;
+  }
+  IsParsingHeritage() {
+    return this.rare_data_and_is_parsing_heritage_.Payload;
+  }
   EnsureRareData() {
     return this.rare_data_;
   }
@@ -747,14 +1001,14 @@ export class ClassScope extends Scope {
   }
   ResolvePrivateNamesPartially() {
     let rare_data_ = this.rare_data_;
-    if(rare_data_ === null || !rare_data_.unresolved_private_names.length) {
+    if (rare_data_ === null || !rare_data_.unresolved_private_names.length) {
       return null;
     }
     return null;
   }
   DeclareBrandVariable(ast_value_factory, is_statis_flag, class_token_pos) {
     let { variable: brand } = this.Declare(ast_value_factory.dot_brand_string(), kConst,
-    NORMAL_VARIABLE, kNeedsInitialization, kMaybeAssigned, false);
+      NORMAL_VARIABLE, kNeedsInitialization, kMaybeAssigned, false);
     brand.set_is_static_flag();
     brand.ForceContextAllocation();
     brand.set_is_used();
@@ -770,14 +1024,66 @@ export class ClassScope extends Scope {
     this.EnsureRareData().unresolved_private_names.push(proxy);
   }
   should_save_class_variable_index() {
-    return this.should_save_class_variable_index_ || this.has_explicit_static_private_methods_access_ || 
-    (this.has_static_private_methods_ && this.inner_scope_calls_eval_);
+    return this.should_save_class_variable_index_ || this.has_explicit_static_private_methods_access_ ||
+      (this.has_static_private_methods_ && this.inner_scope_calls_eval_);
   }
   DeclareClassVariable(ast_value_factory, name, class_token_pos) {
     let { variable } = this.Declare(name === null ? ast_value_factory.dot_string() : name,
-    kConst, NORMAL_VARIABLE, kNeedsInitialization, kMaybeAssigned, false);
+      kConst, NORMAL_VARIABLE, kNeedsInitialization, kMaybeAssigned, false);
     this.class_variable_ = variable;
     this.class_variable_.initializer_position_ = class_token_pos;
     return this.class_variable_;
+  }
+  ResolvePrivateNames() {
+    let rare_data_ = this.GetRareData();
+    if (rare_data_ === null || !rare_data_.unresolved_private_names.length) {
+      return true;
+    }
+
+    let list = rare_data_.unresolved_private_names;
+    for (let proxy of list) {
+      let variable = this.LookupPrivateName(proxy);
+      if (variable === null) {
+        throw new Error(kInvalidPrivateFieldResolution);
+      } else {
+        proxy.BindTo(variable);
+      }
+    }
+  }
+}
+
+class PrivateNameScopeIterator {
+  constructor(start) {
+    this.start_scope_ = start;
+    this.current_scope_ = start;
+    this.skipped_any_scopes_ = false;
+    // if (!start.is_class_scope || start.IsParsingHeritage()) {
+    //   this.Next();
+    // }
+  }
+  IsParsingHeritage() {
+    return false;
+  }
+  GetScope() {
+    return this.current_scope_;
+  }
+  Next() {
+    let inner = this.current_scope_;
+    let scope = inner.outer_scope_;
+    while (scope !== null) {
+      if (scope.is_class_scope()) {
+        if (!inner.private_name_lookup_skips_outer_class_) {
+          this.current_scope_ = scope;
+          return;
+        }
+        this.skipped_any_scopes_ = true;
+      }
+      inner = scope;
+      scope = scope.outer_scope_;
+    }
+    this.current_scope_ = null;
+  }
+  Done() {
+    return this.current_scope_ === null;
   }
 }

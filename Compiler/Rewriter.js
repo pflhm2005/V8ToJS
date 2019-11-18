@@ -15,7 +15,7 @@ export default class Rewriter {
     }
     let body = func.body_;
     if (body.length) {
-      let result = scope.NewTemporary(info.ast_value_factory_.dot_result_string());
+      let result = scope.NewTemporary(info.ast_value_factory_.GetOneByteString(info.ast_value_factory_.dot_result_string()));
       let processor = new Processor(info.stack_limit_, scope, result, info.ast_value_factory_);
       processor.Process(body);
 
@@ -32,6 +32,10 @@ export default class Rewriter {
 
 class AstVisitor {}
 
+/**
+ * 这个类有一套完整的Visit流程
+ * 后续再完善
+ */
 class Processor extends AstVisitor {
   constructor(stack_limit, closure_scope, result, ast_value_factory) {
     super();

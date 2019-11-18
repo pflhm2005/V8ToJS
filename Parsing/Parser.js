@@ -63,7 +63,7 @@ import { Variable } from '../ast/Ast';
  */
 class Parser extends ParserBase {
   constructor(info) {
-    super(null, info.scanner_, info.stack_limit_, info.extension_, info.ast_value_factory_,
+    super(info.scanner_, info.stack_limit_, info.extension_, info.ast_value_factory_,
       info.pending_error_handler_, info.runtime_call_stats_, info.logger_, 0, info.is_module(), true);
     this.info_ = info;
     // this.scanner = info.scanner_;

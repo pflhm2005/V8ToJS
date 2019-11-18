@@ -85,6 +85,14 @@ import {
   UNALLOCATED,
   _kCompoundAssignment,
   _kExpressionStatement,
+  kRequired,
+  THIS_VARIABLE,
+  kConst,
+  REPL_GLOBAL,
+  CONTEXT,
+  PARAMETER,
+  LOCAL,
+  LOOKUP,
 } from "../enum";
 
 import {
@@ -138,6 +146,7 @@ import {
   IsAnonymousExpression,
   HasPrivateMethods,
   AssignmentLookupHoistingModeField,
+  IsDynamicVariableMode,
 } from '../util';
 
 import { AstValueFactory } from './AstValueFactory';
@@ -904,6 +913,7 @@ export class VariableProxy extends Expression {
     this.bit_field_ = IsAssignedField.update(this.bit_field_, 1);
     if (this.is_resolved()) this.var_.set_maybe_assigned();
   }
+  set_needs_hole_check() { this.bit_field_ = HoleCheckModeField.update(this.bit_field_, kRequired); }
   set_maybe_assigned() { this.bit_field_ = MaybeAssignedFlagField.update(this.bit_field_, kMaybeAssigned); }
   is_resolved() { return IsResolvedField.decode(this.bit_field_); }
   is_assigned() { return IsAssignedField.decode(this.bit_field_); }
@@ -1217,7 +1227,7 @@ export class Variable {
   constructor(scope, name, mode, kind, initialization_flag, maybe_assigned_flag = kNotAssigned) {
     this.scope_ = scope;
     this.name_ = name;
-    this.local_if_not_shadowed_ = false;
+    this.local_if_not_shadowed_ = null;
     this.next_ = null;
     this.index_ = -1;
     this.initializer_position_ = kNoSourcePosition;
@@ -1230,18 +1240,68 @@ export class Variable {
       LocationField.encode(UNALLOCATED) |
       VariableKindField.encode(kind);
   }
+  kind() { return VariableKindField.decode(this.bit_field_); }
   mode() { return VariableModeField.decode(this.bit_field_); }
   location() { return LocationField.decode(this.bit_field_); }
   set_is_used() { this.bit_field_ = IsUsedField.update(this.bit_field_, true); }
   is_used() { return IsUsedField.decode(this.bit_field_); }
+  is_this() { return kind() === THIS_VARIABLE; }
+  maybe_assigned() { return MaybeAssignedFlagField.decode(this.bit_field_); }
   set_maybe_assigned() { this.bit_field_ = MaybeAssignedFlagField.update(this.bit_field_, kMaybeAssigned); }
   set_is_static_flag(is_static_flag) { this.bit_field_ = IsStaticFlagField.update(this.bit_field_, is_static_flag); }
   ForceContextAllocation() { this.bit_field_ = ForceContextAllocationField.update(this.bit_field_, true); }
   is_parameter() { return VariableKindField.decode(this.bit_field_) === PARAMETER_VARIABLE; }
+  is_dynamic() { return IsDynamicVariableMode(this.mode()); }
+  initialization_flag() { return InitializationFlagField.decode(this.bit_field_); }
+  IsExport() { return this.index_ > 0; }
+  ForceHoleInitialization() { this.bit_field_ = ForceHoleInitialization.update(this.bit_field_, true); }
+  has_local_if_not_shadowed() { return this.local_if_not_shadowed_ !== null; }
+  IsGlobalObjectProperty() {
+    return (IsDynamicVariableMode(this.mode()) || this.mode() === kVar) && 
+    this.scope_ !== null && this.scope_.is_script_scope();
+  }
+  has_forced_context_allocation() {
+    return ForceContextAllocationField.decode(this.bit_field_);
+  }
 
+  IsStackAllocated() { return this.IsParameter() || this.IsStackLocal(); }
+  IsUnallocated() { return this.location() === UNALLOCATED; }
+  IsContextSlot() { return this.location() === CONTEXT; }
+  IsParameter() { return this.location() === PARAMETER; }
+  IsStackLocal() { return this.location() === LOCAL; }
+  IsLookupSlot() { return this.location() === LOOKUP; }
+
+  binding_needs_init() {
+    if (ForceHoleInitializationField.decode(this.bit_field_)) return true;
+
+    if (this.IsStackAllocated()) return false;
+
+    return this.initialization_flag() === kNeedsInitialization;
+  }
+
+  SetMaybeAssigned() {
+    if (this.mode() === kConst) return;
+
+    if (this.has_local_if_not_shadowed()) {
+      if (!this.maybe_assigned()) {
+        this.local_if_not_shadowed_.SetMaybeAssigned();
+      }
+    }
+    this.set_maybe_assigned();
+  }
+  
   MakeParameterNonSimple() {
     this.bit_field_ = VariableModeField.update(this.bit_field_, kLet);
     this.bit_field_ = InitializationFlagField.update(this.bit_field_, kNeedsInitialization);
+  }
+  AllocateTo(location, index) {
+    this.bit_field_ = LocationField.update(this.bit_field_, location);
+    this.index_ = index;
+  }
+  RewriteLocationForRepl() {
+    if (this.mode() === kLet) {
+      this.bit_field_ = LocationField.update(this.bit_field_, REPL_GLOBAL);
+    }
   }
   static DefaultInitializationFlag(mode) { return mode === kVar ? kCreatedInitialized : kNeedsInitialization; }
 };

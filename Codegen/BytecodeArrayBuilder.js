@@ -5,6 +5,7 @@ import {
 import { FLAG_ignition_reo } from "../Compiler/Flag";
 import BytecodeRegisterAllocator from "./BytecodeRegisterAllocator";
 import BytecodeRegisterOptimizer from "./BytecodeRegisterOptimizer";
+import Register from "./Register";
 
 const kNone = 0;
 const kRead = 1 << 0;
@@ -64,7 +65,9 @@ export default class BytecodeArrayBuilder {
   LoadAccumulatorWithRegister() {
     
   }
-
+  LoadLiteral() {
+    return this;
+  }
   LoadConstantPoolEntry(entry) {
     this.OutputLdaConstant(entry);
     return this;
@@ -82,6 +85,21 @@ export default class BytecodeArrayBuilder {
   }
   AllocateDeferredConstantPoolEntry() {
     return this.constant_array_builder_.InsertDeferred();
+  }
+  Receiver() {
+    return Register.FromParameterIndex(0, this.parameter_count_);
+  }
+  Parameter(parameter_index) {
+    return Register.FromParameterIndex(parameter_index + 1, this.parameter_count_);
+  }
+  StoreAccumulatorInRegister() {
+    return this;
+  }
+  StoreContextSlot() {
+    return this;
+  }
+  CallRuntime() {
+    return this;
   }
 }
 

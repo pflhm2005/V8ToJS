@@ -24,7 +24,8 @@ import {
   FLAG_harmony_import_meta,
   FLAG_harmony_private_methods,
   FLAG_harmony_optional_chaining,
-  FLAG_harmony_nullish
+  FLAG_harmony_nullish,
+  FLAG_harmony_top_level_await
 } from "./Flag";
 
 // ---------- Input flags ---------------------------

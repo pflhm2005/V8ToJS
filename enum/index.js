@@ -14,3 +14,4 @@ export * from './Number';
 export * from './Counters';
 export * from './Context';
 export * from './Runtime';
+export * from './Bytecode';

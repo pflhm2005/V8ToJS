@@ -15,7 +15,9 @@ import {
   kSloppy,
   kStrict,
   kModule,
-  kDefaultBaseConstructor
+  kDefaultBaseConstructor,
+  kDynamic,
+  kDynamicLocal
 } from "../enum";
 import { TokenIsInRange, IsInRange } from './Identifier';
 
@@ -74,3 +76,4 @@ export const IsValidIdentifier = (token, language_mode, is_generator, disallow_a
 }
 
 export const IsBaseConstructor = (kind) => IsInRange(kind, kBaseConstructor, kDefaultBaseConstructor);
+export const IsDynamicVariableMode = (mode) => mode >= kDynamic && mode <= kDynamicLocal;

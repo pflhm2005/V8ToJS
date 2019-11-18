@@ -176,7 +176,6 @@ const kForStatement = 2;
 export default class ParserBase {
   /**
    * 来源于ParseInfo
-   * @param {Zone*} zone 
    * @param {Scanner*} scanner 
    * @param {uintptr_t*} stack_limit 
    * @param {Extension*} extension 
@@ -188,7 +187,7 @@ export default class ParserBase {
    * @param {bool} parsing_module 
    * @param {bool} parsing_on_main_thread 
    */
-  constructor(zone = null, scanner, stack_limit, extension, ast_value_factory, pending_error_handler,
+  constructor(scanner, stack_limit, extension, ast_value_factory, pending_error_handler,
     runtime_call_stats, logger, script_id, parsing_module, parsing_on_main_thread) {
     this.scope_ = new Scope(null);
     this.original_scope_ = null;
@@ -205,7 +204,6 @@ export default class ParserBase {
     this.parsing_module_ = parsing_module;
     this.stack_limit_ = stack_limit;  // 155704134568
     this.pending_error_handler_ = pending_error_handler;
-    this.zone_ = zone;
 
     this.expression_scope_ = null;
     this.scanner_ = scanner;
@@ -254,26 +252,26 @@ export default class ParserBase {
     return this.NewScopeWithParent(this.scope_, scope_type);
   }
   NewScopeWithParent(parent, scope_type) {
-    return new Scope(null, parent, scope_type);
+    return new Scope(parent, scope_type);
   }
   /**
    * 这里的DeclarationScope存在构造函数重载 并且初始化方式不一致
    * 差距过大 手动分成两个不同的子类
    */
   NewFunctionScope(kind) {
-    let result = new FunctionDeclarationScope(null, this.scope_, FUNCTION_SCOPE, kind);
+    let result = new FunctionDeclarationScope(this.scope_, FUNCTION_SCOPE, kind);
     this.function_state_.RecordFunctionOrEvalCall();
     if (!IsArrowFunction(kind)) result.DeclareDefaultFunctionVariables(this.ast_value_factory_);
     return result;
   }
   NewScriptScope() {
-    return new ScriptDeclarationScope(null, this.ast_value_factory_);
+    return new ScriptDeclarationScope(this.ast_value_factory_);
   }
   NewClassScope(parent, is_anonymous) {
-    return new ClassScope(null, parent, is_anonymous);
+    return new ClassScope(parent, is_anonymous);
   }
   NewEvalScope(parent) {
-    return new DeclarationScope(null, parent, EVAL_SCOPE);
+    return new DeclarationScope(parent, EVAL_SCOPE);
   }
   NewModuleScope(parent) {
     return new ModuleScope(parent, this.ast_value_factory_);
