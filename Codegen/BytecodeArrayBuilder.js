@@ -70,9 +70,8 @@ class BytecodeNodeBuilder {
 
 */
 
-function OperandHelper(operand_types, builder, operands) {
-  if (!operand_types.length) return 0;
-  switch (operand_types[0]) {
+function OperandHelper(operand_types, builder, operands, i) {
+  switch (operand_types[i]) {
     case kFlag8:
     case kIntrinsicId:
     case kRuntimeId:
@@ -88,16 +87,45 @@ class BytecodeNodeBuilder {
   /**
    * 原方法较为复杂
    * 存在template与rest两套参数
-   * 将两类参数进行分割
-   * @param {BytecodeArrayBuilder*} builder 
-   * @param {Array} operands 
-   * @param {Array} template 
+   * 将两类参数进行分割 然后进行分类调用
+   * @param {BytecodeArrayBuilder*} builder 字节码生成辅助工具
+   * @param {Array} operands 操作符 可能有0~5个
+   * @param {Array} template 字节码类型与操作符类型 可能有2~7个值
+   * 由于operands和template的长度同步增加 因此可以简单化处理
    */
   static Make(builder, operands, template) {
     const [bytecode, accumulator_use] = template;
     const operand_types = template.slice(2);
-    builder.PrepareToOutputBytecode([bytecode, accumulator_use]);
-    return BytecodeNode.Create(builder.CurrentSourcePosition(bytecode), OperandHelper(operand_types, builder, operands), template);
+    builder.PrepareToOutputBytecode(bytecode, accumulator_use);
+    let source_info = builder.CurrentSourcePosition(bytecode);
+    switch (operands.length) {
+      case 0:
+        return BytecodeNode.Create0(bytecode, accumulator_use, source_info);
+      case 1:
+        return BytecodeNode.Create1(
+          bytecode, accumulator_use, source_info,
+          OperandHelper(operand_types, builder, operands[0], 0), operand_types[0]);
+      case 2:
+        return BytecodeNode.Create2(
+          bytecode, accumulator_use, source_info,
+          ...operands.map((operand, i) => OperandHelper(operand_types, builder, operand, i)),
+          operand_types[0], operand_types[1]);
+      case 3:
+        return BytecodeNode.Create3(
+          bytecode, accumulator_use, source_info,
+          ...operands.map((operand, i) => OperandHelper(operand_types, builder, operand, i)),
+          operand_types[0], operand_types[1], operand_types[2]);
+      case 4:
+        return BytecodeNode.Create4(
+          bytecode, accumulator_use, source_info,
+          ...operands.map((operand, i) => OperandHelper(operand_types, builder, operand, i)),
+          operand_types[0], operand_types[1], operand_types[2], operand_types[3]);
+      case 5:
+        return BytecodeNode.Create5(
+          bytecode, accumulator_use, source_info,
+          ...operands.map((operand, i) => OperandHelper(operand_types, builder, operand, i)),
+          operand_types[0], operand_types[1], operand_types[2], operand_types[3], operand_types[4]);
+    }
   }
 }
 
@@ -165,7 +193,7 @@ export default class BytecodeArrayBuilder {
     return this;
   }
   OutputLdaTheHole() {
-    let node = new BytecodeNode(this.CreateLdaTheHoleNode());
+    let node = this.CreateLdaTheHoleNode();
     this.write(node);
   }
   CreateLdaTheHoleNode() {
@@ -177,7 +205,7 @@ export default class BytecodeArrayBuilder {
     return this;
   }
   OutputLdaConstant(entry) {
-    let node = new BytecodeNode(this.CreateLdaConstantNode(entry));
+    let node = this.CreateLdaConstantNode(entry);
     this.write(node);
   }
   CreateLdaConstantNode(entry) {

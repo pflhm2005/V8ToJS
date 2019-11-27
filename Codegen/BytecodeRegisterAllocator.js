@@ -10,7 +10,7 @@ export default class BytecodeRegisterAllocator{
     let reg = new Register(this.next_register_index_++);
     this.max_register_count_ = Math.max(this.next_register_index_, this.max_register_count_);
     if (this.observer_) {
-      this.observer_.RegisterListAllocateEvent(reg);
+      this.observer_.RegisterAllocateEvent(reg);
     }
     return reg;
   }

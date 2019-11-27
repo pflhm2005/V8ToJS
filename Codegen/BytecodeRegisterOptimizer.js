@@ -1,9 +1,10 @@
-import { 
-  Bytecodes_IsJump, 
+import {
+  Bytecodes_IsJump,
   Bytecodes_IsSwitch,
 } from "../util/Bytecode";
 import { Bytecode_kDebugger, Bytecode_kSuspendGenerator, Bytecode_kResumeGenerator } from "../enum";
 import Register from "./Register";
+import RegisterInfo from "./RegistInfo";
 
 const kNone = 0;
 const kRead = 1 << 0;
@@ -40,11 +41,26 @@ export default class BytecodeRegisterOptimizer {
     }
     this.accumulator_info_ = this.GetRegisterInfo(this.accumulator_);
   }
-  PrepareForBytecode() {
+  RegisterFromRegisterInfoTableIndex(index) {
+    return new Register(index - this.register_info_table_offset_);
+  }
+  NextEquivalenceId() {
+    this.equivalence_id_++;
+    return this.equivalence_id_;
+  }
+  GetRegisterInfo(reg) {
+    let index = this.GetRegisterInfoTableIndex(reg);
+    return this.register_info_table_[index];
+  }
+  GetRegisterInfoTableIndex(reg) {
+    return reg.index_ + this.register_info_table_offset_;
+  }
+
+  PrepareForBytecode(bytecode, accumulator_use) {
     if (Bytecodes_IsJump() || Bytecodes_IsSwitch() ||
-    bytecode === Bytecode_kDebugger || 
-    bytecode === Bytecode_kSuspendGenerator || 
-    bytecode === Bytecode_kResumeGenerator) {
+      bytecode === Bytecode_kDebugger ||
+      bytecode === Bytecode_kSuspendGenerator ||
+      bytecode === Bytecode_kResumeGenerator) {
       this.Flush();
     }
 
@@ -55,5 +71,47 @@ export default class BytecodeRegisterOptimizer {
     if (BytecodeOperands.WritesAccumulator(accumulator_use)) {
       this.PrepareOutputRegister(this.accumulator_);
     }
+  }
+  Flush() {
+
+  }
+  Materialize() {
+
+  }
+  PrepareOutputRegister(reg) {
+    let reg_info = this.GetRegisterInfo(reg);
+    if (reg_info.materialized_) {
+      this.CreateMaterializedEquivalent(reg_info);
+    }
+    reg_info.MoveToNewEquivalenceSet(this.NextEquivalenceId(), true);
+    this.max_register_index_ = Math.max(this.max_register_index_, reg_info.register_,index_);
+  }
+  CreateMaterializedEquivalent(info) {
+    let unmaterialized = info.GetEquivalentToMaterialize();
+    if (unmaterialized) {
+      this.OutputRegisterTransfer(info, unmaterialized);
+    }
+  }
+  OutputRegisterTransfer(input_info, output_info) {
+    let input = input_info.register_;
+    let output = output_info.register_;
+    if (input === this.accumulator_) {
+      this.bytecode_writer_.EmitStar(output);
+    } else if (output === this.accumulator_) {
+      this.bytecode_writer_.EmitLdar(input);
+    } else {
+      this.bytecode_writer_.EmitMov(input, output);
+    }
+    if (output !== this.accumulator_) {
+      this.max_register_index_ = Math.max(this.max_register_index_, output.index_);
+    }
+    output_info.materialized_ = true;
+  }
+  
+  RegisterAllocateEvent(reg) {
+    
+  }
+  RegisterListAllocateEvent(reg_list) {
+
   }
 }
