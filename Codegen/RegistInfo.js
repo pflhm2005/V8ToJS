@@ -22,6 +22,28 @@ export default class RegisterInfo {
     }
     return best_info;
   }
+  GetMaterializedEquivalent() {
+    let visitor = this;
+    do {
+      if (visitor.materialized_) {
+        return visitor;
+      }
+      visitor = visitor.next_;
+    } while (visitor !== this);
+
+    return null;
+  }
+  GetMaterializedEquivalentOtherThan(reg) {
+    let visitor = this;
+    do {
+      if (visitor.materialized_ && visitor.register_ !== reg) {
+        return visitor;
+      }
+      visitor = visitor.next_;
+    } while (visitor !== this);
+
+    return null;
+  }
   /**
    * 相当于链表的去除节点
    */

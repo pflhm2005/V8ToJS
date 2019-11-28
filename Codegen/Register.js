@@ -32,6 +32,12 @@ const kBytecodeOffsetRegisterIndex = (kRegisterFileFromFp - kBytecodeOffsetFromF
 const kCallerPCOffsetFromFp = kCallerPCOffset;
 const kCallerPCOffsetRegisterIndex = (kRegisterFileFromFp - kCallerPCOffsetFromFp) / kSystemPointerSize;
 
+const kRegisterFileStartOffset = kRegisterFileFromFp / kSystemPointerSize;
+
+/**
+ * 寄存器类
+ * 负责管理变量
+ */
 export default class Register {
   static function_closure() {
     
@@ -53,6 +59,9 @@ export default class Register {
   is_current_context() {
     return this.index_ === kCurrentContextRegisterIndex;
   }
+  ToOperand() {
+    return kRegisterFileStartOffset - this.index_;
+  }
 }
 
 export class RegisterList{
@@ -60,7 +69,14 @@ export class RegisterList{
     this.first_reg_index_ = first_reg_index;
     this.register_count_ = register_count;
   }
+  /**
+   * 这个类重载了[]操作符 因此所有取索引操作转换为这个方法
+   * @param {int} 索引
+   */
   get(i) {
     return new Register(this.first_reg_index_ + i);
+  }
+  first_register() {
+    return this.register_count_ === 0 ? new Register(0) : this.get(0);
   }
 }

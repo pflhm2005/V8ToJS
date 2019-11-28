@@ -42,6 +42,9 @@ export default class BytecodeRegisterOptimizer {
     }
     this.accumulator_info_ = this.GetRegisterInfo(this.accumulator_);
   }
+  /**
+   * 基本上是工具方法
+   */
   RegisterFromRegisterInfoTableIndex(index) {
     return new Register(index - this.register_info_table_offset_);
   }
@@ -56,7 +59,27 @@ export default class BytecodeRegisterOptimizer {
   GetRegisterInfoTableIndex(reg) {
     return reg.index_ + this.register_info_table_offset_;
   }
+  GetMaterializedEquivalentNotAccumulator(info) {
+    if (info.materialized_) {
+      return info;
+    }
+    let result = info.GetMaterializedEquivalentOtherThan(this.accumulator_);
+    if (result === null) {
+      this.Materialize(info);
+      result = info;
+    }
+    return result;
+  }
+  Materialize(info) {
+    if (!info.materialized_) {
+      let materialized = info.GetMaterializedEquivalent();
+      this.OutputRegisterTransfer(materialized, info);
+    }
+  }
 
+  /**
+   * 以下方法辅助机器码生成
+   */
   PrepareForBytecode(bytecode, accumulator_use) {
     if (Bytecodes_IsJump() || Bytecodes_IsSwitch() ||
       bytecode === Bytecode_kDebugger ||
@@ -108,11 +131,90 @@ export default class BytecodeRegisterOptimizer {
     }
     output_info.materialized_ = true;
   }
-  
+
+  /**
+   * 以下方法辅助OperandHelper
+   * @returns {Register}
+   */
+  GetInputRegister(reg) {
+    let reg_info = this.GetRegisterInfo(reg);
+    if (reg_info.materialized_) {
+      return reg;
+    } else {
+      let equivalent_info = this.GetMaterializedEquivalentNotAccumulator(reg_info);
+      return equivalent_info.register_;
+    }
+  }
+  GetInputRegisterList(reg_list) {
+    if (reg_list.register_count_ === 1) {
+      let reg = this.GetInputRegister(reg_list.first_register());
+      return new RegisterList(r.index_, 1);
+    } else {
+      let start_index = reg_list.first_register().index_;
+      for (let i = 0; i < reg_list,register_count_; ++i) {
+        let current = new Register(start_index + i);
+        let input_info = this.GetRegisterInfo(current);
+        this.Materialize(input_info);
+        current = null;
+      }
+      return reg_list;
+    }
+  }
+  PrepareOutputRegister(reg) {
+    let reg_info = this.GetRegisterInfo(reg);
+    if (reg_info.materialized_) {
+      this.CreateMaterializedEquivalent(reg_info);
+    }
+    reg_info.MoveToNewEquivalenceSet(this.NextEquivalenceId(), true);
+    this.max_register_index_ = Math.max(this.max_register_index_, reg_info.register_.index_);
+  }
+  PrepareOutputRegisterList(reg_list) {
+    let start_index = reg_list.first_register().index_;
+    for (let i = 0; i < reg_list.register_count_; ++i) {
+      let current = new Register(start_index + i);
+      this.PrepareOutputRegister(current);
+    }
+  }
+
+  /**
+   * 生成寄存器类或寄存器组类时会触发下列事件
+   */
   RegisterAllocateEvent(reg) {
-    
+    this.AllocateRegister(this.GetOrCreateRegisterInfo(reg));
+  }
+  GetOrCreateRegisterInfo(reg) {
+    let index = this.GetRegisterInfoTableIndex(reg);
+    return index < this.register_info_table_.length ? this.register_info_table_[index] : this.NewRegisterInfo(reg);
+  }
+  NewRegisterInfo(reg) {
+    let index = this.GetRegisterInfoTableIndex(reg);
+    this.GrowRegisterMap(reg);
+    return this.register_info_table_[index];
   }
   RegisterListAllocateEvent(reg_list) {
-
+    if (reg_list.register_count_ !== 0) {
+      let first_index = reg_list.first_register().index_;
+      this.GrowRegisterMap(new Register(first_index + reg_list.register_count_ - 1));
+      for (let i = 0; i < reg_list.register_count_; i++) {
+        this.AllocateRegister(this.GetRegisterInfo(new Register(first_index + i)));
+      }
+    }
+  }
+  GrowRegisterMap(reg) {
+    let index = this.GetRegisterInfoTableIndex(reg);
+    if (index >= this.register_info_table_.length) {
+      let new_size = index + 1;
+      let old_size = this.register_info_table_.length;
+      for (let i = old_size; i < new_size; ++i) {
+        this.register_info_table_.push(new RegisterInfo(
+          this.RegisterFromRegisterInfoTableIndex(i), this.NextEquivalenceId(), true, false));
+      }
+    }
+  }
+  AllocateRegister(info) {
+    info.allocated_ = true;
+    if (!info.materialized_) {
+      info.MoveToNewEquivalenceSet(this.NextEquivalenceId(), true);
+    }
   }
 }

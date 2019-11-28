@@ -71,8 +71,15 @@ class BytecodeNodeBuilder {
 
 */
 
-function OperandHelper(operand_types, builder, operands) {
-  switch (operand_types) {
+/**
+ * 机器码操作符处理
+ * 分为三大量情况
+ * 1. 立即数(Imm)
+ * 2. 寄存器输入(Reg)
+ * 3. 寄存器输出(RegOutput)
+ */
+function OperandHelper(operand_type, builder, value) {
+  switch (operand_type) {
     case kFlag8:
     case kIntrinsicId:
     case kRuntimeId:
@@ -80,7 +87,22 @@ function OperandHelper(operand_types, builder, operands) {
     case kIdx:
     case kUImm:
     case kRegCount:
-      return operands;
+    case kImm:
+      return value;
+    case kReg:
+      return builder.GetInputRegisterOperand(value);
+    case kRegList:
+      return builder.GetInputRegisterListOperand(value);
+    case kRegPair:
+      return builder.GetInputRegisterListOperand(value);
+    case kRegOut:
+      return builder.GetOutputRegisterOperand(value);
+    case kRegOutList:
+      return builder.GetOutputRegisterListOperand(value);
+    case kRegOutPair:
+      return builder.GetOutputRegisterListOperand(value);
+    case kRegOutTriple:
+      return builder.GetOutputRegisterListOperand(value);
   }
 }
 
@@ -114,17 +136,17 @@ class BytecodeNodeBuilder {
       case 3:
         return BytecodeNode.Create3(
           bytecode, accumulator_use, source_info,
-          ...operands.map((operand, i) => OperandHelper(operand_types[i], builder, operand, i)),
+          ...operands.map((operand, i) => OperandHelper(operand_types[i], builder, operand)),
           operand_types[0], operand_types[1], operand_types[2]);
       case 4:
         return BytecodeNode.Create4(
           bytecode, accumulator_use, source_info,
-          ...operands.map((operand, i) => OperandHelper(operand_types[i], builder, operand, i)),
+          ...operands.map((operand, i) => OperandHelper(operand_types[i], builder, operand)),
           operand_types[0], operand_types[1], operand_types[2], operand_types[3]);
       case 5:
         return BytecodeNode.Create5(
           bytecode, accumulator_use, source_info,
-          ...operands.map((operand, i) => OperandHelper(operand_types[i], builder, operand, i)),
+          ...operands.map((operand, i) => OperandHelper(operand_types[i], builder, operand)),
           operand_types[0], operand_types[1], operand_types[2], operand_types[3], operand_types[4]);
     }
   }
@@ -271,6 +293,26 @@ export default class BytecodeArrayBuilder {
   }
   CallRuntime() {
     return this;
+  }
+
+  /**
+   * 以下方法服务OperandHelper函数
+   */
+  GetInputRegisterOperand(reg) {
+    if (this.register_optimizer_) reg = this.register_optimizer_.GetInputRegister(reg);
+    return reg.ToOperand();
+  }
+  GetInputRegisterListOperand(reg_list) {
+    if (this.register_optimizer_) reg_list = this.register_optimizer_.GetInputRegisterList(reg_list);
+    return reg_list.first_register().ToOperand();
+  }
+  GetOutputRegisterOperand(reg) {
+    if (this.register_optimizer_) this.register_optimizer_.PrepareOutputRegister(reg);
+    return reg.ToOperand();
+  }
+  GetOutputRegisterListOperand(reg_list) {
+    if (this.register_optimizer_) this.register_optimizer_.PrepareOutputRegisterList(reg_list);
+    return reg_list.first_register().ToOperand();
   }
 }
 
