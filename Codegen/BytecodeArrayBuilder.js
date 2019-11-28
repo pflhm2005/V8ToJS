@@ -1,18 +1,19 @@
 import BytecodeArrayWriter from "./BytecodeArrayWriter";
 import {
   kNoSourcePosition,
-  kLdaTheHole,
+  AccumulatorUse_kWrite,
+  Bytecode_kLdaTheHole,
+  Bytecode_kLdaConstant,
+  Bytecode_kPushContext,
+  AccumulatorUse_kRead,
+  OperandTypeo_kRegOut,
 } from "../enum";
 import { FLAG_ignition_reo, FLAG_ignition_filter_expression_positions } from "../Compiler/Flag";
 import BytecodeRegisterAllocator from "./BytecodeRegisterAllocator";
 import BytecodeRegisterOptimizer from "./BytecodeRegisterOptimizer";
 import Register from "./Register";
 import BytecodeNode from './BytecodeNode';
-
-const kNone = 0;
-const kRead = 1 << 0;
-const kWrite = 1 << 1;
-const kReadWrite = kRead | kWrite;
+import ConstantArrayBuilder from './ConstantArrayBuilder';
 
 const kFlag8 = 1;
 const kIntrinsicId = 2;
@@ -70,8 +71,8 @@ class BytecodeNodeBuilder {
 
 */
 
-function OperandHelper(operand_types, builder, operands, i) {
-  switch (operand_types[i]) {
+function OperandHelper(operand_types, builder, operands) {
+  switch (operand_types) {
     case kFlag8:
     case kIntrinsicId:
     case kRuntimeId:
@@ -104,31 +105,36 @@ class BytecodeNodeBuilder {
       case 1:
         return BytecodeNode.Create1(
           bytecode, accumulator_use, source_info,
-          OperandHelper(operand_types, builder, operands[0], 0), operand_types[0]);
+          OperandHelper(operand_types[0], builder, operands[0], 0), operand_types[0]);
       case 2:
         return BytecodeNode.Create2(
           bytecode, accumulator_use, source_info,
-          ...operands.map((operand, i) => OperandHelper(operand_types, builder, operand, i)),
+          ...operands.map((operand, i) => OperandHelper(operand_types[i], builder, operand)),
           operand_types[0], operand_types[1]);
       case 3:
         return BytecodeNode.Create3(
           bytecode, accumulator_use, source_info,
-          ...operands.map((operand, i) => OperandHelper(operand_types, builder, operand, i)),
+          ...operands.map((operand, i) => OperandHelper(operand_types[i], builder, operand, i)),
           operand_types[0], operand_types[1], operand_types[2]);
       case 4:
         return BytecodeNode.Create4(
           bytecode, accumulator_use, source_info,
-          ...operands.map((operand, i) => OperandHelper(operand_types, builder, operand, i)),
+          ...operands.map((operand, i) => OperandHelper(operand_types[i], builder, operand, i)),
           operand_types[0], operand_types[1], operand_types[2], operand_types[3]);
       case 5:
         return BytecodeNode.Create5(
           bytecode, accumulator_use, source_info,
-          ...operands.map((operand, i) => OperandHelper(operand_types, builder, operand, i)),
+          ...operands.map((operand, i) => OperandHelper(operand_types[i], builder, operand, i)),
           operand_types[0], operand_types[1], operand_types[2], operand_types[3], operand_types[4]);
     }
   }
 }
 
+/**
+ * 该类负责输出各类机器码
+ * 由于V8用宏处理了所有指令 所以很简便
+ * JS也必须用特殊方法统一处理 一个一个写太麻烦了
+ */
 export default class BytecodeArrayBuilder {
   constructor(parameter_count, locals_count, feedback_vector_spec, source_position_mode) {
     this.feedback_vector_spec_ = feedback_vector_spec;
@@ -138,10 +144,11 @@ export default class BytecodeArrayBuilder {
     this.parameter_count_ = parameter_count;
     this.local_register_count_ = locals_count;
     this.register_allocator_ = new BytecodeRegisterAllocator(this.local_register_count_);
-    this.bytecode_array_writer_ = new BytecodeArrayWriter();
+    this.bytecode_array_writer_ = new BytecodeArrayWriter(this.constant_array_builder_, source_position_mode);
     this.register_optimizer_ = null;
 
     this.latest_source_info_ = new BytecodeSourceInfo();
+    this.deferred_source_info_ = new BytecodeSourceInfo();
     this.next_register_index_ = this.local_register_count_;
 
     if (FLAG_ignition_reo) {
@@ -150,6 +157,23 @@ export default class BytecodeArrayBuilder {
         new RegisterTransferWriter(this));
     }
   }
+  Write(node) {
+    this.AttachOrEmitDeferredSourceInfo(node);
+    this.bytecode_array_writer_.Write(node);
+  }
+  AttachOrEmitDeferredSourceInfo(node) {
+    if (!this.deferred_source_info_.is_valid()) return;
+    if (!node.source_info_.is_valid()) {
+      node.source_info_ = this.deferred_source_info_;
+    } else if (this.deferred_source_info_.is_statement() &&
+    node.source_info_.is_expression()) {
+      let source_position = node.source_info_;
+      source_position.MakeStatementPosition(source_position,source_position_);
+      node.source_info_ = source_position;
+    }
+    this.deferred_source_info_.set_invalid();
+  }
+
   SetStatementPosition(stmt) {
     if (stmt.position_ === kNoSourcePosition) return;
     this.latest_source_info_.MakeStatementPosition(stmt.position_);
@@ -172,9 +196,19 @@ export default class BytecodeArrayBuilder {
     return source_position;
   }
 
-  StackCheck() {
-
+  PushContext(context) {
+    this.OutputPushContext(context);
+    return this;
   }
+  OutputPushContext(context) {
+    let node = this.CreatePushContextNode(context);
+    this.Write(node);
+  }
+  CreatePushContextNode(context) {
+    return BytecodeNodeBuilder.Make(this, [context], [Bytecode_kPushContext, AccumulatorUse_kRead, OperandTypeo_kRegOut]);
+  }
+
+  StackCheck() {}
   Receiver() {
 
   }
@@ -194,10 +228,10 @@ export default class BytecodeArrayBuilder {
   }
   OutputLdaTheHole() {
     let node = this.CreateLdaTheHoleNode();
-    this.write(node);
+    this.Write(node);
   }
   CreateLdaTheHoleNode() {
-    return BytecodeNodeBuilder.Make(this, [], [kLdaTheHole, kWrite]);
+    return BytecodeNodeBuilder.Make(this, [], [Bytecode_kLdaTheHole, AccumulatorUse_kWrite]);
   }
 
   LoadConstantPoolEntry(entry) {
@@ -209,7 +243,7 @@ export default class BytecodeArrayBuilder {
     this.write(node);
   }
   CreateLdaConstantNode(entry) {
-    return BytecodeNodeBuilder.Make(this, [entry], [kLdaConstant, kWrite, kIdx]);
+    return BytecodeNodeBuilder.Make(this, [entry], [Bytecode_kLdaConstant, AccumulatorUse_kWrite, kIdx]);
   }
 
   RemainderOfBlockIsDead() {
@@ -227,7 +261,12 @@ export default class BytecodeArrayBuilder {
   StoreAccumulatorInRegister() {
     return this;
   }
-  StoreContextSlot() {
+  StoreContextSlot(context, slot_index, depth) {
+    if (context.is_current_context() & depth === 0) {
+      this.OutputStaCurrentContextSlot(slot_index);
+    } else {
+      this.OutputStaContextSlot(context, slot_index, depth);
+    }
     return this;
   }
   CallRuntime() {
@@ -235,7 +274,11 @@ export default class BytecodeArrayBuilder {
   }
 }
 
+/**
+ * 纯内部使用
+ */
 const kUninitializedPosition = -1;
+const kNone = 0;
 const kExpression = 1;
 const kStatement = 2;
 
@@ -260,13 +303,6 @@ class BytecodeSourceInfo {
   }
   is_expression() {
     return this.position_type_ === kExpression;
-  }
-}
-
-class ConstantArrayBuilder {
-  // TODO
-  InsertDeferred() {
-    return -1;
   }
 }
 

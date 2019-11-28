@@ -530,6 +530,7 @@ export class DeclarationScope extends Scope {
     this.sloppy_block_functions_ = [];
     this.params_ = [];
     this.function_kind_ = function_kind;
+    this.num_parameters_ = 0;
     this.SetDefaults();
   }
   SetDefaults() {
@@ -920,7 +921,6 @@ export class DeclarationScope extends Scope {
 export class FunctionDeclarationScope extends DeclarationScope {
   constructor(outer_scope, scope_type, function_kind = kNormalFunction) {
     super(outer_scope, scope_type, function_kind);
-    this.num_parameters_ = 0;
   }
   /**
    * 由于arguments参数仅出现在function中

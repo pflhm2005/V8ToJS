@@ -25,6 +25,7 @@ import BytecodeArrayBuilder from "./BytecodeArrayBuilder";
 import GlobalDeclarationsBuilder from "./GlobalDeclarationsBuilder";
 import FeedbackSlot from "../util/FeedbackSlot";
 import ValueResultScope from "./ValueResultScope";
+import ContextScope from "./ContextScope";
 
 // This kind means that the slot points to the middle of other slot
 // which occupies more than one feedback vector element.
@@ -561,5 +562,4 @@ class FeedbackMetadata {
 class SharedFeedbackSlot { }
 class BlockCoverageBuilder { }
 
-class ContextScope { }
 class ControlScopeForTopLevel { }

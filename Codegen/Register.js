@@ -49,6 +49,10 @@ export default class Register {
   constructor(index = kInvalidIndex) {
     this.index_ = index;
   }
+
+  is_current_context() {
+    return this.index_ === kCurrentContextRegisterIndex;
+  }
 }
 
 export class RegisterList{

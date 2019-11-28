@@ -2,28 +2,29 @@ import {
   Bytecodes_IsJump,
   Bytecodes_IsSwitch,
 } from "../util/Bytecode";
-import { Bytecode_kDebugger, Bytecode_kSuspendGenerator, Bytecode_kResumeGenerator } from "../enum";
+import { 
+  Bytecode_kDebugger, 
+  Bytecode_kSuspendGenerator,
+  Bytecode_kResumeGenerator, 
+  AccumulatorUse_kRead,
+  AccumulatorUse_kWrite,
+} from "../enum";
 import Register from "./Register";
 import RegisterInfo from "./RegistInfo";
 
-const kNone = 0;
-const kRead = 1 << 0;
-const kWrite = 1 << 1;
-const kReadWrite = kRead || kWrite;
-
 class BytecodeOperands {
   static ReadsAccumulator(accumulator_use) {
-    return (accumulator_use & kRead) === kRead;
+    return (accumulator_use & AccumulatorUse_kRead) === AccumulatorUse_kRead;
   }
   static WritesAccumulator(accumulator_use) {
-    return (accumulator_use & kWrite) === kWrite;
+    return (accumulator_use & AccumulatorUse_kWrite) === AccumulatorUse_kWrite;
   }
 }
 
 export default class BytecodeRegisterOptimizer {
   constructor(register_allocator, fixed_registers_count, parameter_count, bytecode_writer) {
     this.accumulator_ = Register.virtual_accumulator();
-    this.temporary_base_ = fixed_registers_count;
+    this.temporary_base_ = new Register(fixed_registers_count);
     this.max_register_index_ = fixed_registers_count - 1;
     this.register_info_table_ = [];
     this.registers_needing_flushed_ = [];
@@ -36,8 +37,8 @@ export default class BytecodeRegisterOptimizer {
 
     let l = this.register_info_table_offset_ + this.temporary_base_.index_;
     for (let i = 0; i < l; i++) {
-      this.register_info_table_[i] = new RegisterInfo(
-        this.RegisterFromRegisterInfoTableIndex(i), this.NextEquivalenceId(), true, true);
+      this.register_info_table_.push(new RegisterInfo(
+        this.RegisterFromRegisterInfoTableIndex(i), this.NextEquivalenceId(), true, true));
     }
     this.accumulator_info_ = this.GetRegisterInfo(this.accumulator_);
   }
@@ -84,7 +85,7 @@ export default class BytecodeRegisterOptimizer {
       this.CreateMaterializedEquivalent(reg_info);
     }
     reg_info.MoveToNewEquivalenceSet(this.NextEquivalenceId(), true);
-    this.max_register_index_ = Math.max(this.max_register_index_, reg_info.register_,index_);
+    this.max_register_index_ = Math.max(this.max_register_index_, reg_info.register_.index_);
   }
   CreateMaterializedEquivalent(info) {
     let unmaterialized = info.GetEquivalentToMaterialize();

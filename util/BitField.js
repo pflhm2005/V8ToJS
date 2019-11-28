@@ -197,3 +197,13 @@ export const HasPrivateMethods = BitField(10, 1);
 export const AllocateDoubleAlignFlag = BitField(0, 1);
 export const AllowLargeObjectAllocationFlag = BitField(0, 1);
 export const DeclareGlobalsEvalFlag = BitField(0, 1);
+
+/**
+ * Source-position
+ */
+export const IsExternalField = BitField(0, 1);
+export const ExternalLineField = BitField(1, 20);
+export const ExternalFileIdField = BitField(21, 10);
+
+export const ScriptOffsetField = BitField(1, 30);
+export const InliningIdField = BitField(31, 16);
