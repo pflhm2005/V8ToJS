@@ -15,4 +15,3 @@ export * from './Counters';
 export * from './Context';
 export * from './Runtime';
 export * from './Bytecode';
-export * from './Operand';

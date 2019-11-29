@@ -5,8 +5,24 @@ import {
   Bytecode_kLdaTheHole,
   Bytecode_kLdaConstant,
   Bytecode_kPushContext,
-  AccumulatorUse_kRead,
-  OperandTypeo_kRegOut,
+  bytecodeMapping,
+  OperandType_kFlag8,
+  OperandType_kIntrinsicId,
+  OperandType_kRuntimeId,
+  OperandType_kNativeContextIndex,
+  OperandType_kIdx,
+  OperandType_kUImm,
+  OperandType_kRegCount,
+  OperandType_kImm,
+  OperandType_kRegList,
+  OperandType_kRegPair,
+  OperandType_kRegOut,
+  OperandType_kRegOutList,
+  OperandType_kRegOutPair,
+  OperandType_kRegOutTriple,
+  OperandType_kReg,
+  Bytecode_kLdaUndefined,
+  Bytecode_kLdar,
 } from "../enum";
 import { FLAG_ignition_reo, FLAG_ignition_filter_expression_positions } from "../Compiler/Flag";
 import BytecodeRegisterAllocator from "./BytecodeRegisterAllocator";
@@ -15,61 +31,8 @@ import Register from "./Register";
 import BytecodeNode from './BytecodeNode';
 import ConstantArrayBuilder from './ConstantArrayBuilder';
 
-const kFlag8 = 1;
-const kIntrinsicId = 2;
-const kRuntimeId = 3;
-const kNativeContextIndex = 4;
-const kIdx = 5;
-const kUImm = 6;
-const kRegCount = 7;
-const kImm = 8;
-const kReg = 9;
-const kRegList = 10;
-const kRegPair = 11;
-const kRegOut = 12;
-const kRegOutList = 13;
-const kRegOutPair = 14;
-const kRegOutTriple = 15;
-
 // TODO
 function IsWithoutExternalSideEffects() { return true; }
-
-/* example
-
-V(LdaTheHole, AccumulatorUse::kWrite)
-
-BytecodeNode BytecodeArrayBuilder::CreateLdaTheHoleNode(Operands... operands) {
-  return BytecodeNodeBuilder<Bytecode::kLdaTheHole, AccumulatorUse::kWrite>::Make(this, operands...)
-};
-void BytecodeArrayBuilder::OutputLdaTheHole(Operands... operands) {
-  BytecodeNode node(CreateLdaTheHoleNode(operands...));
-  Write(&node);
-}
-void BytecodeArrayBuilder::OutputLdaTheHole(BytecodeLabel* label, Operands... operands) {
-  BytecodeNode node(CreateLdaTheHoleNode(operands...));
-  WriteJump(&node, label);
-}
-
-#define DEFINE_BYTECODE_NODE_CREATOR(Name, ...)                              \
-  template <typename... Operands>                                            \
-  V8_INLINE static BytecodeNode Name(BytecodeSourceInfo source_info,         \
-                                     Operands... operands) {                 \
-    return Create<Bytecode::k##Name, __VA_ARGS__>(source_info, operands...); \
-  }
-  BYTECODE_LIST(DEFINE_BYTECODE_NODE_CREATOR)
-#undef DEFINE_BYTECODE_NODE_CREATOR
-
-template <Bytecode bytecode, AccumulatorUse accumulator_use, OperandType... operand_types>
-class BytecodeNodeBuilder {
-  static BytecodeNode Make(BytecodeArrayBuilder* builder, Operands... operands) {
-    builder->PrepareToOutputBytecode<bytecode, accumulator_use>();
-    return BytecodeNode::Create<bytecode, accumulator_use, operand_types...>(
-        builder->CurrentSourcePosition(bytecode),
-        OperandHelper<operand_types>::Convert(builder, operands)...);
-  }
-}
-
-*/
 
 /**
  * 机器码操作符处理
@@ -80,28 +43,28 @@ class BytecodeNodeBuilder {
  */
 function OperandHelper(operand_type, builder, value) {
   switch (operand_type) {
-    case kFlag8:
-    case kIntrinsicId:
-    case kRuntimeId:
-    case kNativeContextIndex:
-    case kIdx:
-    case kUImm:
-    case kRegCount:
-    case kImm:
+    case OperandType_kFlag8:
+    case OperandType_kIntrinsicId:
+    case OperandType_kRuntimeId:
+    case OperandType_kNativeContextIndex:
+    case OperandType_kIdx:
+    case OperandType_kUImm:
+    case OperandType_kRegCount:
+    case OperandType_kImm:
       return value;
-    case kReg:
+    case OperandType_kReg:
       return builder.GetInputRegisterOperand(value);
-    case kRegList:
+    case OperandType_kRegList:
       return builder.GetInputRegisterListOperand(value);
-    case kRegPair:
+    case OperandType_kRegPair:
       return builder.GetInputRegisterListOperand(value);
-    case kRegOut:
+    case OperandType_kRegOut:
       return builder.GetOutputRegisterOperand(value);
-    case kRegOutList:
+    case OperandType_kRegOutList:
       return builder.GetOutputRegisterListOperand(value);
-    case kRegOutPair:
+    case OperandType_kRegOutPair:
       return builder.GetOutputRegisterListOperand(value);
-    case kRegOutTriple:
+    case OperandType_kRegOutTriple:
       return builder.GetOutputRegisterListOperand(value);
   }
 }
@@ -121,6 +84,8 @@ class BytecodeNodeBuilder {
     const operand_types = template.slice(2);
     builder.PrepareToOutputBytecode(bytecode, accumulator_use);
     let source_info = builder.CurrentSourcePosition(bytecode);
+    // 不存在会默认传null 过滤掉
+    operands = operands.filter(v => v !== null);
     switch (operands.length) {
       case 0:
         return BytecodeNode.Create0(bytecode, accumulator_use, source_info);
@@ -179,6 +144,9 @@ export default class BytecodeArrayBuilder {
         new RegisterTransferWriter(this));
     }
   }
+  /**
+   * 下面是工具方法
+   */
   Write(node) {
     this.AttachOrEmitDeferredSourceInfo(node);
     this.bytecode_array_writer_.Write(node);
@@ -217,60 +185,74 @@ export default class BytecodeArrayBuilder {
     }
     return source_position;
   }
+  RemainderOfBlockIsDead() {
+    return this.bytecode_array_writer_.exit_seen_in_block_;
+  }
+  StackCheck() {}
+  Receiver() {}
 
+  /**
+   * 下列函数处理字节码节点的生成
+   * 一般分为三步
+   * 1. Loadxxx/Push/Pop 立即值会直接output 特殊字面量会有一个从池里获取值的过程
+   * 2. outputxxx 统一由宏定义
+   * 3. Createxxx 统一由宏和枚举宏定义
+   * 由于第一步不是固定的 所以统一对2、3进行类似于宏的统一分发处理
+   */
   PushContext(context) {
-    this.OutputPushContext(context);
+    this.Output(Bytecode_kPushContext, context);
     return this;
   }
-  OutputPushContext(context) {
-    let node = this.CreatePushContextNode(context);
-    this.Write(node);
+  LoadTheHole() {
+    this.Output(Bytecode_kLdaTheHole);
+    return this;
   }
-  CreatePushContextNode(context) {
-    return BytecodeNodeBuilder.Make(this, [context], [Bytecode_kPushContext, AccumulatorUse_kRead, OperandTypeo_kRegOut]);
-  }
-
-  StackCheck() {}
-  Receiver() {
-
+  LoadConstantPoolEntry(entry) {
+    this.Output(Bytecode_kLdaConstant, entry);
+    return this;
   }
   LoadUndefined() {
-
+    this.Output(Bytecode_kLdaUndefined);
+    return this;
   }
-  LoadAccumulatorWithRegister() {
-
+  LoadAccumulatorWithRegister(reg) {
+    if (this.register_optimizer_) {
+      this.SetDeferredSourceInfo(this.CurrentSourcePosition(Bytecode_kLdar));
+      this.register_optimizer_.DoLdar(reg);
+    } else {
+      this.Output(Bytecode_kLdar);
+    }
+    return this;
   }
   LoadLiteral() {
     return this;
   }
-
-  LoadTheHole() {
-    this.OutputLdaTheHole();
-    return this;
-  }
-  OutputLdaTheHole() {
-    let node = this.CreateLdaTheHoleNode();
+  
+  /**
+   * 将所有Ouput、Create方法统一处理
+   * 逻辑参照DEFINE_BYTECODE_OUTPUT宏
+   * @param {Bytecode} bytecode 字节码类型
+   * @param {Operands} operands 操作类型
+   * @returns {void}
+   */
+  Output(bytecode, operands = null) {
+    let node = this.Create(bytecode, operands);
     this.Write(node);
   }
-  CreateLdaTheHoleNode() {
-    return BytecodeNodeBuilder.Make(this, [], [Bytecode_kLdaTheHole, AccumulatorUse_kWrite]);
+  /**
+   * C++源码由template、rest参数组成
+   * 枚举值由宏拼接而成 这里处理成手动传入
+   * template参数的作用由于不是泛型声明而是实际使用 所以作为数组参数传入
+   * @param 所有参数由Output透传进来
+   * @returns {BytecodeNode}
+   */
+  Create(bytecode, operands = null) {
+    return BytecodeNodeBuilder.Make(this, [operands], bytecodeMapping[bytecode]);
   }
 
-  LoadConstantPoolEntry(entry) {
-    this.OutputLdaConstant(entry);
-    return this;
-  }
-  OutputLdaConstant(entry) {
-    let node = this.CreateLdaConstantNode(entry);
-    this.write(node);
-  }
-  CreateLdaConstantNode(entry) {
-    return BytecodeNodeBuilder.Make(this, [entry], [Bytecode_kLdaConstant, AccumulatorUse_kWrite, kIdx]);
-  }
-
-  RemainderOfBlockIsDead() {
-    return this.bytecode_array_writer_.exit_seen_in_block_;
-  }
+  /**
+   * 下面是一些功能性方法
+   */
   AllocateDeferredConstantPoolEntry() {
     return this.constant_array_builder_.InsertDeferred();
   }

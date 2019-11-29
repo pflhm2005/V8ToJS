@@ -177,7 +177,7 @@ export default class BytecodeRegisterOptimizer {
   }
 
   /**
-   * 生成寄存器类或寄存器组类时会触发下列事件
+   * 生成寄存器或寄存器组时会触发下列事件
    */
   RegisterAllocateEvent(reg) {
     this.AllocateRegister(this.GetOrCreateRegisterInfo(reg));
