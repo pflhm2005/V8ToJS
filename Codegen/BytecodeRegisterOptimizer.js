@@ -22,14 +22,14 @@ class BytecodeOperands {
 }
 
 export default class BytecodeRegisterOptimizer {
-  constructor(register_allocator, fixed_registers_count, parameter_count, bytecode_writer) {
+  constructor(register_allocator, fixed_registers_count, parameter_count, builder) {
     this.accumulator_ = Register.virtual_accumulator();
     this.temporary_base_ = new Register(fixed_registers_count);
     this.max_register_index_ = fixed_registers_count - 1;
     this.register_info_table_ = [];
     this.registers_needing_flushed_ = [];
     this.equivalence_id_ = 0;
-    this.bytecode_writer_ = bytecode_writer;
+    this.builder_ = builder;
     this.flush_required_ = false;
     register_allocator.observer_ = this;
 
@@ -45,6 +45,61 @@ export default class BytecodeRegisterOptimizer {
   /**
    * 基本上是工具方法
    */
+  DoLdar(input) {
+    let input_info = this.GetRegisterInfo(input);
+    this.RegisterTransfer(input_info, this.accumulator_info_);
+  }
+  DoStar(output) {
+    let output_info = this.GetRegisterInfo(output);
+    this.RegisterTransfer(this.accumulator_info_, output_info);
+  }
+  RegisterTransfer(input_info, output_info) {
+    let output_is_observable = this.RegisterIsObservable(output_info.register_);
+    let in_same_equivalence_set = output_info.IsInSameEquivalenceSet(input_info);
+    if (in_same_equivalence_set && (!output_is_observable || output_info.materialized_)) {
+      return;
+    }
+
+    if (output_info.materialized_) {
+      this.CreateMaterializedEquivalent(output_info);
+    }
+
+    if (!in_same_equivalence_set) {
+      this.AddToEquivalenceSet(input_info, output_info);
+    }
+
+    if (output_is_observable) {
+      output_info.materialized_ = false;
+      let materialized_info = input_info.GetMaterializedEquivalent();
+      this.OutputRegisterTransfer(materialized_info, output_info);
+    }
+
+    let input_is_observable = this.RegisterIsObservable(input_info.register_);
+    if (input_is_observable) {
+      input_info.MarkTemporariesAsUnmaterialized(this.temporary_base_);
+    }
+  }
+  AddToEquivalenceSet(set_member, non_set_member) {
+    this.PushToRegistersNeedingFlush(non_set_member);
+    non_set_member.AddToEquivalenceSetOf(set_member);
+    this.flush_required_ = true;
+  }
+  PushToRegistersNeedingFlush(reg) {
+    if (!reg.needs_flush_) {
+      reg.needs_flush_ = true;
+      this.registers_needing_flushed_.push(reg);
+    }
+  }
+  /**
+   * Register类的比较都做了重载
+   */
+  RegisterIsTemporary(reg) {
+    return reg.index_ >= this.temporary_base_.index_
+  }
+  RegisterIsObservable(reg) {
+    return reg.index_ !== this.accumulator_.index_ && !this.RegisterIsTemporary(reg);
+  }
+
   RegisterFromRegisterInfoTableIndex(index) {
     return new Register(index - this.register_info_table_offset_);
   }
@@ -120,11 +175,11 @@ export default class BytecodeRegisterOptimizer {
     let input = input_info.register_;
     let output = output_info.register_;
     if (input === this.accumulator_) {
-      this.bytecode_writer_.EmitStar(output);
+      this.builder_.OutputStarRaw(output);
     } else if (output === this.accumulator_) {
-      this.bytecode_writer_.EmitLdar(input);
+      this.builder_.OutputLdarRaw(input);
     } else {
-      this.bytecode_writer_.EmitMov(input, output);
+      this.builder_.OutputMovRaw(input, output);
     }
     if (output !== this.accumulator_) {
       this.max_register_index_ = Math.max(this.max_register_index_, output.index_);
@@ -155,7 +210,6 @@ export default class BytecodeRegisterOptimizer {
         let current = new Register(start_index + i);
         let input_info = this.GetRegisterInfo(current);
         this.Materialize(input_info);
-        current = null;
       }
       return reg_list;
     }

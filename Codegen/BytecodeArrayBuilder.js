@@ -1,7 +1,6 @@
 import BytecodeArrayWriter from "./BytecodeArrayWriter";
 import {
   kNoSourcePosition,
-  AccumulatorUse_kWrite,
   Bytecode_kLdaTheHole,
   Bytecode_kLdaConstant,
   Bytecode_kPushContext,
@@ -23,6 +22,9 @@ import {
   OperandType_kReg,
   Bytecode_kLdaUndefined,
   Bytecode_kLdar,
+  Bytecode_kStaCurrentContextSlot,
+  Bytecode_kStar,
+  Bytecode_kMov,
 } from "../enum";
 import { FLAG_ignition_reo, FLAG_ignition_filter_expression_positions } from "../Compiler/Flag";
 import BytecodeRegisterAllocator from "./BytecodeRegisterAllocator";
@@ -83,16 +85,14 @@ class BytecodeNodeBuilder {
     const [bytecode, accumulator_use] = template;
     const operand_types = template.slice(2);
     builder.PrepareToOutputBytecode(bytecode, accumulator_use);
-    let source_info = builder.CurrentSourcePosition(bytecode);
-    // 不存在会默认传null 过滤掉
-    operands = operands.filter(v => v !== null);
+    let source_info = source_info = builder.CurrentSourcePosition(bytecode);
     switch (operands.length) {
       case 0:
         return BytecodeNode.Create0(bytecode, accumulator_use, source_info);
       case 1:
         return BytecodeNode.Create1(
           bytecode, accumulator_use, source_info,
-          OperandHelper(operand_types[0], builder, operands[0], 0), operand_types[0]);
+          OperandHelper(operand_types[0], builder, operands[0]), operand_types[0]);
       case 2:
         return BytecodeNode.Create2(
           bytecode, accumulator_use, source_info,
@@ -141,7 +141,7 @@ export default class BytecodeArrayBuilder {
     if (FLAG_ignition_reo) {
       this.register_optimizer_ = new BytecodeRegisterOptimizer(
         this.register_allocator_, this.local_register_count_, parameter_count,
-        new RegisterTransferWriter(this));
+        this);
     }
   }
   /**
@@ -163,7 +163,10 @@ export default class BytecodeArrayBuilder {
     }
     this.deferred_source_info_.set_invalid();
   }
-
+  SetDeferredSourceInfo(source_info) {
+    if (!source_info.is_valid()) return;
+    this.deferred_source_info_ = source_info;
+  }
   SetStatementPosition(stmt) {
     if (stmt.position_ === kNoSourcePosition) return;
     this.latest_source_info_.MakeStatementPosition(stmt.position_);
@@ -199,16 +202,25 @@ export default class BytecodeArrayBuilder {
    * 3. Createxxx 统一由宏和枚举宏定义
    * 由于第一步不是固定的 所以统一对2、3进行类似于宏的统一分发处理
    */
-  PushContext(context) {
-    this.Output(Bytecode_kPushContext, context);
+  PushContext(ctx) {
+    this.Output(Bytecode_kPushContext, [ctx]);
     return this;
+  }
+  OutputStar(reg) {
+    this.Output(Bytecode_kStar, [reg]);
+  }
+  OutputStaContextSlot(...args) {
+    this.Output(Bytecode_kStaCurrentContextSlot, args);
+  }
+  OutputStaCurrentContextSlot(ctx) {
+    this.Output(Bytecode_kStaCurrentContextSlot, [ctx]);
   }
   LoadTheHole() {
     this.Output(Bytecode_kLdaTheHole);
     return this;
   }
   LoadConstantPoolEntry(entry) {
-    this.Output(Bytecode_kLdaConstant, entry);
+    this.Output(Bytecode_kLdaConstant, [entry]);
     return this;
   }
   LoadUndefined() {
@@ -224,10 +236,37 @@ export default class BytecodeArrayBuilder {
     }
     return this;
   }
+  /**
+   * 重载过多 再说
+   */
   LoadLiteral() {
     return this;
   }
-  
+  /**
+   * 这三个方法较为特殊
+   * 直接走的Bytenode生成 不走Prepare 否则会造成无限递归
+   */
+  OutputLdarRaw(reg) {
+    let operand = reg.ToOperand();
+    let map = bytecodeMapping[Bytecode_kLdar];
+    let node = BytecodeNode.Create1(Bytecode_kLdar, null, new BytecodeSourceInfo(), operand, map[2]);
+    this.Write(node);
+  }
+  OutputStarRaw(reg) {
+    let operand = reg.ToOperand();
+    let map = bytecodeMapping[Bytecode_kStar];
+    let node = BytecodeNode.Create1(Bytecode_kStar, null, new BytecodeSourceInfo(), operand, map[2]);
+    this.Write(node);
+  }
+  OutputMovRaw(src, dest) {
+    let operand0 = src.ToOperand();
+    let operand1 = dest.ToOperand();
+    let map = bytecodeMapping[Bytecode_kMov];
+    let node = BytecodeNode.Create2(
+      Bytecode_kStar, null, new BytecodeSourceInfo(), [operand0, operand1], map[2], map[3]);
+    this.Write(node);
+  }
+
   /**
    * 将所有Ouput、Create方法统一处理
    * 逻辑参照DEFINE_BYTECODE_OUTPUT宏
@@ -235,7 +274,7 @@ export default class BytecodeArrayBuilder {
    * @param {Operands} operands 操作类型
    * @returns {void}
    */
-  Output(bytecode, operands = null) {
+  Output(bytecode, operands = []) {
     let node = this.Create(bytecode, operands);
     this.Write(node);
   }
@@ -246,8 +285,8 @@ export default class BytecodeArrayBuilder {
    * @param 所有参数由Output透传进来
    * @returns {BytecodeNode}
    */
-  Create(bytecode, operands = null) {
-    return BytecodeNodeBuilder.Make(this, [operands], bytecodeMapping[bytecode]);
+  Create(bytecode, operands = []) {
+    return BytecodeNodeBuilder.Make(this, operands, bytecodeMapping[bytecode]);
   }
 
   /**
@@ -262,7 +301,13 @@ export default class BytecodeArrayBuilder {
   Parameter(parameter_index) {
     return Register.FromParameterIndex(parameter_index + 1, this.parameter_count_);
   }
-  StoreAccumulatorInRegister() {
+  StoreAccumulatorInRegister(reg) {
+    if (this.register_optimizer_) {
+      this.SetDeferredSourceInfo(this.CurrentSourcePosition(Bytecode_kStar));
+      this.register_optimizer_.DoStar(reg);
+    } else {
+      this.OutputStar(reg);
+    }
     return this;
   }
   StoreContextSlot(context, slot_index, depth) {
@@ -331,5 +376,3 @@ class BytecodeSourceInfo {
 }
 
 class HandlerTableBuilder { }
-
-class RegisterTransferWriter { }

@@ -44,6 +44,20 @@ export default class RegisterInfo {
 
     return null;
   }
+  IsInSameEquivalenceSet(info) {
+    return this.equivalence_id_ === info.equivalence_id_;
+  }
+  AddToEquivalenceSetOf(info) {
+    this.next_.prev_ = this.prev_;
+    this.prev_.next_ = this.next_;
+
+    this.next_ = info.next_;
+    this.prev_ = info;
+    this.prev_.next_ = this;
+    this.next_.prev_ = this;
+    this.equivalence_id_ = info.equivalence_id_;
+    this.materialized_ = false;
+  }
   /**
    * 相当于链表的去除节点
    */
