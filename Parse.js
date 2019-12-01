@@ -2,10 +2,10 @@
  * 普通node模式不支持import语法
  * 需安装babel-node工具
  */
-import Parsing from './Compile/Parsing';
+import Parsing from './Parsing/Parsing';
 import isolate from './Execution/Isolate';
-import ParseInfo from './Compile/ParseInfo';
-import { ScriptOriginOptions } from './Compile/Script';
+import ParseInfo from './Compiler/ParseInfo';
+import { ScriptOriginOptions } from './Execution/Script';
 // 在这里设置待编译字符串
 const source = `
 function fn(a, b, c){
