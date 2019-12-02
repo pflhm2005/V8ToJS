@@ -163,6 +163,10 @@ export default class BytecodeGenerator {
     let outer_next_register_index_ = this.register_allocator().next_register_index_;
 
     this.AllocateTopLevelRegisters();
+
+    //
+    this.builder_.StackCheck(this.info_.literal_.start_position());
+ 
     // 状态函数
     if (this.info_.literal_.CanSuspend()) {
       this.BuildGeneratorPrologue();

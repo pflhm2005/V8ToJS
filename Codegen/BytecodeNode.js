@@ -44,7 +44,7 @@ function ScaleForSignedOperand(value) {
 
 export default class BytecodeNode {
   constructor(bytecode, operand_count, operand_scale, source_info,
-    operand0 = 0, operand1 = 0, operand2 = 0, operand3 = 0, operand4 = 0, ) {
+    operand0 = 0, operand1 = 0, operand2 = 0, operand3 = 0, operand4 = 0) {
     this.bytecode_ = bytecode;
     this.operands_ = [operand0, operand1, operand2, operand3, operand4];
     this.operand_count_ = operand_count;

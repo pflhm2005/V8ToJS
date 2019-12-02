@@ -21,13 +21,19 @@ import {
   Bytecodes_GetOperandSizes,
 } from "../util/Bytecode";
 import SourcePosition from './SourcePosition';
+import SourcePositionTableBuilder from "./SourcePositionTableBuilder";
 
 export default class BytecodeArrayWriter {
+  /**
+   * 
+   * @param {ConstantArrayBuilder} constant_array_builder 
+   * @param {RecordingMode} source_position_mode 
+   */
   constructor(constant_array_builder, source_position_mode) {
     // bytecodes_.reserve(512)
     this.bytecodes_ = [];
     this.unbound_jumps_ = 0;
-    this.source_position_table_builder_ = source_position_mode;
+    this.source_position_table_builder_ = new SourcePositionTableBuilder(source_position_mode);
     this.constant_array_builder_ = constant_array_builder;
     this.last_bytecode_ = Bytecode_kIllegal;
     this.last_bytecode_offset_ = 0;
@@ -35,6 +41,14 @@ export default class BytecodeArrayWriter {
     this.elide_noneffectful_bytecodes_ = FLAG_ignition_elide_noneffectful_bytecodes;
     this.exit_seen_in_block_ = false;
   }
+  /**
+   * 将字节码信息写入容器中
+   * 1. 判断当前节点是否有快速跳出信息 throw、return、continue等等
+   * 2. 同步最后一个字节码信息
+   * 3. 更新位置映射表
+   * 4. 写字节码
+   * @param {BytecodeNode} node 字节码描述节点
+   */
   Write(node) {
     if (this.exit_seen_in_block_) return;
     this.UpdateExitSeenInBlock(node.bytecodes_);
@@ -90,13 +104,13 @@ export default class BytecodeArrayWriter {
     this.bytecodes_.push(bytecode);
 
     const operands = node.operands_;
+    console.log(bytecode, operands);
     const operand_count = node.operand_count_;
     const operand_sizes = Bytecodes_GetOperandSizes(bytecode, operand_scale);
     for (let i = 0; i < operand_count; ++i) {
       switch(operand_sizes[i]) {
         case OperandSize_kNone:
           throw new Error('UNREACHABLE');
-          break;
         case OperandSize_kByte:
           this.bytecodes_.push(operands[i]);
           break;

@@ -1,5 +1,6 @@
 import BytecodeGenerator, { FeedbackVectorSpec } from "../Codegen/BytecodeGenerator";
 import { SUCCEEDED, FAILED } from "./Complier";
+import { RecordingMode_RECORD_SOURCE_POSITIONS, RecordingMode_OMIT_LAZY_SOURCE_POSITIONS } from "../enum";
 
 const kReadyToPrepare = 0;
 const kReadyToExecute = 0;
@@ -11,10 +12,6 @@ const kIsEval = 1 << 0;
 const kCollectTypeProfile = 1 << 1;
 const kMightAlwaysOpt = 1 << 2;
 const kCollectSourcePositions = 1 << 3;
-
-const OMIT_SOURCE_POSITIONS = 0;
-const LAZY_SOURCE_POSITIONS = 0;
-const RECORD_SOURCE_POSITIONS = 0;
 
 export default class Interpreter {
   /**
@@ -106,8 +103,8 @@ class UnoptimizedCompilationInfo {
     return this.scope().num_parameters_ + 1;
   }
   SourcePositionRecordingMode() {
-    if (this.collect_source_positions()) return RECORD_SOURCE_POSITIONS;
-    return this.literal_.AllowsLazyCompilation() ? RECORD_SOURCE_POSITIONS : LAZY_SOURCE_POSITIONS;
+    if (this.collect_source_positions()) return RecordingMode_RECORD_SOURCE_POSITIONS;
+    return this.literal_.AllowsLazyCompilation() ? RecordingMode_RECORD_SOURCE_POSITIONS : RecordingMode_OMIT_LAZY_SOURCE_POSITIONS;
   }
   collect_type_profile() {
     return this.GetFlag(kCollectTypeProfile);

@@ -44,6 +44,9 @@ const BitField = (shift, size) => {
   let kSize = size;
   let kMask = ((1 << kShift) << kSize) - (1 << kShift);
   return {
+    kShift,
+    kSize,
+    kMask,
     kNext: shift + size,
     encode(value) {
       return (value << kShift) >>> 0;
@@ -207,3 +210,6 @@ export const ExternalFileIdField = BitField(21, 10);
 
 export const ScriptOffsetField = BitField(1, 30);
 export const InliningIdField = BitField(31, 16);
+
+export const MoreBit = BitField(7, 1);
+export const ValueBits = BitField(0, 7);

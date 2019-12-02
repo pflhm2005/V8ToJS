@@ -513,3 +513,7 @@ export const AccumulatorPreservingMode_kPreserve = 1;
 
 export const ContextSlotMutability_kImmutableSlot = 0;
 export const ContextSlotMutability_kMutableSlot = 1;
+
+export const RecordingMode_OMIT_SOURCE_POSITIONS = 0;
+export const RecordingMode_OMIT_LAZY_SOURCE_POSITIONS = 1;
+export const RecordingMode_RECORD_SOURCE_POSITIONS = 2;

@@ -35,6 +35,7 @@ import {
   Bytecode_kLdaImmutableContextSlot,
   Bytecode_kLdaContextSlot,
   Bytecode_kPopContext,
+  Bytecode_kStackCheck,
 } from "../enum";
 import { FLAG_ignition_reo, FLAG_ignition_filter_expression_positions } from "../Compiler/Flag";
 import BytecodeRegisterAllocator from "./BytecodeRegisterAllocator";
@@ -208,7 +209,13 @@ export default class BytecodeArrayBuilder {
   RemainderOfBlockIsDead() {
     return this.bytecode_array_writer_.exit_seen_in_block_;
   }
-  StackCheck() {}
+  StackCheck(position) {
+    if (position !== kNoSourcePosition) {
+      this.latest_source_info_.ForceExpressionPosition(position);
+    }
+    this.Output(Bytecode_kStackCheck);
+    return this;
+  }
 
   /**
    * 下列函数处理字节码节点的生成
@@ -279,7 +286,8 @@ export default class BytecodeArrayBuilder {
     return this;
   }
   /**
-   * 重载过多 直接分为单个函数
+   * 重载过多 逻辑不怎么统一
+   * 直接分为单个函数
    */
   LoadLiteral_Smi(smi) {
     if (smi === 0) {
@@ -299,11 +307,21 @@ export default class BytecodeArrayBuilder {
   LoadLiteral_Symbol() {
     return this;
   }
-  LoadLiteral_Scope() {
+  LoadLiteral_Scope(scope) {
+    let entry = this.GetConstantPoolEntry(scope);
+    this.Output(Bytecode_kLdaConstant, [entry]);
     return this;
   }
   LoadLiteral_BigInt() {
     return this;
+  }
+
+  /**
+   * 下列方法同样一堆重载
+   * 服务上面的字面量Load
+   */
+  GetConstantPoolEntry(value) {
+    return this.constant_array_builder_.Insert(value);
   }
 
     /**
@@ -443,6 +461,10 @@ class BytecodeSourceInfo {
   }
   is_expression() {
     return this.position_type_ === kExpression;
+  }
+  ForceExpressionPosition(source_position) {
+    this.position_type_ = kExpression;
+    this.source_position_ = source_position;
   }
 }
 
