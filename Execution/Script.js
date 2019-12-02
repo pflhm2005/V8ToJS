@@ -28,10 +28,14 @@ class ScriptCompiler {
   static Compile(context, source, options = kNoCompileOptions, no_cache_reason = kNoCacheNoReason) {
     let isolate = context.GetIsolate();
     let maybe = this.CompileUnboundInternal(isolate, source, options, no_cache_reason);
-
+    console.info('待完善');
+    return;
     // v8::Context::Scope scope(context);
     return maybe.BindToCurrentContext();
   }
+  /**
+   * @returns {UnboundScript}
+   */
   static CompileUnboundInternal(isolate, source, options, no_cache_reason) {
     let script_data = new ScriptData();
     if (options === kConsumeCodeCache) script_data = new ScriptData(source.cached_data.data, source.cached_data.length);
@@ -45,7 +49,19 @@ class ScriptCompiler {
   }
 }
 
-class UnboundScript{}
+class UnboundScript{
+  constructor(function_info) {
+    this.function_info_ = function_info;
+  }
+  /**
+   * @returns {Script}
+   */
+  BindToCurrentContext() {
+    let isolate = this.function_info_.GetIsolate();
+    let fnc = isolate.factory_.NewFunctionFromSharedFunctionInfo(this.function_info_, isolate.native_context());
+    return fnc;
+  }
+}
 
 class ScriptData {
   constructor(data = '', length = 0) {

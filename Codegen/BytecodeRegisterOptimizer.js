@@ -203,7 +203,7 @@ export default class BytecodeRegisterOptimizer {
   GetInputRegisterList(reg_list) {
     if (reg_list.register_count_ === 1) {
       let reg = this.GetInputRegister(reg_list.first_register());
-      return new RegisterList(r.index_, 1);
+      return new RegisterList(reg);
     } else {
       let start_index = reg_list.first_register().index_;
       for (let i = 0; i < reg_list,register_count_; ++i) {
@@ -269,6 +269,12 @@ export default class BytecodeRegisterOptimizer {
     info.allocated_ = true;
     if (!info.materialized_) {
       info.MoveToNewEquivalenceSet(this.NextEquivalenceId(), true);
+    }
+  }
+  RegisterListFreeEvent(reg_list) {
+    let first_index = reg_list.first_register().index_;
+    for (let i = 0; i < reg_list.register_count_; i++) {
+      this.GetRegisterInfo(new Register(first_index + i)).allocated_ = false;
     }
   }
 }

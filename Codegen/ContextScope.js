@@ -15,4 +15,18 @@ export default class ContextScope{
     }
     generator.execution_context_ = this;
   }
+  ContextChainDepth(scope) {
+    return this.scope_.ContextChainLength(scope);
+  }
+  Previous(depth) {
+    if (depth > this.depth_) {
+      return null;
+    }
+
+    let previous = this;
+    for (let i = depth; i > 0; --i) {
+      previous = previous.outer_;
+    }
+    return previous;
+  }
 }

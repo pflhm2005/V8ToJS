@@ -23,4 +23,11 @@ export default class BytecodeRegisterAllocator{
     }
     return reg_list;
   }
+  ReleaseRegisters(register_index) {
+    let count = this.next_register_index_ - register_index;
+    this.next_register_index_ = register_index;
+    if (this.observer_) {
+      this.observer_.RegisterListFreeEvent(new RegisterList(register_index, count));
+    }
+  }
 }

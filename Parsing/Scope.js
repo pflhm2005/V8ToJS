@@ -200,6 +200,13 @@ export default class Scope {
   ContextHeaderLength() {
     return this.HasContextExtensionSlot() ? MIN_CONTEXT_EXTENDED_SLOTS : MIN_CONTEXT_SLOTS;
   }
+  ContextChainLength(scope) {
+    let n = 0;
+    for (let s = this; s !== scope; s = s.outer_scope_) {
+      if (s.NeedsContext()) n++;
+    }
+    return n;
+  }
   HasContextExtensionSlot() {
     switch(this.scope_type_) {
       case MODULE_SCOPE:

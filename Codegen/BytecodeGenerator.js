@@ -33,6 +33,7 @@ import {
   HoleCheckMode_kRequired,
   VariableMode_kConst,
   TokenEnumList,
+  ContextSlotMutability_kMutableSlot,
 } from "../enum";
 import Register from "./Register";
 import { IsResumableFunction, IsBaseConstructor, DeclareGlobalsEvalFlag } from "../util";
@@ -159,7 +160,7 @@ export default class BytecodeGenerator {
     let incoming_context = new ContextScope(this, this.closure_scope_);
     let control = new ControlScopeForTopLevel(this);
     // RegisterAllocationScope register_scope(this);
-    // let outer_next_register_index_ = this.register_allocator().next_register_index_;
+    let outer_next_register_index_ = this.register_allocator().next_register_index_;
 
     this.AllocateTopLevelRegisters();
     // 状态函数
@@ -175,18 +176,18 @@ export default class BytecodeGenerator {
       // 析构
       let outer_ = local_function_context.outer_;
       if (outer_) {
-        this.builder_.PopContext(outer_);
+        this.builder_.PopContext(outer_.register_);
         outer_.register_ = local_function_context.register_;
       }
       this.execution_context_ = outer_;
     } else {
       this.GenerateBytecodeBody();
     }
-    this.register_allocator().ReleaseRegisters(outer_next_register_index_);
     // 析构
+    this.register_allocator().ReleaseRegisters(outer_next_register_index_);
     let outer_ = incoming_context.outer_;
     if (outer_) {
-      this.builder_.PopContext(outer_);
+      this.builder_.PopContext(outer_.register_);
       outer_.register_ = incoming_context.register_;
     }
     this.execution_context_ = outer_;
@@ -253,13 +254,13 @@ export default class BytecodeGenerator {
 
     if (scope.is_script_scope()) {
       let scope_reg = this.register_allocator().NewRegister();
-      this.builder_.LoadLiteral(scope)
+      this.builder_.LoadLiteral_Scope(scope)
         .StoreAccumulatorInRegister(scope_reg)
         .CallRuntime(kNewScriptContext, scope_reg);
     } else if (scope.is_module_scope()) {
       let args = this.register_allocator().NewRegisterList(2);
       this.builder_.MoveRegister(this.builder_.Parameter(0), args.get(0))
-        .LoadLiteral(scope)
+        .LoadLiteral_Scope(scope)
         .StoreAccumulatorInRegister(args.get(1))
         .CallRuntime(kPushModuleContext, args);
     } else {
@@ -357,11 +358,14 @@ export default class BytecodeGenerator {
   }
   BuildVariableAssignment(variable, op, hole_check_mode) {
     let mode = variable.mode();
-    let assignment_register_scope = new RegisterAllocationScope(this);
+    // RegisterAllocationScope assignment_register_scope(this);
+    let outer_next_register_index_ = this.register_allocator().next_register_index_;
     // BytecodeLabel end_label;
     switch (variable.location()) {
 
     }
+    // 析构
+    this.register_allocator().ReleaseRegisters(outer_next_register_index_);
   }
 
   BuildGeneratorObjectVariableInitialization() {
@@ -373,9 +377,13 @@ export default class BytecodeGenerator {
   }
   VisitDeclarations(declarations) {
     // RegisterAllocationScope register_scope(this);
+    let outer_next_register_index_ = this.register_allocator().next_register_index_;
     for (let decl of declarations) {
       // RegisterAllocationScope register_scope(this);
+      let outer_next_register_index_ = this.register_allocator().next_register_index_;
       this.Visit(decl);
+      // 析构
+      this.register_allocator().ReleaseRegisters(outer_next_register_index_);
     }
     if (this.globals_builder_.empty()) return;
     this.globals_builder_.set_constant_pool_entry(this.builder_.AllocateDeferredConstantPoolEntry());
@@ -393,6 +401,8 @@ export default class BytecodeGenerator {
     //
     this.global_declarations_.push(this.globals_builder_);
     this.globals_builder_ = new GlobalDeclarationsBuilder();
+    // 析构
+    this.register_allocator().ReleaseRegisters(outer_next_register_index_);
   }
   register_allocator() {
     return this.builder_.register_allocator_;
@@ -440,9 +450,6 @@ export default class BytecodeGenerator {
     this.feedback_slot_cache_.Put(slot_kind, variable, this.feedback_index(slot));
     return slot;
   }
-  feedback_index(slot) {
-    return slot.id_;
-  }
 
   VisitExpressionStatement(stmt) {
     this.builder_.SetStatementPosition(stmt);
@@ -457,8 +464,15 @@ export default class BytecodeGenerator {
     // CurrentScope current_scope(this, stmt->scope());
     if (stmt.scope_ !== null && stmt.scope_.NeedsContext()) {
       this.BuildNewLocalBlockContext(stmt.scope_);
-      // let scope = new ContextScope(this. stmt.scope_);
+      let scope = new ContextScope(this. stmt.scope_);
       this.VisitBlockDeclarationsAndStatements(stmt);
+      // 析构
+      let outer_ = scope.outer_;
+      if (outer_) {
+        this.builder_.PopContext(outer_.register_);
+        outer_.register_ = scope.register_;
+      }
+      this.execution_context_ = outer_;
     } else {
       this.VisitBlockDeclarationsAndStatements(stmt);
     }
@@ -511,7 +525,7 @@ export default class BytecodeGenerator {
   /**
    * 计算表达式结果并保存到累加器中
    * @param {Assignment} expr 赋值表达式右值
-   * @return {TypeHint}
+   * @return {TypeHint} 右值的类型推断 Boolean/String/Any
    */
   VisitForAccumulatorValue(expr) {
     let accumulator_scope = new ValueResultScope(this);
@@ -549,12 +563,12 @@ export default class BytecodeGenerator {
   BuildVariableAssignment(variable, op, hole_check_mode, lookup_hoisting_mode) {
     let mode = variable.mode();
     // RegisterAllocationScope assignment_register_scope(this);
+    let outer_next_register_index_ = this.register_allocator().next_register_index_;
     let end_label = null;
     let loc = variable.location();
-    console.log(loc);
     switch (loc) {
       case VariableLocation_PARAMETER:
-      case VariableLocation_LOCAL:
+      case VariableLocation_LOCAL: {
         let destination = null;
         if (loc === VariableLocation_PARAMETER) {
           if (variable.IsReceiver()) {
@@ -582,7 +596,55 @@ export default class BytecodeGenerator {
           // this.builder_.CallRuntime(kThrowConstAssignError)
         }
         break;
+      }
+      case VariableLocation_UNALLOCATED: {
+        let slot = this.GetCachedStoreGlobalICSlot(this.language_mode(), variable);
+        this.builder_.StoreGlobal(variable.raw_name(), this.feedback_index(slot));
+        break;
+      }
+      case VariableLocation_CONTEXT: {
+        // 获取上下文深度 每一个作用域会生成一个
+        let depth = this.execution_context_.ContextChainDepth(variable.scope_);
+        // 获取上下文作用链
+        let context = this.execution_context_.Previous(depth);
+        let context_reg = null;
+
+        if (context) {
+          context_reg = context.register_;
+        } else {
+          context_reg = this.execution_context_.register_;
+        }
+
+        if (hole_check_mode === HoleCheckMode_kRequired) {
+          let value_temp = this.register_allocator().NewRegister();
+          this.builder_
+          .StoreAccumulatorInRegister(value_temp)
+          .LoadContextSlot(context_reg, variable.index_, depth, ContextSlotMutability_kMutableSlot);
+
+          this.BuildHoleCheckForVariableAssignment(variable, op);
+          this.builder_.LoadAccumulatorWithRegister(value_temp);
+        }
+
+        if (mode !== VariableMode_kConst || op === TokenEnumList.indexOf('Token::INIT')) {
+          this.builder_.StoreContextSlot(context_reg, variable.index_, depth);
+        } else if (variable.throw_on_const_assignment(this.language_mode())) {
+          // this.builder_.CallRuntime(kThrowConstAssignError)
+        }
+        break;
+      }
+        
       // TODO
+    }
+    // 析构
+    this.register_allocator().ReleaseRegisters(outer_next_register_index_);
+  }
+  BuildHoleCheckForVariableAssignment(variable, op) {
+    // 检测const this = 1
+    if (variable.is_this() && variable.mode() === VariableMode_kConst
+    && op === TokenEnumList.indexOf('Token::INIT')) {
+      this.builder_.ThrowSuperAlreadyCalledIfNotHole();
+    } else {
+      this.BuildThrowIfHole(variable);
     }
   }
 
@@ -629,6 +691,7 @@ export default class BytecodeGenerator {
     }
   }
 
+  feedback_index(slot) { return slot.id_; }
   language_mode() { return this.current_scope_.language_mode(); }
   function_kind() { return this.info_.literal_.kind(); }
   feedback_spec() { return this.info_.feedback_vector_spec_; }

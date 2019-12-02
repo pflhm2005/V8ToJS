@@ -510,3 +510,6 @@ export const TypeHint_kString = 2;
 
 export const AccumulatorPreservingMode_kNone = 0;
 export const AccumulatorPreservingMode_kPreserve = 1;
+
+export const ContextSlotMutability_kImmutableSlot = 0;
+export const ContextSlotMutability_kMutableSlot = 1;

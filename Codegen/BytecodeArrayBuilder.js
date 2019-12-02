@@ -29,6 +29,12 @@ import {
   Bytecode_kLdaSmi,
   Bytecode_kLdaNull,
   Bytecode_kBoolean,
+  ContextSlotMutability_kImmutableSlot,
+  Bytecode_kLdaImmutableCurrentContextSlot,
+  Bytecode_kLdaCurrentContextSlot,
+  Bytecode_kLdaImmutableContextSlot,
+  Bytecode_kLdaContextSlot,
+  Bytecode_kPopContext,
 } from "../enum";
 import { FLAG_ignition_reo, FLAG_ignition_filter_expression_positions } from "../Compiler/Flag";
 import BytecodeRegisterAllocator from "./BytecodeRegisterAllocator";
@@ -212,8 +218,26 @@ export default class BytecodeArrayBuilder {
    * 3. Createxxx 统一由宏和枚举宏定义
    * 由于第一步不是固定的 所以统一对2、3进行类似于宏的统一分发处理
    */
+  LoadContextSlot(context, slot_index, depth, mutability) {
+    if (context.is_current_context() & depth === 0) {
+      if (mutability === ContextSlotMutability_kImmutableSlot) {
+        this.Output(Bytecode_kLdaImmutableCurrentContextSlot, [slot_index]);
+      } else {
+        this.Output(Bytecode_kLdaCurrentContextSlot, [slot_index]);
+      }
+    } else if (mutability === ContextSlotMutability_kImmutableSlot) {
+      this.Output(Bytecode_kLdaImmutableContextSlot, [context, slot_index, depth]);
+    } else {
+      this.Output(Bytecode_kLdaContextSlot, slot_index, depth);
+    }
+    return this;
+  }
   PushContext(ctx) {
     this.Output(Bytecode_kPushContext, [ctx]);
+    return this;
+  }
+  PopContext(ctx) {
+    this.Output(Bytecode_kPopContext, [ctx]);
     return this;
   }
   OutputStar(reg) {
@@ -261,22 +285,25 @@ export default class BytecodeArrayBuilder {
     if (smi === 0) {
       this.Output(Bytecode_kLdaZero);
     } else {
-      this.Output(Bytecode_kLdaSmi, smi);
+      this.Output(Bytecode_kLdaSmi, [smi]);
     }
     return this;
   }
   // TODO
   LoadLiteral_HeapNumber() {
-
+    return this;
   }
   LoadLiteral_String() {
-
+    return this;
   }
   LoadLiteral_Symbol() {
-
+    return this;
+  }
+  LoadLiteral_Scope() {
+    return this;
   }
   LoadLiteral_BigInt() {
-
+    return this;
   }
 
     /**
