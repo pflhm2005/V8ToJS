@@ -203,7 +203,6 @@ export default class BytecodeArrayBuilder {
     return this.bytecode_array_writer_.exit_seen_in_block_;
   }
   StackCheck() {}
-  Receiver() {}
 
   /**
    * 下列函数处理字节码节点的生成
@@ -338,6 +337,9 @@ export default class BytecodeArrayBuilder {
   }
   Parameter(parameter_index) {
     return Register.FromParameterIndex(parameter_index + 1, this.parameter_count_);
+  }
+  Local(index) {
+    return new Register(index);
   }
   StoreAccumulatorInRegister(reg) {
     if (this.register_optimizer_) {

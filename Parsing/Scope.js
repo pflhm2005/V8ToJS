@@ -22,17 +22,17 @@ import {
   kMappedArguments,
   kUnmappedArguments,
   SLOPPY_FUNCTION_NAME_VARIABLE,
-  CONTEXT,
+  VariableLocation_CONTEXT,
   TokenEnumList,
   kMaybeAssigned,
   CLASS_SCOPE,
   kModule,
   BLOCK_SCOPE,
   VariableMode_kDynamicLocal,
-  MODULE,
+  VariableLocation_MODULE,
   MIN_CONTEXT_EXTENDED_SLOTS,
   MIN_CONTEXT_SLOTS,
-  LOCAL,
+  VariableLocation_LOCAL,
 } from "../enum";
 import { Variable, AstNodeFactory } from "../ast/AST";
 import {
@@ -337,7 +337,7 @@ export default class Scope {
   // LookupInScopeInfo() {
   //   let name_handle = name.literal_bytes_;
   //   let found = false;
-  //   let location = CONTEXT;
+  //   let location = VariableLocation_CONTEXT;
   //   let index = 0;
   //   {
   //     index = ScopeInfo.ContextSlotIndex(this.scope_info_, name_handle, mode, )
@@ -662,7 +662,7 @@ export class DeclarationScope extends Scope {
     }
     if (Variable.initialization_flag() === kCreatedInitialized) return;
 
-    if (variable.location() === MODULE && !variable.IsExport()) {
+    if (variable.location() === VariableLocation_MODULE && !variable.IsExport()) {
       return this.SetNeedsHoleCheck(variable, proxy);
     }
 
@@ -733,13 +733,13 @@ export class DeclarationScope extends Scope {
     }
   }
   AllocateHeapSlot(variable) {
-    variable.AllocateTo(CONTEXT, this.num_heap_slots_++);
+    variable.AllocateTo(VariableLocation_CONTEXT, this.num_heap_slots_++);
   }
   AllocateStackSlot(variable) {
     if (this.is_block_scope()) {
       this.outer_scope_.GetDeclarationScope().AllocateStackSlot(variable);
     } else {
-      variable.AllocateTo(LOCAL, this.num_stack_slots_++);
+      variable.AllocateTo(VariableLocation_LOCAL, this.num_stack_slots_++);
     }
   }
   MustAllocate(variable) {

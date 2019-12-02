@@ -81,18 +81,18 @@ import {
   _kVariableDeclaration,
   kHasDuplicateParameters,
   kShouldEagerCompile,
-  kElided,
-  UNALLOCATED,
+  HoleCheckMode_kElided,
+  VariableLocation_UNALLOCATED,
   _kCompoundAssignment,
   _kExpressionStatement,
-  kRequired,
+  HoleCheckMode_kRequired,
   THIS_VARIABLE,
   VariableMode_kConst,
-  REPL_GLOBAL,
-  CONTEXT,
-  PARAMETER,
-  LOCAL,
-  LOOKUP,
+  VariableLocation_REPL_GLOBAL,
+  VariableLocation_CONTEXT,
+  VariableLocation_PARAMETER,
+  VariableLocation_LOCAL,
+  VariableLocation_LOOKUP,
   AssignType_NON_PROPERTY,
   VariableMode_kPrivateMethod,
   AssignType_PRIVATE_METHOD,
@@ -106,6 +106,7 @@ import {
   AssignType_NAMED_SUPER_PROPERTY,
   AssignType_NAMED_PROPERTY,
   AssignType_KEYED_SUPER_PROPERTY,
+  SLOPPY_FUNCTION_NAME_VARIABLE,
 } from "../enum";
 
 import {
@@ -160,6 +161,7 @@ import {
   HasPrivateMethods,
   AssignmentLookupHoistingModeField,
   IsDynamicVariableMode,
+  is_strict,
 } from '../util';
 
 import { AstValueFactory } from './AstValueFactory';
@@ -949,7 +951,7 @@ export class VariableProxy extends Expression {
     this.bit_field_ |= IsAssignedField.encode(false) |
       IsResolvedField.encode(false) |
       IsRemovedFromUnresolvedField.encode(false) |
-      HoleCheckModeField.encode(kElided);
+      HoleCheckModeField.encode(HoleCheckMode_kElided);
   }
   set_var(v) { this.var_ = v; }
   set_is_resolved() { this.bit_field_ = IsResolvedField.update(this.bit_field_, 1); }
@@ -957,7 +959,7 @@ export class VariableProxy extends Expression {
     this.bit_field_ = IsAssignedField.update(this.bit_field_, 1);
     if (this.is_resolved()) this.var_.set_maybe_assigned();
   }
-  set_needs_hole_check() { this.bit_field_ = HoleCheckModeField.update(this.bit_field_, kRequired); }
+  set_needs_hole_check() { this.bit_field_ = HoleCheckModeField.update(this.bit_field_, HoleCheckMode_kRequired); }
   set_maybe_assigned() { this.bit_field_ = MaybeAssignedFlagField.update(this.bit_field_, kMaybeAssigned); }
   is_resolved() { return IsResolvedField.decode(this.bit_field_); }
   is_assigned() { return IsAssignedField.decode(this.bit_field_); }
@@ -1284,7 +1286,7 @@ export class Variable {
       IsUsedField.encode(false) |
       ForceContextAllocationField.encode(false) |
       ForceHoleInitializationField.encode(false) |
-      LocationField.encode(UNALLOCATED) |
+      LocationField.encode(VariableLocation_UNALLOCATED) |
       VariableKindField.encode(kind);
   }
   kind() { return VariableKindField.decode(this.bit_field_); }
@@ -1292,7 +1294,7 @@ export class Variable {
   location() { return LocationField.decode(this.bit_field_); }
   set_is_used() { this.bit_field_ = IsUsedField.update(this.bit_field_, true); }
   is_used() { return IsUsedField.decode(this.bit_field_); }
-  is_this() { return kind() === THIS_VARIABLE; }
+  is_this() { return this.kind() === THIS_VARIABLE; }
   maybe_assigned() { return MaybeAssignedFlagField.decode(this.bit_field_); }
   set_maybe_assigned() { this.bit_field_ = MaybeAssignedFlagField.update(this.bit_field_, kMaybeAssigned); }
   set_is_static_flag(is_static_flag) { this.bit_field_ = IsStaticFlagField.update(this.bit_field_, is_static_flag); }
@@ -1310,13 +1312,17 @@ export class Variable {
   has_forced_context_allocation() {
     return ForceContextAllocationField.decode(this.bit_field_);
   }
+  throw_on_const_assignment(language_mode) {
+    return this.kind() !== SLOPPY_FUNCTION_NAME_VARIABLE || is_strict(language_mode);
+  }
 
   IsStackAllocated() { return this.IsParameter() || this.IsStackLocal(); }
-  IsUnallocated() { return this.location() === UNALLOCATED; }
-  IsContextSlot() { return this.location() === CONTEXT; }
-  IsParameter() { return this.location() === PARAMETER; }
-  IsStackLocal() { return this.location() === LOCAL; }
-  IsLookupSlot() { return this.location() === LOOKUP; }
+  IsUnallocated() { return this.location() === VariableLocation_UNALLOCATED; }
+  IsContextSlot() { return this.location() === VariableLocation_CONTEXT; }
+  IsParameter() { return this.location() === VariableLocation_PARAMETER; }
+  IsStackLocal() { return this.location() === VariableLocation_LOCAL; }
+  IsLookupSlot() { return this.location() === VariableLocation_LOOKUP; }
+  IsReceiver() { return this.index_ === -1; }
 
   binding_needs_init() {
     if (ForceHoleInitializationField.decode(this.bit_field_)) return true;
@@ -1347,7 +1353,7 @@ export class Variable {
   }
   RewriteLocationForRepl() {
     if (this.mode() === VariableMode_kLet) {
-      this.bit_field_ = LocationField.update(this.bit_field_, REPL_GLOBAL);
+      this.bit_field_ = LocationField.update(this.bit_field_, VariableLocation_REPL_GLOBAL);
     }
   }
   static DefaultInitializationFlag(mode) { return mode === VariableMode_kVar ? kCreatedInitialized : kNeedsInitialization; }

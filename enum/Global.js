@@ -195,14 +195,14 @@ export const kMappedArguments = 0;
 export const kUnmappedArguments = 0;
 export const kRestParameter = 0;
 
-export const UNALLOCATED = 0;
-export const PARAMETER = 1;
-export const LOCAL = 2;
-export const CONTEXT = 3;
-export const LOOKUP = 4;
-export const MODULE = 5;
-export const REPL_GLOBAL = 6;
-export const kLastVariableLocation = REPL_GLOBAL;
+export const VariableLocation_UNALLOCATED = 0;
+export const VariableLocation_PARAMETER = 1;
+export const VariableLocation_LOCAL = 2;
+export const VariableLocation_CONTEXT = 3;
+export const VariableLocation_LOOKUP = 4;
+export const VariableLocation_MODULE = 5;
+export const VariableLocation_REPL_GLOBAL = 6;
+export const VariableLocation_kLastVariableLocation = VariableLocation_REPL_GLOBAL;
 
 export const INSIDE_TYPEOF = 0;
 export const NOT_INSIDE_TYPEOF = 1;

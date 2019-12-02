@@ -1,14 +1,14 @@
 import {
-  kElided,
+  HoleCheckMode_kElided,
   kRestParameter,
   kTraceEnter,
   kBody,
-  LOCAL,
+  VariableLocation_LOCAL,
   _kBlock,
   _kVariableDeclaration,
   _kExpressionStatement,
   _kAssignment,
-  UNALLOCATED,
+  VariableLocation_UNALLOCATED,
   NOT_INSIDE_TYPEOF,
   INSIDE_TYPEOF,
   kNewScriptContext,
@@ -16,7 +16,7 @@ import {
   MIN_CONTEXT_SLOTS,
   EVAL_SCOPE,
   FUNCTION_SCOPE,
-  CONTEXT,
+  VariableLocation_CONTEXT,
   AccumulatorPreservingMode_kNone,
   AssignType_NON_PROPERTY,
   _kLiteral,
@@ -29,6 +29,10 @@ import {
   Literal_kString,
   Literal_kSymbol,
   Literal_kBigInt,
+  VariableLocation_PARAMETER,
+  HoleCheckMode_kRequired,
+  VariableMode_kConst,
+  TokenEnumList,
 } from "../enum";
 import Register from "./Register";
 import { IsResumableFunction, IsBaseConstructor, DeclareGlobalsEvalFlag } from "../util";
@@ -331,25 +335,25 @@ export default class BytecodeGenerator {
   VisitArgumentsObject(variable) {
     if (variable === null) return;
     this.builder_.CreateArguments(this.closure_scope_.GetArgumentsType());
-    this.BuildVariableAssignment(variable, 'Token::ASSIGN', kElided);
+    this.BuildVariableAssignment(variable, 'Token::ASSIGN', HoleCheckMode_kElided);
   }
   VisitRestArgumentsArray(rest) {
     if (rest == null) return;
     this.builder_.CreateArguments(kRestParameter);
-    this.BuildVariableAssignment(rest, 'Token::ASSIGN', kElided);
+    this.BuildVariableAssignment(rest, 'Token::ASSIGN', HoleCheckMode_kElided);
   }
   VisitThisFunctionVariable(variable) {
     if (variable == null) return;
     this.builder_.LoadAccumulatorWithRegister();
-    this.BuildVariableAssignment(variable, 'Token::INIT', kElided);
+    this.BuildVariableAssignment(variable, 'Token::INIT', HoleCheckMode_kElided);
   }
   VisitNewTargetVariable(variable) {
     if (variable == null) return;
     if (IsResumableFunction(this.info_.literal_.kind())) return;
-    if (variable.location() === LOCAL) return;
+    if (variable.location() === VariableLocation_LOCAL) return;
 
     this.builder_.LoadAccumulatorWithRegister(this.incoming_new_target_or_generator_);
-    this.BuildVariableAssignment(variable, 'Token::INIT', kElided);
+    this.BuildVariableAssignment(variable, 'Token::INIT', HoleCheckMode_kElided);
   }
   BuildVariableAssignment(variable, op, hole_check_mode) {
     let mode = variable.mode();
@@ -413,12 +417,12 @@ export default class BytecodeGenerator {
     let variable = decl.var_;
     if (!variable.is_used()) return;
     switch (variable.location()) {
-      case UNALLOCATED: {
+      case VariableLocation_UNALLOCATED: {
         let slot = this.GetCachedLoadGlobalICSlot(NOT_INSIDE_TYPEOF, variable);
         this.globals_builder_.AddUndefinedDeclaration(variable.name_, slot);
         break;
       }
-      case CONTEXT:
+      case VariableLocation_CONTEXT:
         if (variable.binding_needs_init()) {
           this.builder_.LoadTheHole()
             .StoreContextSlot(this.execution_context_.register_, variable.index_, 0);
@@ -542,8 +546,44 @@ export default class BytecodeGenerator {
   }
   BuildDestructuringObjectAssignment() {}
   BuildDestructuringArrayAssignment() {}
-  BuildVariableAssignment() {
-    
+  BuildVariableAssignment(variable, op, hole_check_mode, lookup_hoisting_mode) {
+    let mode = variable.mode();
+    // RegisterAllocationScope assignment_register_scope(this);
+    let end_label = null;
+    let loc = variable.location();
+    console.log(loc);
+    switch (loc) {
+      case VariableLocation_PARAMETER:
+      case VariableLocation_LOCAL:
+        let destination = null;
+        if (loc === VariableLocation_PARAMETER) {
+          if (variable.IsReceiver()) {
+            destination = this.builder_.Receiver();
+          } else {
+            destination = this.builder_.Parameter(variable.index_);
+          }
+        } else {
+          destination = this.builder_.Local(variable.index_);
+        }
+
+        if (hole_check_mode === HoleCheckMode_kRequired) {
+          let value_temp = this.register_allocator().NewRegister();
+          this.builder_
+          .StoreAccumulatorInRegister(value_temp)
+          .LoadAccumulatorWithRegister(destination);
+
+          this.BuildHoleCheckForVariableAssignment(variable, op);
+          this.builder_.LoadAccumulatorWithRegister(value_temp);
+        }
+
+        if (mode !== VariableMode_kConst || op === TokenEnumList.indexOf('Token::INIT')) {
+          this.builder_.StoreAccumulatorInRegister(destination);
+        } else if (variable.throw_on_const_assignment(this.language_mode())) {
+          // this.builder_.CallRuntime(kThrowConstAssignError)
+        }
+        break;
+      // TODO
+    }
   }
 
   /**
@@ -589,6 +629,7 @@ export default class BytecodeGenerator {
     }
   }
 
+  language_mode() { return this.current_scope_.language_mode(); }
   function_kind() { return this.info_.literal_.kind(); }
   feedback_spec() { return this.info_.feedback_vector_spec_; }
   InitializeAstVisitor(stack_limit) {

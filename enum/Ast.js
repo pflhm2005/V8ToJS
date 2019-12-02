@@ -12,8 +12,8 @@ export const kParameterDeclaration = 3;
 export const kVarDeclaration = 4;
 export const kLexicalDeclaration = 5;
 
-export const kRequired = 0;
-export const kElided = 1;
+export const HoleCheckMode_kRequired = 0;
+export const HoleCheckMode_kElided = 1;
 
 // for语句的遍历模式
 export const ENUMERATE = 0; // for in
