@@ -503,3 +503,10 @@ export const bytecodeMapping = [
 export const Bytecode_kAny = 0;
 export const Bytecode_kBoolean = 1;
 export const Bytecode_kString = 2;
+
+export const TypeHint_kAny = 0;
+export const TypeHint_kBoolean = 1;
+export const TypeHint_kString = 2;
+
+export const AccumulatorPreservingMode_kNone = 0;
+export const AccumulatorPreservingMode_kPreserve = 1;

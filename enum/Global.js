@@ -26,15 +26,34 @@ export const SLOPPY_FUNCTION_NAME_VARIABLE = 4;
 /**
  * 声明类型
  */
-export const kLet = 0;  // let声明
-export const kConst = 1;  // cosnt声明
-export const kVar = 2;  // var、function声明
+export const VariableMode_kLet = 0;  // let声明
+export const VariableMode_kConst = 1;  // const声明
+export const VariableMode_kVar = 2;  // var、function声明
 // 编译器内部类型
-export const kTemporary = 3;  // 临时变量(用户不可见) 分配在栈上
-export const kDynamic = 4;  // 未知的声明
-export const kDynamicGlobal = 5;  // 全局变量
-export const kDynamicLocal = 6; // 本地变量
-export const kLastLexicalVariableMode = kConst;  // ES6新出的两种类型
+export const VariableMode_kTemporary = 3;  // 临时变量(用户不可见) 分配在栈上
+export const VariableMode_kDynamic = 4;  // 未知的声明
+export const VariableMode_kDynamicGlobal = 5;  // 全局变量
+export const VariableMode_kDynamicLocal = 6; // 本地变量
+// 私有属性
+export const VariableMode_kPrivateMethod = 7;
+export const VariableMode_kPrivateSetterOnly = 8;
+export const VariableMode_kPrivateGetterOnly = 9;
+export const VariableMode_kPrivateGetterAndSetter = 10;
+
+export const VariableMode_kLastLexicalVariableMode = VariableMode_kConst;  // ES6新出的两种类型
+
+/**
+ * 赋值类型
+ */
+export const AssignType_NON_PROPERTY = 0; // 解构赋值
+export const AssignType_NAMED_PROPERTY = 1; // obj.key
+export const AssignType_KEYED_PROPERTY = 2; // obj[key]
+export const AssignType_NAMED_SUPER_PROPERTY = 3; // super.key
+export const AssignType_KEYED_SUPER_PROPERTY = 4; // super[key]
+export const AssignType_PRIVATE_METHOD = 5; // obj.#key
+export const AssignType_PRIVATE_GETTER_ONLY = 5;  // obj.#key getter
+export const AssignType_PRIVATE_SETTER_ONLY = 5;  // obj.#key setter
+export const AssignType_PRIVATE_GETTER_AND_SETTER = 5;  // obk.#key gettter+setter
 
 /**
  * 字符类型相关

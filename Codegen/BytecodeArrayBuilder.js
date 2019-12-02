@@ -25,6 +25,10 @@ import {
   Bytecode_kStaCurrentContextSlot,
   Bytecode_kStar,
   Bytecode_kMov,
+  Bytecode_kLdaZero,
+  Bytecode_kLdaSmi,
+  Bytecode_kLdaNull,
+  Bytecode_kBoolean,
 } from "../enum";
 import { FLAG_ignition_reo, FLAG_ignition_filter_expression_positions } from "../Compiler/Flag";
 import BytecodeRegisterAllocator from "./BytecodeRegisterAllocator";
@@ -151,6 +155,13 @@ export default class BytecodeArrayBuilder {
     this.AttachOrEmitDeferredSourceInfo(node);
     this.bytecode_array_writer_.Write(node);
   }
+  SetExpressionPosition(expr) {
+    let position = expr.position_;
+    if (position === kNoSourcePosition) return;
+    if (!this.latest_source_info_.is_statement()) {
+      this.latest_source_info_.MakeExpressionPosition(position);
+    }
+  }
   AttachOrEmitDeferredSourceInfo(node) {
     if (!this.deferred_source_info_.is_valid()) return;
     if (!node.source_info_.is_valid()) {
@@ -223,8 +234,16 @@ export default class BytecodeArrayBuilder {
     this.Output(Bytecode_kLdaConstant, [entry]);
     return this;
   }
+  LoadBoolean() {
+    this.Output(Bytecode_kBoolean);
+    return this;
+  }
   LoadUndefined() {
     this.Output(Bytecode_kLdaUndefined);
+    return this;
+  }
+  LoadNull() {
+    this.Output(Bytecode_kLdaNull);
     return this;
   }
   LoadAccumulatorWithRegister(reg) {
@@ -237,13 +256,54 @@ export default class BytecodeArrayBuilder {
     return this;
   }
   /**
-   * 重载过多 再说
+   * 重载过多 直接分为单个函数
    */
-  LoadLiteral() {
+  LoadLiteral_Smi(smi) {
+    if (smi === 0) {
+      this.Output(Bytecode_kLdaZero);
+    } else {
+      this.Output(Bytecode_kLdaSmi, smi);
+    }
     return this;
   }
+  // TODO
+  LoadLiteral_HeapNumber() {
+
+  }
+  LoadLiteral_String() {
+
+  }
+  LoadLiteral_Symbol() {
+
+  }
+  LoadLiteral_BigInt() {
+
+  }
+
+    /**
+   * 将所有Ouput、Create方法统一处理
+   * 逻辑参照DEFINE_BYTECODE_OUTPUT宏
+   * @param {Bytecode} bytecode 字节码类型
+   * @param {Operands} operands 操作类型
+   * @returns {void}
+   */
+  Output(bytecode, operands = []) {
+    let node = this.Create(bytecode, operands);
+    this.Write(node);
+  }
   /**
-   * 这三个方法较为特殊
+   * C++源码由template、rest参数组成
+   * 枚举值由宏拼接而成 这里处理成手动传入
+   * template参数的作用由于不是泛型声明而是实际使用 所以作为数组参数传入
+   * @param 所有参数由Output透传进来
+   * @returns {BytecodeNode}
+   */
+  Create(bytecode, operands = []) {
+    return BytecodeNodeBuilder.Make(this, operands, bytecodeMapping[bytecode]);
+  }
+
+  /**
+   * 这三个方法较为特殊 属于内存元操作
    * 直接走的Bytenode生成 不走Prepare 否则会造成无限递归
    */
   OutputLdarRaw(reg) {
@@ -265,28 +325,6 @@ export default class BytecodeArrayBuilder {
     let node = BytecodeNode.Create2(
       Bytecode_kStar, null, new BytecodeSourceInfo(), [operand0, operand1], map[2], map[3]);
     this.Write(node);
-  }
-
-  /**
-   * 将所有Ouput、Create方法统一处理
-   * 逻辑参照DEFINE_BYTECODE_OUTPUT宏
-   * @param {Bytecode} bytecode 字节码类型
-   * @param {Operands} operands 操作类型
-   * @returns {void}
-   */
-  Output(bytecode, operands = []) {
-    let node = this.Create(bytecode, operands);
-    this.Write(node);
-  }
-  /**
-   * C++源码由template、rest参数组成
-   * 枚举值由宏拼接而成 这里处理成手动传入
-   * template参数的作用由于不是泛型声明而是实际使用 所以作为数组参数传入
-   * @param 所有参数由Output透传进来
-   * @returns {BytecodeNode}
-   */
-  Create(bytecode, operands = []) {
-    return BytecodeNodeBuilder.Make(this, operands, bytecodeMapping[bytecode]);
   }
 
   /**
@@ -358,6 +396,10 @@ class BytecodeSourceInfo {
   }
   MakeStatementPosition(source_position) {
     this.position_type_ = kStatement;
+    this.source_position_ = source_position;
+  }
+  MakeExpressionPosition(source_position) {
+    this.position_type_ = kExpression;
     this.source_position_ = source_position;
   }
   is_valid() {

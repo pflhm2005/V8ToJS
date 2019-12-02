@@ -7,8 +7,8 @@ import {
   kArrowFunction,
   kAsyncArrowFunction,
   PARAMETER_VARIABLE,
-  kVar,
-  kLet
+  VariableMode_kVar,
+  VariableMode_kLet
 } from '../enum';
 
 import {
@@ -214,7 +214,7 @@ export class ParameterDeclarationParsingScope extends ExpressionScope {
   }
   Declare(name, pos) {
     let kind = PARAMETER_VARIABLE;
-    let mode = kVar;
+    let mode = VariableMode_kVar;
     let { was_added, variable } = this.parser_.DeclareVariable(
       name, kind, mode, Variable.DefaultInitializationFlag(mode), this.parser_.scope_, false, pos);
     if (!this.has_duplicate() && !was_added) {
@@ -264,7 +264,7 @@ export class ArrowHeadParsingScope extends ExpressionParsingScope {
     let result = this.parser_.NewFunctionScope(this.kind());
     if (!this.has_simple_parameter_list_) result.SetHasNonSimpleParameters();
     let kind = PARAMETER_VARIABLE;
-    let mode = this.has_simple_parameter_list_ ? kVar : kLet;
+    let mode = this.has_simple_parameter_list_ ? VariableMode_kVar : VariableMode_kLet;
     for (let proxy of this.variable_list_) {
       this.parser_.DeclareAndBindVariable(proxy, kind, mode, Variable.DefaultInitializationFlag(mode),
         result, false, proxy.position());

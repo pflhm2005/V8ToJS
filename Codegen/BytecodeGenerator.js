@@ -17,6 +17,18 @@ import {
   EVAL_SCOPE,
   FUNCTION_SCOPE,
   CONTEXT,
+  AccumulatorPreservingMode_kNone,
+  AssignType_NON_PROPERTY,
+  _kLiteral,
+  Literal_kSmi,
+  Literal_kHeapNumber,
+  Literal_kUndefined,
+  Literal_kBoolean,
+  Literal_kNull,
+  Literal_kTheHole,
+  Literal_kString,
+  Literal_kSymbol,
+  Literal_kBigInt,
 } from "../enum";
 import Register from "./Register";
 import { IsResumableFunction, IsBaseConstructor, DeclareGlobalsEvalFlag } from "../util";
@@ -26,6 +38,8 @@ import GlobalDeclarationsBuilder from "./GlobalDeclarationsBuilder";
 import FeedbackSlot from "../util/FeedbackSlot";
 import ValueResultScope from "./ValueResultScope";
 import ContextScope from "./ContextScope";
+import { Property } from "../ast/Ast";
+import { AssignmentLhsData } from "./AssignmentLhsData";
 
 // This kind means that the slot points to the middle of other slot
 // which occupies more than one feedback vector element.
@@ -88,6 +102,13 @@ const kSystemPointerSizeLog2 = 2;
 const kTaggedSize = 1 << kSystemPointerSizeLog2;
 const kMaximumSlots = (kMaxRegularHeapObjectSize - kTodoHeaderSize) / kTaggedSize - 1;
 
+/**
+ * 字节码生成器
+ * 核心概念如下
+ * 1. Register 寄存器 => 用来存储计算结果
+ * 2. Accumulator 累加器 => 寄存器的一种 => 用来储存计算产生的中间结果 
+ * 3. Imm 立即值
+ */
 export default class BytecodeGenerator {
   constructor(info, ast_string_constants, eager_inner_literals) {
     this.zone_ = null;
@@ -124,7 +145,9 @@ export default class BytecodeGenerator {
     this.catch_prediction_ = UNCAUGHT;
     this.stack_limit_ = 0;
     this.stack_overflow_ = false;
-    if (info.has_source_range_map()) this.block_coverage_builder_ = new BlockCoverageBuilder(null, new BytecodeArrayBuilder(), info.source_range_map_);
+    if (info.has_source_range_map()) {
+      this.block_coverage_builder_ = new BlockCoverageBuilder(null, new BytecodeArrayBuilder(), info.source_range_map_);
+    }
   }
   GenerateBytecode(stack_limit) {
     this.InitializeAstVisitor(stack_limit);
@@ -222,7 +245,6 @@ export default class BytecodeGenerator {
   }
   BuildNewLocalActivationContext() {
     let value_execution_result = new ValueResultScope(this);
-
     let scope = this.closure_scope_;
 
     if (scope.is_script_scope()) {
@@ -301,6 +323,8 @@ export default class BytecodeGenerator {
         return this.VisitBlock(node);
       case _kAssignment:
         return this.VisitAssignment(node);
+      case _kLiteral:
+        return this.VisitLiteral(node);
     }
   }
 
@@ -327,6 +351,15 @@ export default class BytecodeGenerator {
     this.builder_.LoadAccumulatorWithRegister(this.incoming_new_target_or_generator_);
     this.BuildVariableAssignment(variable, 'Token::INIT', kElided);
   }
+  BuildVariableAssignment(variable, op, hole_check_mode) {
+    let mode = variable.mode();
+    let assignment_register_scope = new RegisterAllocationScope(this);
+    // BytecodeLabel end_label;
+    switch (variable.location()) {
+
+    }
+  }
+
   BuildGeneratorObjectVariableInitialization() {
 
   }
@@ -436,19 +469,128 @@ export default class BytecodeGenerator {
     }
   }
 
+  /**
+   * 解析赋值表达式
+   * 包含target_、value_
+   * 步骤如下
+   * 1. 获取赋值表达式左边类型(解构、对象、普通标识符)
+   * 2. 对右值进行处理后放入累加器中
+   * 3. 记录最后一次表达式的位置
+   * 4. 构建赋值表达式的字节码
+   * @param {Assignment} expr 赋值表达式
+   */
   VisitAssignment(expr) {
     let lhs_data = this.PrepareAssignmentLhs(expr.target_);
     this.VisitForAccumulatorValue(expr.value_);
     this.builder_.SetExpressionPosition(expr);
     this.BuildAssignment(lhs_data, expr.op(), expr.lookup_hoisting_mode());
   }
+  PrepareAssignmentLhs(lhs, accumulator_preserving_mode = AccumulatorPreservingMode_kNone) {
+    let assign_type = null;
+    /**
+     * 根据类型进行划分
+     * 1. 对象属性
+     * 2. 普通标识符变量
+     */
+    if (lhs.IsProperty()) {
+      assign_type = Property.GetAssignType(lhs);
+    } else {
+      assign_type = AssignType_NON_PROPERTY;
+    }
+    switch (assign_type) {
+      case AssignType_NON_PROPERTY:
+        return AssignmentLhsData.NonProperty(lhs);
+      // TODO
+    }
+    throw new Error('UNREACHABLE');
+  }
+  /**
+   * 计算表达式结果并保存到累加器中
+   * @param {Assignment} expr 赋值表达式右值
+   * @return {TypeHint}
+   */
+  VisitForAccumulatorValue(expr) {
+    let accumulator_scope = new ValueResultScope(this);
+    this.Visit(expr);
+    let type_hint = accumulator_scope.type_hint_;
+    // 析构
+    this.execution_result_ = accumulator_scope.outer_;
+    accumulator_scope = null;
+    return type_hint;
+  }
+  BuildAssignment(lhs_data, op, lookup_hoisting_mode) {
+    let expr = lhs_data.expr_;
+    switch (lhs_data.assign_type_) {
+      /**
+       * 处理赋值解构与普通赋值
+       * 1. let {a} = {a: 1};
+       * 2. let [a] = [1];
+       * 3. let a = 1;
+       */
+      case AssignType_NON_PROPERTY: {
+        if (expr.IsObjectLiteral()) {
+          this.BuildDestructuringObjectAssignment(expr, op, lookup_hoisting_mode);
+        } else if (expr.IsArrayLiteral()) {
+          this.BuildDestructuringArrayAssignment(expr, op, lookup_hoisting_mode);
+        } else {
+          this.BuildVariableAssignment(expr.var_, op, expr.hole_check_mode(), lookup_hoisting_mode);
+        }
+        break;
+      }
+      // TODO
+    }
+  }
+  BuildDestructuringObjectAssignment() {}
+  BuildDestructuringArrayAssignment() {}
+  BuildVariableAssignment() {
+    
+  }
 
-  function_kind() {
-    return this.info_.literal_.kind();
+  /**
+   * 这个类的构造经过了特殊处理
+   * 因此在生成字节码的时候也要进行额外区分各类字面量
+   * @param {Literal*} expr 字面量
+   */
+  VisitLiteral(expr) {
+    if (this.execution_result_.IsEffect()) return;
+    switch (expr.type()) {
+      /**
+       * 这里会做各种类型转换 实际上返回各类立即值
+       * JS在这里做调用分发
+       */
+      case Literal_kSmi:
+        this.builder_.LoadLiteral_Smi(expr.val());
+        break;
+      case Literal_kHeapNumber:
+        this.builder_.LoadLiteral_HeapNumber(expr.val());
+      case Literal_kUndefined:
+        this.builder_.LoadUndefined();
+        break;
+      case Literal_kBoolean:
+        this.builder_.LoadBoolean(expr.ToBooleanIsTrue());
+        execution_result_.SetResultIsBoolean();
+        break;
+      case Literal_kNull:
+        this.builder_.LoadNull();
+        break;
+      case Literal_kTheHole:
+        this.builder_.LoadTheHole();
+        break;
+      case Literal_kString:
+        this.builder_.LoadLiteral_String(expr);
+        execution_result_.SetResultIsString();
+        break;
+      case Literal_kSymbol:
+        this.builder_.LoadLiteral_Symbol(expr.val());
+        break;
+      case Literal_kBigInt:
+        this.builder_.LoadLiteral_BigInt(expr.val());
+        break;
+    }
   }
-  feedback_spec() {
-    return this.info_.feedback_vector_spec_;
-  }
+
+  function_kind() { return this.info_.literal_.kind(); }
+  feedback_spec() { return this.info_.feedback_vector_spec_; }
   InitializeAstVisitor(stack_limit) {
     this.stack_limit = stack_limit;
     this.stack_overflow_ = false;
@@ -456,15 +598,6 @@ export default class BytecodeGenerator {
   AllocateTopLevelRegisters() { }
   BuildGeneratorPrologue() {
 
-  }
-
-  BuildVariableAssignment(variable, op, hole_check_mode) {
-    let mode = variable.mode();
-    let assignment_register_scope = new RegisterAllocationScope(this);
-    // BytecodeLabel end_label;
-    switch (variable.location()) {
-
-    }
   }
 }
 class FeedbackSlotCache {

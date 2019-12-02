@@ -17,9 +17,9 @@ import { FuncNameInferrer } from './function/FuncNameInferrer';
 import ParsePropertyInfo from './object/ParsePropertyInfo';
 
 import {
-  kVar,
-  kLet,
-  kConst,
+  VariableMode_kVar,
+  VariableMode_kLet,
+  VariableMode_kConst,
 
   kObjectLiteral,
 
@@ -70,7 +70,7 @@ import {
   SETTER,
   kExpression,
   kWrapped,
-  kLastLexicalVariableMode,
+  VariableMode_kLastLexicalVariableMode,
   BLOCK_SCOPE,
   kStrict,
   kClassLiteral,
@@ -649,7 +649,7 @@ export default class ParserBase {
     let functionLiteral = this.ParseFunctionLiteral(name, this.scanner_.location(), name_validity,
       function_kind, pos, kDeclaration, this.language_mode(), null);
 
-    let mode = (!this.scope_.is_declaration_scope_ || this.scope_.is_module_scope()) ? kLet : kVar;
+    let mode = (!this.scope_.is_declaration_scope_ || this.scope_.is_module_scope()) ? VariableMode_kLet : VariableMode_kVar;
     let kind = is_sloppy(this.language_mode()) &&
       !this.scope_.is_declaration_scope_ &&
       flags === kIsNormal ? SLOPPY_BLOCK_FUNCTION_VARIABLE : NORMAL_VARIABLE;
@@ -930,7 +930,7 @@ export default class ParserBase {
         inner_body.push(inner_block);
         inner_block.scope_ = inner_scope;
         if (!this.HasCheckedSyntax()) {
-          let conflict = inner_scope.FindVariableDeclaredIn(function_scope, kLastLexicalVariableMode);
+          let conflict = inner_scope.FindVariableDeclaredIn(function_scope, VariableMode_kLastLexicalVariableMode);
           if (conflict !== null) this.ReportVarRedeclarationIn(conflict, inner_scope);
         }
         this.InsertShadowingVarBindingInitializers(inner_block);
@@ -1451,16 +1451,16 @@ export default class ParserBase {
      */
     switch (this.peek()) {
       case 'Token::VAR':
-        parsing_result.descriptor.mode = kVar;
+        parsing_result.descriptor.mode = VariableMode_kVar;
         this.Consume('Token::VAR');
         break;
       case 'Token::CONST':
         this.Consume('Token::CONST');
-        parsing_result.descriptor.mode = kConst;
+        parsing_result.descriptor.mode = VariableMode_kConst;
         break;
       case 'Token::LET':
         this.Consume('Token::LET');
-        parsing_result.descriptor.mode = kLet;
+        parsing_result.descriptor.mode = VariableMode_kLet;
         break;
       default:
         this.UNREACHABLE();
@@ -1506,7 +1506,7 @@ export default class ParserBase {
         if (this.peek() === 'Token::ASSIGN' ||
           // 判断for in、for of语法 这个暂时不解析
           (var_context === kForStatement && this.PeekInOrOf()) ||
-          parsing_result.descriptor.mode === kLet) {
+          parsing_result.descriptor.mode === VariableMode_kLet) {
           pattern = this.ExpressionFromIdentifier(name, decl_pos);
         }
         /**
@@ -1569,11 +1569,11 @@ export default class ParserBase {
            * 这里的name为null不代表变量名是null 而是解构声明语句
            * 即const a、const { a, b }不合法
            */
-          if (parsing_result.descriptor.mode === kConst || name === null) {
+          if (parsing_result.descriptor.mode === VariableMode_kConst || name === null) {
             throw new Error(kDeclarationMissingInitializer);
           }
           // let a 默认赋值为undefined
-          if (parsing_result.descriptor.mode === kLet) value = this.ast_node_factory_.NewUndefinedLiteral(this.position());
+          if (parsing_result.descriptor.mode === VariableMode_kLet) value = this.ast_node_factory_.NewUndefinedLiteral(this.position());
         }
       }
 
@@ -2136,7 +2136,7 @@ export default class ParserBase {
                 catch_info.variable = catch_info.scope.DeclareCatchVariableName(this.ast_value_factory_.dot_catch_string());
                 let decls = this.scope_.declarations;
                 let declaration_it = decls.length;
-                let destructuring = new VariableDeclarationParsingScope(this, kLet, null);
+                let destructuring = new VariableDeclarationParsingScope(this, VariableMode_kLet, null);
                 catch_info.pattern = this.ParseBindingPattern();
 
                 let initializer_position = this.end_position();
@@ -2158,7 +2158,7 @@ export default class ParserBase {
                     let name = catch_info.variable.raw_name();
                     if (inner_scope.LookupLocal(name)) conflict = name;
                   } else {
-                    conflict = inner_scope.FindVariableDeclaredIn(this.scope_, kVar);
+                    conflict = inner_scope.FindVariableDeclaredIn(this.scope_, VariableMode_kVar);
                   }
                   if (conflict !== null) {
                     throw new Error('Identifier has already been declared');

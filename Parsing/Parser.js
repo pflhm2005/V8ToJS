@@ -5,7 +5,7 @@ import {
   PARSE_EAGERLY,
   kNoSourcePosition,
   kUseCounterFeatureCount,
-  kVar,
+  VariableMode_kVar,
   PARAMETER_VARIABLE,
   kSloppyModeBlockScopedFunctionRedefinition,
   kWrapped,
@@ -18,7 +18,7 @@ import {
   kYes,
   kBlock,
   kNamedExpression,
-  kConst,
+  VariableMode_kConst,
   NORMAL_VARIABLE,
   kCreatedInitialized,
   SLOPPY_BLOCK_FUNCTION_VARIABLE,
@@ -29,8 +29,8 @@ import {
   kNoDuplicateParameters,
   REFLECT_APPLY_INDEX,
   kInlineGetImportMetaObject,
-  kLet,
-  kTemporary,
+  VariableMode_kLet,
+  VariableMode_kTemporary,
   kDefaultDerivedConstructor,
   kDefaultBaseConstructor,
   kStrict,
@@ -434,7 +434,7 @@ class Parser extends ParserBase {
   DeclareVariable(name, kind, mode, init, scope, was_added_params, begin, end = kNoSourcePosition) {
     let declaration;
     // var声明的变量需要提升
-    if (mode === kVar && !scope.is_declaration_scope_) {
+    if (mode === VariableMode_kVar && !scope.is_declaration_scope_) {
       declaration = this.ast_node_factory_.NewNestedVariableDeclaration(scope, begin);
     }
     /**
@@ -940,7 +940,7 @@ class Parser extends ParserBase {
     let outer_scope_ = this.scope_;
     this.scope_ = inner_scope;
     for (let decl of inner_scope.decls_) {
-      if (decl.var_.mode() !== kVar || !decl.IsVariableDeclaration()) {
+      if (decl.var_.mode() !== VariableMode_kVar || !decl.IsVariableDeclaration()) {
         continue;
       }
       let name = decl.var_.raw_name();
@@ -1029,7 +1029,7 @@ class Parser extends ParserBase {
        */
       scope.DeclareParameter(
         is_simple ? parameter.name() : this.ast_value_factory_.empty_string(),
-        is_simple ? kVar : kTemporary,
+        is_simple ? VariableMode_kVar : VariableMode_kTemporary,
         is_optional, parameter.is_rest_, this.ast_value_factory_, parameter.position);
     }
   }
@@ -1066,7 +1066,7 @@ class Parser extends ParserBase {
     declaration.set_var(class_variable);
   }
   DeclareClass(variable_name, value, names, class_token_pos, end_pos) {
-    let proxy = this.DeclareBoundVariable(variable_name, kLet, class_token_pos);
+    let proxy = this.DeclareBoundVariable(variable_name, VariableMode_kLet, class_token_pos);
     proxy.var_.initializer_position_ = end_pos;
     if (names) names.push(variable_name);
     let assignment = this.ast_node_factory_.NewAssignment('Token::INIT', proxy, value, class_token_pos);
@@ -1126,7 +1126,7 @@ class Parser extends ParserBase {
         let is_rest = true;
         let is_optional = false;
         let constructor_args = function_scope.DeclareParameter(
-          constructor_args_name, kTemporary, is_optional, is_rest, this.ast_value_factory_, pos);
+          constructor_args_name, VariableMode_kTemporary, is_optional, is_rest, this.ast_value_factory_, pos);
 
         let call = null;
         {

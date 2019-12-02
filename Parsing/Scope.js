@@ -1,7 +1,7 @@
 import {
-  kVar,
-  kDynamic,
-  kConst,
+  VariableMode_kVar,
+  VariableMode_kDynamic,
+  VariableMode_kConst,
   kNotAssigned,
   kSloppy,
   kStrict,
@@ -9,7 +9,7 @@ import {
   kCreatedInitialized,
   THIS_VARIABLE,
   kNeedsInitialization,
-  kTemporary,
+  VariableMode_kTemporary,
   EVAL_SCOPE,
   FUNCTION_SCOPE,
   MODULE_SCOPE,
@@ -17,7 +17,7 @@ import {
   WITH_SCOPE,
   SCRIPT_SCOPE,
   kNormalFunction,
-  kDynamicGlobal,
+  VariableMode_kDynamicGlobal,
   kNoSourcePosition,
   kMappedArguments,
   kUnmappedArguments,
@@ -28,7 +28,7 @@ import {
   CLASS_SCOPE,
   kModule,
   BLOCK_SCOPE,
-  kDynamicLocal,
+  VariableMode_kDynamicLocal,
   MODULE,
   MIN_CONTEXT_EXTENDED_SLOTS,
   MIN_CONTEXT_SLOTS,
@@ -357,7 +357,7 @@ export default class Scope {
    */
   DeclareVariable(declaration, name, pos, mode, kind, init, was_added, sloppy_mode_block_scope_function_redefinition, ok) {
     // 变量提升 往上搜索第一个有效作用域
-    if (mode === kVar && !this.is_declaration_scope_) {
+    if (mode === VariableMode_kVar && !this.is_declaration_scope_) {
       return this.GetDeclarationScope().DeclareVariable(declaration, name, pos, mode, kind, init, was_added, sloppy_mode_block_scope_function_redefinition, ok);
     }
     let variable = this.LookupLocal(name);
@@ -368,8 +368,8 @@ export default class Scope {
        * "eval(var a = 1;)"
        * 属于动态声明的变量
        */
-      if (this.is_eval_scope() && this.is_sloppy(this.language_mode()) && mode === kVar) {
-        // variable = this.NonLocal(name, kDynamic);
+      if (this.is_eval_scope() && this.is_sloppy(this.language_mode()) && mode === VariableMode_kVar) {
+        // variable = this.NonLocal(name, VariableMode_kDynamic);
         variable.set_is_used();
       }
       // 正常声明
@@ -387,7 +387,7 @@ export default class Scope {
     return { was_added, sloppy_mode_block_scope_function_redefinition };
   }
   DeclareCatchVariableName() {
-    let { variable } = this.Declare(name, kVar, NORMAL_VARIABLE, kCreatedInitialized, kNotAssigned, false);
+    let { variable } = this.Declare(name, VariableMode_kVar, NORMAL_VARIABLE, kCreatedInitialized, kNotAssigned, false);
     return variable;
   }
   DeclareLocal(name, mode, kind, was_added_param, init_flag) {
@@ -396,7 +396,7 @@ export default class Scope {
 
     // 作用域判断
     if (this.is_script_scope() || this.is_module_scope()) {
-      if (mode !== kConst) variable.set_maybe_assigned();
+      if (mode !== VariableMode_kConst) variable.set_maybe_assigned();
       variable.set_is_used();
     }
     return variable;
@@ -443,15 +443,15 @@ export default class Scope {
     this.DeclareThis(ast_value_factory);
     // 生成.new.target变量
     this.new_target_ = this.Declare(ast_value_factory.GetOneByteStringInternal(
-      ast_value_factory.new_target_string()), kConst, NORMAL_VARIABLE, kCreatedInitialized, kNotAssigned, false).variable;
+      ast_value_factory.new_target_string()), VariableMode_kConst, NORMAL_VARIABLE, kCreatedInitialized, kNotAssigned, false).variable;
     if (IsConciseMethod(this.function_kind_) || IsClassConstructor(this.function_kind_) || IsAccessorFunction(this.function_kind_)) {
       this.EnsureRareData().this_function = this.Declare(ast_value_factory.GetOneByteStringInternal(
-        ast_value_factory.this_function_string()), kConst, NORMAL_VARIABLE, kCreatedInitialized, kNotAssigned, false).variable;
+        ast_value_factory.this_function_string()), VariableMode_kConst, NORMAL_VARIABLE, kCreatedInitialized, kNotAssigned, false).variable;
     }
   }
   DeclareThis(ast_value_factory) {
     let derived_constructor = IsDerivedConstructor(this.function_kind_);
-    let p1 = derived_constructor ? kConst : kVar;
+    let p1 = derived_constructor ? VariableMode_kConst : VariableMode_kVar;
     let p2 = derived_constructor ? kNeedsInitialization : kCreatedInitialized;
     this.receiver_ = new Variable(this, ast_value_factory.GetOneByteStringInternal(ast_value_factory.this_string()), p1, THIS_VARIABLE, p2, kNotAssigned);
   }
@@ -481,7 +481,7 @@ export default class Scope {
    */
   DeclareParameter(name, mode, is_optional, is_rest, ast_value_factory, position) {
     let variable = null;
-    if (mode === kTemporary) {
+    if (mode === VariableMode_kTemporary) {
       variable = this.NewTemporary(name);
     }
     else {
@@ -502,7 +502,7 @@ export default class Scope {
   }
   NewTemporary(name, maybe_assigned = kMaybeAssigned) {
     let scope = this.GetClosureScope();
-    let variable = new Variable(scope, name, kTemporary, NORMAL_VARIABLE, kCreatedInitialized);
+    let variable = new Variable(scope, name, VariableMode_kTemporary, NORMAL_VARIABLE, kCreatedInitialized);
     scope.AddLocal(variable);
     if (maybe_assigned === kMaybeAssigned) variable.set_maybe_assigned();
     return variable;
@@ -614,13 +614,13 @@ export class DeclarationScope extends Scope {
 
     while (true) {
       if (mode === kDeserializedScope && scope.is_debug_evaluate_scope_) {
-        return entry_point.NonLocal(proxy.raw_name(), kDynamic);
+        return entry_point.NonLocal(proxy.raw_name(), VariableMode_kDynamic);
       }
 
       let variable = mode === kParsedScope ?
         scope.LookupLocal(proxy.raw_name()) : scope.LookupInScopeInfo(proxy.raw_name(), entry_point);
 
-      if (variable !== null && !(scope.is_eval_scope() && variable.mode() === kDynamic)) {
+      if (variable !== null && !(scope.is_eval_scope() && variable.mode() === VariableMode_kDynamic)) {
         if (mode === kParsedScope && force_context_allocation && !variable.is_dynamic()) {
           variable.ForceContextAllocation();
         }
@@ -657,7 +657,7 @@ export class DeclarationScope extends Scope {
     proxy.BindTo(variable);
   }
   UpdateNeedsHoleCheck(variable, proxy, scope) {
-    if (variable.mode() === kDynamicLocal) {
+    if (variable.mode() === VariableMode_kDynamicLocal) {
       return this.UpdateNeedsHoleCheck(variable.local_if_not_shadowed_, proxy, scope);
     }
     if (Variable.initialization_flag() === kCreatedInitialized) return;
@@ -752,7 +752,7 @@ export class DeclarationScope extends Scope {
   }
   MustAllocateInContext(variable) {
     let mode = variable.mode();
-    if (mode === kTemporary) return false;
+    if (mode === VariableMode_kTemporary) return false;
     if (this.is_catch_scope()) return true;
     if (this.is_script_scope() || this.is_eval_scope()) {
       if (IsLexicalVariableMode(mode)) {
@@ -829,7 +829,7 @@ export class DeclarationScope extends Scope {
     return result;
   }
   DeclareDynamicGlobal(name, kind, cache) {
-    return cache.variables_.Declare(this, name, kDynamicGlobal, kind, kCreatedInitialized, kNotAssigned, false).variable;
+    return cache.variables_.Declare(this, name, VariableMode_kDynamicGlobal, kind, kCreatedInitialized, kNotAssigned, false).variable;
   }
   calls_sloppy_eval() {
     return !this.is_script_scope() && this.scope_calls_eval_ && is_sloppy(this.language_mode());
@@ -837,8 +837,8 @@ export class DeclarationScope extends Scope {
   DeclareFunctionVar(name, cache = null) {
     if (cache === null) cache = this;
     let kind = is_sloppy(this.language_mode()) ? SLOPPY_FUNCTION_NAME_VARIABLE : NORMAL_VARIABLE;
-    this.function_ = new Variable(this, name, kConst, kind, kCreatedInitialized);
-    if (this.calls_sloppy_eval()) cache.NonLocal(name, kDynamic);
+    this.function_ = new Variable(this, name, VariableMode_kConst, kind, kCreatedInitialized);
+    if (this.calls_sloppy_eval()) cache.NonLocal(name, VariableMode_kDynamic);
     else cache.variables_.push(this.function_);
     return this.function_;
   }
@@ -903,15 +903,15 @@ export class DeclarationScope extends Scope {
       if (factory) {
         let pos = sloppy_block_function.position_;
         let declaration = factory.NewVariableDeclaration(pos);
-        let variable = this.DeclareVariable(declaration, name, pos, kVar, NORMAL_VARIABLE,
-          Variable.DefaultInitializationFlag(kVar), false/* &was_added */, null, true/* &ok */);
+        let variable = this.DeclareVariable(declaration, name, pos, VariableMode_kVar, NORMAL_VARIABLE,
+          Variable.DefaultInitializationFlag(VariableMode_kVar), false/* &was_added */, null, true/* &ok */);
         let source = factory.NewVariableProxy(sloppy_block_function.var_);
         let target = factory.NewVariableProxy(variable);
         let assignment = factory.NewAssignment(sloppy_block_function.init(), target, source, pos);
         let statement = factory.NewExpressionStatement(assignment, pos);
         sloppy_block_function.statement_ = statement;
       } else {
-        let variable = this.DeclareVariableName(name, kVar, false);
+        let variable = this.DeclareVariableName(name, VariableMode_kVar, false);
         if (sloppy_block_function.init() === TokenEnumList.indexOf('Token::ASSIGN')) variable.set_maybe_assigned();
       }
     }
@@ -927,7 +927,7 @@ export class FunctionDeclarationScope extends DeclarationScope {
    * 所以这个方法可以不用放到Scope上
    */
   DeclareArguments(ast_value_factory) {
-    let { was_added, variable } = this.Declare(ast_value_factory.GetOneByteStringInternal(ast_value_factory.arguments_string()), kVar,
+    let { was_added, variable } = this.Declare(ast_value_factory.GetOneByteStringInternal(ast_value_factory.arguments_string()), VariableMode_kVar,
       NORMAL_VARIABLE, kCreatedInitialized, kNotAssigned, false);
     this.arguments_ = variable;
     /**
@@ -1007,7 +1007,7 @@ export class ClassScope extends Scope {
     return null;
   }
   DeclareBrandVariable(ast_value_factory, is_statis_flag, class_token_pos) {
-    let { variable: brand } = this.Declare(ast_value_factory.dot_brand_string(), kConst,
+    let { variable: brand } = this.Declare(ast_value_factory.dot_brand_string(), VariableMode_kConst,
       NORMAL_VARIABLE, kNeedsInitialization, kMaybeAssigned, false);
     brand.set_is_static_flag();
     brand.ForceContextAllocation();
@@ -1029,7 +1029,7 @@ export class ClassScope extends Scope {
   }
   DeclareClassVariable(ast_value_factory, name, class_token_pos) {
     let { variable } = this.Declare(name === null ? ast_value_factory.dot_string() : name,
-      kConst, NORMAL_VARIABLE, kNeedsInitialization, kMaybeAssigned, false);
+      VariableMode_kConst, NORMAL_VARIABLE, kNeedsInitialization, kMaybeAssigned, false);
     this.class_variable_ = variable;
     this.class_variable_.initializer_position_ = class_token_pos;
     return this.class_variable_;

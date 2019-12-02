@@ -1,5 +1,5 @@
 import {
-  kLastLexicalVariableMode,
+  VariableMode_kLastLexicalVariableMode,
   kAsyncArrowFunction,
   kAsyncGeneratorFunction,
   kArrowFunction,
@@ -16,8 +16,8 @@ import {
   kStrict,
   kModule,
   kDefaultBaseConstructor,
-  kDynamic,
-  kDynamicLocal
+  VariableMode_kDynamic,
+  VariableMode_kDynamicLocal
 } from "../enum";
 import { TokenIsInRange, IsInRange } from './Identifier';
 
@@ -28,7 +28,7 @@ export const is_strict = language_mode => language_mode === kStrict;
  * 表达式类型判定
  */
 export const IsLexicalVariableMode = (mode) => {
-  return mode <= kLastLexicalVariableMode;
+  return mode <= VariableMode_kLastLexicalVariableMode;
 }
 
 /**
@@ -76,4 +76,4 @@ export const IsValidIdentifier = (token, language_mode, is_generator, disallow_a
 }
 
 export const IsBaseConstructor = (kind) => IsInRange(kind, kBaseConstructor, kDefaultBaseConstructor);
-export const IsDynamicVariableMode = (mode) => mode >= kDynamic && mode <= kDynamicLocal;
+export const IsDynamicVariableMode = (mode) => mode >= VariableMode_kDynamic && mode <= VariableMode_kDynamicLocal;

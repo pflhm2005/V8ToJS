@@ -1,4 +1,4 @@
-import { _kAny } from "../enum";
+import { TypeHint_kBoolean, TypeHint_kString, TypeHint_kAny } from "../enum";
 
 const kUninitialized = 0;
 const kEffect = 1;
@@ -10,8 +10,18 @@ class ExpressionResultScope {
     this.outer_ = generator.execution_result_;
     this.allocator_ = generator;
     this.kind_ = kind;
-    this.type_hint_ = _kAny;
+    this.type_hint_ = TypeHint_kAny;
     generator.execution_result_ = this;
+  }
+  IsEffect() { return this.kind_ === kEffect; }
+  IsValue() { return this.kind_ === kValue; }
+  IsTest() { return this.kind_ === kTest; }
+
+  SetResultIsBoolean() {
+    this.type_hint_ = TypeHint_kBoolean;
+  }
+  SetResultIsString() {
+    this.type_hint_ = TypeHint_kString;
   }
 }
 

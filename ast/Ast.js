@@ -1,16 +1,16 @@
 import {
-  kVar,
+  VariableMode_kVar,
   kNoSourcePosition,
 
-  kSmi,
-  kHeapNumber,
-  kBigInt,
-  kString,
-  kSymbol,
-  kBoolean,
-  kUndefined,
-  kNull,
-  kTheHole,
+  Literal_kSmi,
+  Literal_kHeapNumber,
+  Literal_kBigInt,
+  Literal_kString,
+  Literal_kSymbol,
+  Literal_kBoolean,
+  Literal_kUndefined,
+  Literal_kNull,
+  Literal_kTheHole,
 
   _kVariableProxy,
 
@@ -31,7 +31,7 @@ import {
   _kEmptyStatement,
   _kClassLiteral,
   PARAMETER_VARIABLE,
-  kLet,
+  VariableMode_kLet,
   _kFunctionLiteral,
   kAnonymousExpression,
   _kCall,
@@ -87,12 +87,25 @@ import {
   _kExpressionStatement,
   kRequired,
   THIS_VARIABLE,
-  kConst,
+  VariableMode_kConst,
   REPL_GLOBAL,
   CONTEXT,
   PARAMETER,
   LOCAL,
   LOOKUP,
+  AssignType_NON_PROPERTY,
+  VariableMode_kPrivateMethod,
+  AssignType_PRIVATE_METHOD,
+  AssignType_KEYED_PROPERTY,
+  AssignType_PRIVATE_GETTER_ONLY,
+  VariableMode_kPrivateGetterOnly,
+  VariableMode_kPrivateSetterOnly,
+  AssignType_PRIVATE_SETTER_ONLY,
+  VariableMode_kPrivateGetterAndSetter,
+  AssignType_PRIVATE_GETTER_AND_SETTER,
+  AssignType_NAMED_SUPER_PROPERTY,
+  AssignType_NAMED_PROPERTY,
+  AssignType_KEYED_SUPER_PROPERTY,
 } from "../enum";
 
 import {
@@ -181,26 +194,26 @@ export class AstNodeFactory {
    * @returns {Literal} 字面量类
    */
   NewTheHoleLiteral() {
-    return new Literal(kTheHole, null, kNoSourcePosition);
+    return new Literal(Literal_kTheHole, null, kNoSourcePosition);
   }
   NewUndefinedLiteral(pos) {
-    return new Literal(kUndefined, null, pos);
+    return new Literal(Literal_kUndefined, null, pos);
   }
   NewNullLiteral(pos) {
-    return new Literal(kNull, null, pos);
+    return new Literal(Literal_kNull, null, pos);
   }
   NewNumberLiteral(number, pos) {
     let int_value = DoubleToSmiInteger(number);
     if (int_value !== null) {
       return this.NewSmiLiteral(int_value, pos);
     }
-    return new Literal(kHeapNumber, number, pos);
+    return new Literal(Literal_kHeapNumber, number, pos);
   }
   NewBooleanLiteral(b, pos) {
-    return new Literal(kBoolean, b, pos);
+    return new Literal(Literal_kBoolean, b, pos);
   }
   NewSmiLiteral(number, pos) {
-    return new Literal(kSmi, number, pos);
+    return new Literal(Literal_kSmi, number, pos);
   }
   NewArrayLiteral(values, first_spread_index, pos) {
     return new ArrayLiteral(values, first_spread_index, pos);
@@ -209,13 +222,13 @@ export class AstNodeFactory {
     return new ObjectLiteral(properties, boilerplate_properties, pos, has_rest_property);
   }
   NewBigIntLiteral(bigint, pos) {
-    return new Literal(kBigInt, bigint, pos);
+    return new Literal(Literal_kBigInt, bigint, pos);
   }
   NewStringLiteral(string, pos) {
-    return new Literal(kString, string, pos);
+    return new Literal(Literal_kString, string, pos);
   }
   NewSymbolLiteral(symbol, pos) {
-    return new Literal(kSymbol, symbol, pos);
+    return new Literal(Literal_kSymbol, symbol, pos);
   }
 
   NewTemplateLiteral(string_parts, substitutions, pos) {
@@ -425,8 +438,10 @@ class AstNode {
   IsVariableProxy() { return this.node_type() === _kVariableProxy; }
   IsEmptyStatement() { return this.node_type() === _kEmptyStatement; }
   IsClassLiteral() { return this.node_type() === _kClassLiteral; }
-  IsFunctionLiteral() { return this.node_type() === _kClassLiteral; }
-  IsLiteral() { return this.node_type() === _kFunctionLiteral; }
+  IsFunctionLiteral() { return this.node_type() === _kFunctionLiteral; }
+  IsLiteral() { return this.node_type() === _kLiteral; }
+  IsObjectLiteral() { return this.node_type() === _kObjectLiteral; }
+  IsArrayLiteral() { return this.node_type() === _kArrayLiteral; }
   IsCall() { return this.node_type() === _kCall; }
   IsCallNew() { return this.node_type() === _kCallNew; }
   IsProperty() { return this.node_type() === _kProperty; }
@@ -695,30 +710,30 @@ export class Expression extends AstNode {
   IsPropertyName() {
     return false;
   }
-  IsNumberLiteral() { return this.IsLiteral() && (this.type() === kHeapNumber || this.type() === kSmi); }
+  IsNumberLiteral() { return this.IsLiteral() && (this.type() === Literal_kHeapNumber || this.type() === Literal_kSmi); }
   IsPattern() { return IsInRange(this.node_type(), _kObjectLiteral, _kArrayLiteral); }
 
   type() { return TypeField.decode(this.bit_field_); }
   ToBooleanIsFalse() { return !this.ToBooleanIsTrue(); }
   ToBooleanIsTrue() {
     switch (this.type()) {
-      case kSmi:
+      case Literal_kSmi:
         return this.val() !== 0;
-      case kHeapNumber:
+      case Literal_kHeapNumber:
         return this.DoubleToBoolean(this.val());
-      case kString:
+      case Literal_kString:
         return !this.val() === '';
-      case kNull:
-      case kUndefined:
+      case Literal_kNull:
+      case Literal_kUndefined:
         return false;
-      case kBoolean:
+      case Literal_kBoolean:
         return this.val();
-      case kBigInt:
+      case Literal_kBigInt:
         // TODO
         return false;
-      case kSymbol:
+      case Literal_kSymbol:
         return true;
-      case kTheHole:
+      case Literal_kTheHole:
         this.UNREACHABLE();
     }
     this.UNREACHABLE();
@@ -794,7 +809,7 @@ class GetTemplateObject extends Expression {
   }
 }
 
-class Property extends Expression {
+export class Property extends Expression {
   constructor(obj, key, pos) {
     super(pos, _kProperty);
     this.obj_ = obj;
@@ -802,6 +817,34 @@ class Property extends Expression {
   }
   IsSuperAccess() {
     return this.obj_.IsSuperPropertyReference();
+  }
+  IsPrivateReference() {
+    return this.key_.IsPrivateName();
+  }
+  static GetAssignType(property) {
+    if (property === null) return AssignType_NON_PROPERTY;
+    if (pproperty.IsPrivateReference()) {
+      let proxy = property.key_;
+      let variable = proxy.var_;
+      switch (variable.mode()) {
+        case VariableMode_kPrivateMethod:
+          return AssignType_PRIVATE_METHOD;
+        case VariableMode_kConst:
+          return AssignType_KEYED_PROPERTY;
+        case VariableMode_kPrivateGetterOnly:
+          return AssignType_PRIVATE_GETTER_ONLY;
+        case VariableMode_kPrivateSetterOnly:
+          return AssignType_PRIVATE_SETTER_ONLY;
+        case VariableMode_kPrivateGetterAndSetter:
+          return AssignType_PRIVATE_GETTER_AND_SETTER;
+        default:
+          throw new Error('UNREACHABLE');
+      }
+    }
+    let super_access = property.IsSuperAccess();
+    return (property.key_.IsPropertyName())
+    ? (super_access ? AssignType_NAMED_SUPER_PROPERTY : AssignType_NAMED_PROPERTY)
+    : (super_access ? AssignType_KEYED_SUPER_PROPERTY : AssignType_KEYED_PROPERTY);
   }
 }
 
@@ -861,25 +904,26 @@ class Literal extends Expression {
      * 因此源码在这里用了union来优化内存的使用
      * 包括了6个字面量变量string_、smi_、number_、symbol_、bigint_、boolean_
      */
-    this.type = type;
+    // this.type = type;
     /**
      * JS既没有函数重载(参数不同可以模拟 类型实在无力) 也没有union数据结构
      * 连枚举也没有(实际上用ES6的Symbol模拟枚举是一个可行性方案 但是成本略高)
      * 因此用一个数组来保存各种类型的值 用val()来获取对应的值
      */
     this.val_ = new Array(6).fill(null);
-    if (type !== kNull || val !== kUndefined || val !== kTheHole) this.val_[type] = val;
+    if (type !== Literal_kNull || val !== Literal_kUndefined || val !== Literal_kTheHole) this.val_[type] = val;
 
-    this.bit_field_ = NodeTypeField.update(this.bit_field_, type);
+    this.bit_field_ = TypeField.update(this.bit_field_, type);
   }
+  type() { return TypeField.decode(this.bit_field_); }
   // add
   val() {
-    return this.val_[this.type];
+    return this.val_[this.type()];
   }
   AsLiteral() { }
-  IsString() { return this.type = kString; }
+  IsString() { return this.type = Literal_kString; }
   IsPropertyName() {
-    if (this.type !== kString) return true;
+    if (this.type !== Literal_kString) return true;
     return !AstValueFactory.GetOneByteString(this.val()).AsArrayIndex().is_array_index;
   }
   AsRawString() { return this.val(); }
@@ -929,6 +973,12 @@ export class VariableProxy extends Expression {
   }
   is_new_target() {
     return IsNewTargetField.decode(this.bit_field_);
+  }
+  IsPrivateName() {
+    return !this.raw_name().IsEmpty() && this.raw_name().FirstCharacter() === '#';
+  }
+  hole_check_mode() {
+    return HoleCheckModeField.decode(this.bit_field_);
   }
 }
 
@@ -1216,9 +1266,6 @@ class Await extends Suspend {
   }
 }
 
-/**
- * 下面放的是继承于ZoneObject类
- */
 // The AST refers to variables via VariableProxies - placeholders for the actual
 // variables. Variables themselves are never directly referred to from the AST,
 // they are maintained by scopes, and referred to from VariableProxies and Slots
@@ -1257,7 +1304,7 @@ export class Variable {
   ForceHoleInitialization() { this.bit_field_ = ForceHoleInitialization.update(this.bit_field_, true); }
   has_local_if_not_shadowed() { return this.local_if_not_shadowed_ !== null; }
   IsGlobalObjectProperty() {
-    return (IsDynamicVariableMode(this.mode()) || this.mode() === kVar) && 
+    return (IsDynamicVariableMode(this.mode()) || this.mode() === VariableMode_kVar) && 
     this.scope_ !== null && this.scope_.is_script_scope();
   }
   has_forced_context_allocation() {
@@ -1280,7 +1327,7 @@ export class Variable {
   }
 
   SetMaybeAssigned() {
-    if (this.mode() === kConst) return;
+    if (this.mode() === VariableMode_kConst) return;
 
     if (this.has_local_if_not_shadowed()) {
       if (!this.maybe_assigned()) {
@@ -1291,7 +1338,7 @@ export class Variable {
   }
   
   MakeParameterNonSimple() {
-    this.bit_field_ = VariableModeField.update(this.bit_field_, kLet);
+    this.bit_field_ = VariableModeField.update(this.bit_field_, VariableMode_kLet);
     this.bit_field_ = InitializationFlagField.update(this.bit_field_, kNeedsInitialization);
   }
   AllocateTo(location, index) {
@@ -1299,11 +1346,11 @@ export class Variable {
     this.index_ = index;
   }
   RewriteLocationForRepl() {
-    if (this.mode() === kLet) {
+    if (this.mode() === VariableMode_kLet) {
       this.bit_field_ = LocationField.update(this.bit_field_, REPL_GLOBAL);
     }
   }
-  static DefaultInitializationFlag(mode) { return mode === kVar ? kCreatedInitialized : kNeedsInitialization; }
+  static DefaultInitializationFlag(mode) { return mode === VariableMode_kVar ? kCreatedInitialized : kNeedsInitialization; }
 };
 
 class CaseClause {
