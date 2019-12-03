@@ -48,13 +48,15 @@ function transformV8MacroToEnum(key, prefix) {
     let idx = 0;
     for (let i = 0; i < l; ++i) {
       let char = str[i];
+      // 理论上不会出现
+      if (i === l - 1) break;
       if (char === key && str[i + 1] === '(') {
         ar.push(`export const ${prefix}`);
         flag = true;
         i++;
         continue;
       }
-      if (flag && char === ',') {
+      if (flag && (char === ',' || char === ')')) {
         flag = false;
         ar.push(` = ${idx++};\n`);
       }
