@@ -36,11 +36,12 @@ import {
   Bytecode_kLdaContextSlot,
   Bytecode_kPopContext,
   Bytecode_kStackCheck,
+  Bytecode_kInvokeIntrinsic,
 } from "../enum";
 import { FLAG_ignition_reo, FLAG_ignition_filter_expression_positions } from "../Compiler/Flag";
 import BytecodeRegisterAllocator from "./BytecodeRegisterAllocator";
 import BytecodeRegisterOptimizer from "./BytecodeRegisterOptimizer";
-import Register from "./Register";
+import Register, { RegisterList } from "./Register";
 import BytecodeNode from './BytecodeNode';
 import ConstantArrayBuilder from './ConstantArrayBuilder';
 
@@ -403,7 +404,24 @@ export default class BytecodeArrayBuilder {
     }
     return this;
   }
-  CallRuntime() {
+  /**
+   * 有三个重载 可以用一个函数实现
+   * @param {Runtime::FunctionId} function_id
+   * @param {RegisterList} reg_list
+   */
+  CallRuntime(function_id, reg_list = null) {
+    if (reg_list === null) {
+      reg_list = new RegisterList();
+    }
+    if (reg_list instanceof Register) {
+      reg_list = new RegisterList(reg_list);
+    }
+    if (IntrinsicsHelper_IsSupported(function_id)) {
+      let intrinsic_id = IntrinsicsHelper_FromRuntimeId(function_id);
+      this.Output(Bytecode_kInvokeIntrinsic, intrinsic_id, reg_list, reg_list.register_count_);
+    } else {
+      this.Output(Bytecode_kCallRuntime, function_id, reg_list, reg_list.register_count_);
+    }
     return this;
   }
 

@@ -66,6 +66,10 @@ export default class Register {
 
 export class RegisterList{
   constructor(first_reg_index = kInvalidIndex, register_count = 0) {
+    if (first_reg_index instanceof Register) {
+      first_reg_index = first_reg_index.index_;
+      register_count = 1;
+    }
     this.first_reg_index_ = first_reg_index;
     this.register_count_ = register_count;
   }

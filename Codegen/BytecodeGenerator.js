@@ -1,7 +1,7 @@
 import {
   HoleCheckMode_kElided,
   kRestParameter,
-  kTraceEnter,
+  Runtime_FunctionId_kTraceEnter,
   kBody,
   VariableLocation_LOCAL,
   _kBlock,
@@ -11,8 +11,8 @@ import {
   VariableLocation_UNALLOCATED,
   NOT_INSIDE_TYPEOF,
   INSIDE_TYPEOF,
-  kNewScriptContext,
-  kPushModuleContext,
+  Runtime_FunctionId_kNewScriptContext,
+  Runtime_FunctionId_kPushModuleContext,
   MIN_CONTEXT_SLOTS,
   EVAL_SCOPE,
   FUNCTION_SCOPE,
@@ -216,7 +216,7 @@ export default class BytecodeGenerator {
     }
 
     if (FLAG_trace) {
-      this.builder_.CallRuntime(kTraceEnter);
+      this.builder_.CallRuntime(Runtime_FunctionId_kTraceEnter);
     }
 
     // TODO
@@ -260,13 +260,13 @@ export default class BytecodeGenerator {
       let scope_reg = this.register_allocator().NewRegister();
       this.builder_.LoadLiteral_Scope(scope)
         .StoreAccumulatorInRegister(scope_reg)
-        .CallRuntime(kNewScriptContext, scope_reg);
+        .CallRuntime(Runtime_FunctionId_kNewScriptContext, scope_reg);
     } else if (scope.is_module_scope()) {
       let args = this.register_allocator().NewRegisterList(2);
       this.builder_.MoveRegister(this.builder_.Parameter(0), args.get(0))
         .LoadLiteral_Scope(scope)
         .StoreAccumulatorInRegister(args.get(1))
-        .CallRuntime(kPushModuleContext, args);
+        .CallRuntime(Runtime_FunctionId_kPushModuleContext, args);
     } else {
       let slot_count = scope.num_heap_slots_ - MIN_CONTEXT_SLOTS;
       if (slot_count <= kMaximumSlots) {
@@ -283,7 +283,7 @@ export default class BytecodeGenerator {
       } else {
         let arg = this.register_allocator().NewRegister();
         this.builder_.LoadLiteral(scope).StoreAccumulatorInRegister(arg)
-          .CallRuntime(kNewFunctionContext, arg);
+          .CallRuntime(Runtime_FunctionId_kNewFunctionContext, arg);
       }
     }
     // 析构
