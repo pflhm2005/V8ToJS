@@ -60,7 +60,7 @@ export default class Register {
     return this.index_ === kCurrentContextRegisterIndex;
   }
   ToOperand() {
-    return kRegisterFileStartOffset - this.index_;
+    return (kRegisterFileStartOffset - this.index_) >>> 0;
   }
 }
 

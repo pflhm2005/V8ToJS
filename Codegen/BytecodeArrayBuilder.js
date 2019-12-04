@@ -37,6 +37,8 @@ import {
   Bytecode_kPopContext,
   Bytecode_kStackCheck,
   Bytecode_kInvokeIntrinsic,
+  Bytecode_kCallRuntime,
+  Bytecode_kReturn,
 } from "../enum";
 import { FLAG_ignition_reo, FLAG_ignition_filter_expression_positions } from "../Compiler/Flag";
 import BytecodeRegisterAllocator from "./BytecodeRegisterAllocator";
@@ -44,6 +46,7 @@ import BytecodeRegisterOptimizer from "./BytecodeRegisterOptimizer";
 import Register, { RegisterList } from "./Register";
 import BytecodeNode from './BytecodeNode';
 import ConstantArrayBuilder from './ConstantArrayBuilder';
+import { IntrinsicsHelper_FromRuntimeId, IntrinsicsHelper_IsSupported } from "../util";
 
 // TODO
 function IsWithoutExternalSideEffects() { return true; }
@@ -190,6 +193,13 @@ export default class BytecodeArrayBuilder {
     if (stmt.position_ === kNoSourcePosition) return;
     this.latest_source_info_.MakeStatementPosition(stmt.position_);
   }
+  SetReturnPosition(source_position, literal) {
+    if (source_position !== kNoSourcePosition) {
+      this.latest_source_info_.MakeStatementPosition(source_position);
+    } else if (literal.return_position() !== kNoSourcePosition) {
+      this.latest_source_info_.MakeStatementPosition(literal.return_position());
+    }
+  }
   PrepareToOutputBytecode(bytecode, accumulator_use) {
     if (this.register_optimizer_) {
       this.register_optimizer_.PrepareForBytecode(bytecode, accumulator_use);
@@ -316,6 +326,10 @@ export default class BytecodeArrayBuilder {
   LoadLiteral_BigInt() {
     return this;
   }
+  Return() {
+    this.Output(Bytecode_kReturn);
+    return this;
+  }
 
   /**
    * 下列方法同样一堆重载
@@ -418,9 +432,9 @@ export default class BytecodeArrayBuilder {
     }
     if (IntrinsicsHelper_IsSupported(function_id)) {
       let intrinsic_id = IntrinsicsHelper_FromRuntimeId(function_id);
-      this.Output(Bytecode_kInvokeIntrinsic, intrinsic_id, reg_list, reg_list.register_count_);
+      this.Output(Bytecode_kInvokeIntrinsic, [intrinsic_id, reg_list, reg_list.register_count_]);
     } else {
-      this.Output(Bytecode_kCallRuntime, function_id, reg_list, reg_list.register_count_);
+      this.Output(Bytecode_kCallRuntime, [function_id, reg_list, reg_list.register_count_]);
     }
     return this;
   }

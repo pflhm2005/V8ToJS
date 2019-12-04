@@ -1232,6 +1232,9 @@ class FunctionLiteral extends Expression {
   start_position() {
     return this.scope_.start_position_;
   }
+  end_position() {
+    return this.scope_.end_position_;
+  }
   requires_brand_initialization() {
     let outer = this.scope_.outer_scope_;
     if (!outer.is_class_scope()) return false;
@@ -1239,6 +1242,9 @@ class FunctionLiteral extends Expression {
   }
   requires_instance_members_initializer() {
     return RequiresInstanceMembersInitializer.decode(this.bit_field_);
+  }
+  return_position() {
+      return Math.max(this.start_position(), this.end_position() - (HasBracesField.decode(this.bit_field_) ? 1 : 0));
   }
 }
 

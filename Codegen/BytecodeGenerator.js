@@ -231,9 +231,6 @@ export default class BytecodeGenerator {
     // 构建import语法
     this.VisitModuleNamespaceImports();
 
-    // 
-    this.builder_.StackCheck(literal.start_position());
-
     // 构建基类构造函数
     if (IsBaseConstructor(this.function_kind())) {
       if (literal.requires_brand_initialization()) {
@@ -423,8 +420,15 @@ export default class BytecodeGenerator {
       if (this.builder_.RemainderOfBlockIsDead()) break;
     }
   }
-  BuildReturn() {
-
+  BuildReturn(source_position) {
+    if (FLAG_trace) {
+      // ..
+    }
+    if (this.info_.collect_type_profile()) {
+      this.builder_.CollectTypeProfile(info.literal_.return_position());
+    }
+    this.builder_.SetReturnPosition(source_position, this.info_.literal_);
+    this.builder_.Return();
   }
 
   VisitVariableDeclaration(decl) {

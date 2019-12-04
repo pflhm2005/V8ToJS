@@ -20,13 +20,16 @@ function readAndWrite(readCallback) {
 function setIndex() {
   readAndWrite((ar, str) => {
     let l = str.length;
+    let idx = 0;
     for (let i = 0; i < l; ++i) {
       let char = str[i];
       ar.push(char);
-      if (char === '=') result.push(` ${i}`);
+      if (char === '=') ar.push(` ${idx++}`);
     }
   });
 }
+
+setIndex();
 
 /**
  * 转换V8枚举
@@ -66,3 +69,7 @@ function transformV8MacroToEnum(key, prefix) {
 }
 
 // transformV8MacroToEnum('V', 'IntrinsicId_k');
+
+/**
+ * 考虑写一个函数处理C++的宏
+ */

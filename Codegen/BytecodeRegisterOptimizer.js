@@ -9,7 +9,7 @@ import {
   AccumulatorUse_kRead,
   AccumulatorUse_kWrite,
 } from "../enum";
-import Register from "./Register";
+import Register, { RegisterList } from "./Register";
 import RegisterInfo from "./RegistInfo";
 
 class BytecodeOperands {
@@ -174,9 +174,9 @@ export default class BytecodeRegisterOptimizer {
   OutputRegisterTransfer(input_info, output_info) {
     let input = input_info.register_;
     let output = output_info.register_;
-    if (input === this.accumulator_) {
+    if (input.index_ === this.accumulator_.index_) {
       this.builder_.OutputStarRaw(output);
-    } else if (output === this.accumulator_) {
+    } else if (output.index_ === this.accumulator_.index_) {
       this.builder_.OutputLdarRaw(input);
     } else {
       this.builder_.OutputMovRaw(input, output);

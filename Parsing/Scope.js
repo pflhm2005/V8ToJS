@@ -162,10 +162,13 @@ export default class Scope {
     this.is_repl_mode_scope_ = false;
 
     this.num_stack_slots_ = 0;
-    this.num_heap_slots_ = 0;
+    this.num_heap_slots_ = this.ContextHeaderLength();
 
     this.set_language_mode(kSloppy);
     if (outer_scope) this.outer_scope_.AddInnerScope(this);
+  }
+  ContextHeaderLength() {
+    return this.HasContextExtensionSlot() ? MIN_CONTEXT_EXTENDED_SLOTS : MIN_CONTEXT_SLOTS;
   }
   AddInnerScope(inner_scope) {
     inner_scope.sibling_ = this.inner_scope_;
