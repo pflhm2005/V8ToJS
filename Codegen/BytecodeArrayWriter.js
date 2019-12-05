@@ -19,6 +19,7 @@ import {
   Bytecodes_IsAccumulatorLoadWithoutEffects, 
   Bytecodes_OperandScaleToPrefixBytecode,
   Bytecodes_GetOperandSizes,
+  decToHex,
 } from "../util/Bytecode";
 import SourcePosition from './SourcePosition';
 import SourcePositionTableBuilder from "./SourcePositionTableBuilder";
@@ -101,33 +102,46 @@ export default class BytecodeArrayWriter {
       let prefix = Bytecodes_OperandScaleToPrefixBytecode(operand_scale);
       this.bytecodes_.push(prefix);
     }
-    this.bytecodes_.push(bytecode);
+    this.bytecodes_.push(decToHex(bytecode, 1));
 
     const operands = node.operands_;
-    console.log(bytecode, operands);
+    // console.log(bytecode, operand_scale);
     const operand_count = node.operand_count_;
+    /**
+     * 可能要止步于此了
+     * 这里返回的是一个数组
+     */
     const operand_sizes = Bytecodes_GetOperandSizes(bytecode, operand_scale);
     for (let i = 0; i < operand_count; ++i) {
       switch(operand_sizes[i]) {
         case OperandSize_kNone:
           throw new Error('UNREACHABLE');
+        /**
+         * 这个比较正常
+         */
         case OperandSize_kByte:
-          this.bytecodes_.push(operands[i]);
+          this.bytecodes_.push(decToHex(operands[i], 1));
           break;
-        case OperandSize_kShort: {
-          let operand = operands[i];
-          this.bytecodes_.push(operand[0]);
-          this.bytecodes_.push(operand[1]);
-          break;
-        }
-        case OperandSize_kQuad: {
-          let raw_operand = operands[i];
-          this.bytecodes_.push(raw_operand[0]);
-          this.bytecodes_.push(raw_operand[1]);
-          this.bytecodes_.push(raw_operand[2]);
-          this.bytecodes_.push(raw_operand[3]);
-          break;
-        }
+        /**
+         * 下面的两个取索引存在一个强转
+         * 下面的暂时无法实现
+         * uint16_t operand = static_cast<uint16_t>(operands[i]);
+         * const uint8_t* raw_operand = reinterpret_cast<const uint8_t*>(&operand);
+         */
+        // case OperandSize_kShort: {
+        //   let operand = decToHex(operands[i], 2);
+        //   this.bytecodes_.push(operand[0]);
+        //   this.bytecodes_.push(operand[1]);
+        //   break;
+        // }
+        // case OperandSize_kQuad: {
+        //   let raw_operand = decToHex(operands[i], 2);
+        //   this.bytecodes_.push(raw_operand[0]);
+        //   this.bytecodes_.push(raw_operand[1]);
+        //   this.bytecodes_.push(raw_operand[2]);
+        //   this.bytecodes_.push(raw_operand[3]);
+        //   break;
+        // }
       }
     }
   }

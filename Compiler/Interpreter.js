@@ -69,6 +69,9 @@ class InterpreterCompilationJob extends UnoptimizedCompilationJob {
     // MaybePrintAst(parse_info(), compilation_info());
     this.generator_.GenerateBytecode(this.stack_limit_);
     if (this.generator_.stack_overflow_) return FAILED;
+    console.info('待编译JS代码为:\n', this.parse_info_.character_stream_.source_string);
+    console.info('输出的bytecode为:\n', this.generator_.builder_.bytecode_array_writer_.bytecodes_);
+    console.info('待完善');
     return SUCCEEDED;
   }
 }

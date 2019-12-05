@@ -99,10 +99,10 @@ export const Bytecodes_OperandScaleToPrefixBytecode = (operand_scale) => {
   }
 }
 export const Bytecodes_GetOperandSizes = (bytecode, operand_scale) => {
+  // Single、Double、Quad分别是1，2，4
+  // 移位后对应数组索引0，1，2
   let scale_index = operand_scale >> 1;
-  // TODO 这里的宏看不懂
-  return 0;
-  // return kOperandSizes[scale_index][bytecode];
+  return kOperandSizes[scale_index][bytecode];
 }
 
 export const BytecodeOperands_IsScalableSignedByte = (operand_type) => IsInRange(operand_type, OperandTypeo_kImm, OperandTypeo_kRegOutTriple);
@@ -196,4 +196,13 @@ export const IntrinsicsHelper_FromRuntimeId = (function_id) => {
     default:
       throw new Error('UNREACHABLE');
   }
+}
+
+export const decToHex = (dec, bytes) => {
+  let hex = '';
+  for(let i = 0;i < bytes;i++){
+    hex += String.fromCharCode(dec & 0xff);
+    dec >>>= 8;
+  }
+  return hex;
 }

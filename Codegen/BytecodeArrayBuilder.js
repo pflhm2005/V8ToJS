@@ -53,7 +53,7 @@ function IsWithoutExternalSideEffects() { return true; }
 
 /**
  * 机器码操作符处理
- * 分为三大量情况
+ * 分为三大类情况
  * 1. 立即数(Imm)
  * 2. 寄存器输入(Reg)
  * 3. 寄存器输出(RegOutput)
@@ -344,7 +344,6 @@ export default class BytecodeArrayBuilder {
    * 逻辑参照DEFINE_BYTECODE_OUTPUT宏
    * @param {Bytecode} bytecode 字节码类型
    * @param {Operands} operands 操作类型
-   * @returns {void}
    */
   Output(bytecode, operands = []) {
     let node = this.Create(bytecode, operands);

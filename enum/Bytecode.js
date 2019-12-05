@@ -254,15 +254,6 @@ export const OperandSize_kQuad = 4;
 export const OperandSize_kLast = OperandSize_kQuad;
 
 /**
- * 机器码操作空间映射
- */
-export const kOperandSizes = [
-  [],
-  [],
-  [],
-];
-
-/**
  * 机器码枚举与操作符的映射
  * V(Wide, AccumulatorUse::kNone) => (0): [Bytecode_kWide, AccumulatorUse_kNone]
  * ...
@@ -543,3 +534,71 @@ export const IntrinsicId_kIsSmi = 21;
 export const IntrinsicId_kToStringRT = 22;
 export const IntrinsicId_kToLength = 23;
 export const IntrinsicId_kToObject = 24;
+
+export const OperandTypeInfo_kNone = 0;
+export const OperandTypeInfo_kScalableSignedByte = 1;
+export const OperandTypeInfo_kScalableUnsignedByte = 2;
+export const OperandTypeInfo_kFixedUnsignedByte = 3;
+export const OperandTypeInfo_kFixedUnsignedShort = 4;
+
+function OperandScaler(IsScalable, UnscaledSize, Size = 0) {
+  if (IsScalable) {
+    return UnscaledSize * Size;
+  } else {
+    return UnscaledSize;
+  }
+}
+
+function OperandeTypeToInfo(operand_type) {
+  switch (operand_type) {
+    case OperandType_kReg:
+    case OperandType_kRegList:
+    case OperandType_kRegPair:
+    case OperandType_kRegOut:
+    case OperandType_kRegOutList:
+    case OperandType_kRegOutPair:
+    case OperandType_kRegOutTriple:
+    case OperandType_kImm:
+      return OperandTypeInfo_kScalableSignedByte;
+    case OperandType_kIdx:
+    case OperandType_kUImm:
+    case OperandType_kRegCount:
+    case OperandType_kNativeContextIndex:
+      return OperandTypeInfo_kScalableUnsignedByte;
+    case OperandType_kFlag8:
+    case OperandType_kIntrinsicId:
+      return OperandTypeInfo_kFixedUnsignedByte;
+    case OperandType_kRuntimeId:
+      return OperandTypeInfo_kFixedUnsignedShort;
+    default:
+      return OperandTypeInfo_kNone;
+  }
+}
+
+function OperandTypeInfoToSize(operand_info) {
+  switch (operand_info) {
+    case OperandTypeInfo_kNone:
+      return [false, /*false,*/ OperandSize_kNone];
+    case OperandTypeInfo_kScalableSignedByte:
+      return [true, /*false,*/ OperandSize_kByte];
+    case OperandTypeInfo_kScalableUnsignedByte:
+      return [true, /*true,*/ OperandSize_kByte];
+    case OperandTypeInfo_kFixedUnsignedByte:
+      return [false, /*true,*/ OperandSize_kByte];
+    case OperandTypeInfo_kFixedUnsignedShort:
+      return [false, /*true,*/ OperandSize_kShort];
+  }
+}
+
+/**
+ * 机器码映射表
+ */
+export const kOperandSizes = [OperandScale_kSingle, OperandScale_kDouble, OperandScale_kQuadruple].map(operand_scale => {
+  return bytecodeMapping.map(map => {
+    let operand_types = map.slice(2);
+    if (operand_types.length === 0) operand_types = [OperandTypeInfo_kNone];
+    return operand_types.map(operand_type => {
+      return OperandScaler(...OperandTypeInfoToSize(OperandeTypeToInfo(operand_type)), operand_scale);
+    });
+  });
+});

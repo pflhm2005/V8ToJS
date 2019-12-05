@@ -28,10 +28,14 @@ class ScriptCompiler {
   static Compile(context, source, options = kNoCompileOptions, no_cache_reason = kNoCacheNoReason) {
     let isolate = context.GetIsolate();
     let maybe = this.CompileUnboundInternal(isolate, source, options, no_cache_reason);
-    console.info('待完善');
-    return;
+    return console.info('Complie');
     // v8::Context::Scope scope(context);
     return maybe.BindToCurrentContext();
+  }
+  static _Compile(context, source, options = kNoCompileOptions, no_cache_reason = kNoCacheNoReason) {
+    let isolate = context.GetIsolate();
+    let maybe = this.CompileUnboundInternal(isolate, source, options, no_cache_reason);
+    return ;
   }
   /**
    * @returns {UnboundScript}

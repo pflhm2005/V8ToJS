@@ -29,7 +29,7 @@ function setIndex() {
   });
 }
 
-setIndex();
+// setIndex();
 
 /**
  * 转换V8枚举
