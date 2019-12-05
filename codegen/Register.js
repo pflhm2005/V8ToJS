@@ -1,4 +1,4 @@
-import { FLAG_enable_embedded_constant_pool } from "../Compiler/Flag";
+import { FLAG_enable_embedded_constant_pool } from "../compiler/Flag";
 
 const kInvalidIndex = -1;
 

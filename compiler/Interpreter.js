@@ -1,4 +1,4 @@
-import BytecodeGenerator, { FeedbackVectorSpec } from "../Codegen/BytecodeGenerator";
+import BytecodeGenerator, { FeedbackVectorSpec } from "../codegen/BytecodeGenerator";
 import { SUCCEEDED, FAILED } from "./Complier";
 import { RecordingMode_RECORD_SOURCE_POSITIONS, RecordingMode_OMIT_LAZY_SOURCE_POSITIONS } from "../enum";
 

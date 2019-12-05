@@ -40,7 +40,7 @@ import {
   Bytecode_kCallRuntime,
   Bytecode_kReturn,
 } from "../enum";
-import { FLAG_ignition_reo, FLAG_ignition_filter_expression_positions } from "../Compiler/Flag";
+import { FLAG_ignition_reo, FLAG_ignition_filter_expression_positions } from "../compiler/Flag";
 import BytecodeRegisterAllocator from "./BytecodeRegisterAllocator";
 import BytecodeRegisterOptimizer from "./BytecodeRegisterOptimizer";
 import Register, { RegisterList } from "./Register";

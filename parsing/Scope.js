@@ -45,7 +45,7 @@ import {
   is_sloppy,
   IsArrowFunction
 } from "../util";
-import { kInvalidPrivateFieldResolution } from "../MessageTemplate";
+import { kInvalidPrivateFieldResolution } from "../messageTemplate";
 // import ThreadedList from '../base/ThreadedList';
 
 const kThisFunction = 0;

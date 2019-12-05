@@ -12,4 +12,4 @@ let create_params = new CreateParams();
 let isolate = Isolate.New(create_params);
 let context = new Context(isolate);
 
-Script._Compile(context, source_code);
+Script.Compile(context, source_code);

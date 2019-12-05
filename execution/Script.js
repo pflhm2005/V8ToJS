@@ -10,7 +10,7 @@ import {
   TYPE_NORMAL,
 } from "../enum";
 
-import Compiler from "../Compiler/Complier";
+import Compiler from "../compiler/Complier";
 
 function GetScriptDetails(isolate, resource_name, resource_line_offset, resource_column_offset, source_map_url, host_defined_options) {
   let script_details = new ScriptDetails();
@@ -31,11 +31,6 @@ class ScriptCompiler {
     return console.info('Complie');
     // v8::Context::Scope scope(context);
     return maybe.BindToCurrentContext();
-  }
-  static _Compile(context, source, options = kNoCompileOptions, no_cache_reason = kNoCacheNoReason) {
-    let isolate = context.GetIsolate();
-    let maybe = this.CompileUnboundInternal(isolate, source, options, no_cache_reason);
-    return ;
   }
   /**
    * @returns {UnboundScript}

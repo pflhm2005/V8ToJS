@@ -40,7 +40,7 @@ import {
   kZeroDigitNumericSeparator,
   kContinuousNumericSeparator,
   kTrailingNumericSeparator,
-} from '../../MessageTemplate';
+} from '../../messageTemplate';
 
 const IMPLICIT_OCTAL = 0;
 const BINARY = 1;

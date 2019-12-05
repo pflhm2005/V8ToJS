@@ -1,5 +1,5 @@
 import Location from "../scanner/Location";
-import { kParamDupe } from "../../MessageTemplate";
+import { kParamDupe } from "../../messageTemplate";
 
 class FormalParametersBase {
   constructor(scope) {

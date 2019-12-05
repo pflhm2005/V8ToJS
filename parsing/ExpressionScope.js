@@ -19,7 +19,7 @@ import {
 import {
   kTooManyVariables,
   kLetInLexicalBinding,
-} from '../MessageTemplate';
+} from '../messageTemplate';
 import Location from './scanner/Location';
 
 const kExpressionIndex = 0;

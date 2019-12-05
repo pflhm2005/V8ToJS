@@ -1,11 +1,11 @@
-import Parsing from "../Parsing/Parsing";
+import Parsing from "../parsing/Parsing";
 import ParseInfo from "./ParseInfo";
 import Interpreter from "./Interpreter";
 import { FLAG_stress_lazy_source_positions } from "./Flag";
 import { FLAG_use_strict } from "./Flag";
 import { kEagerCompile, kConsumeCodeCache } from "../enum";
 import Rewriter from "./Rewriter";
-import { DeclarationScope } from "../Parsing/Scope";
+import { DeclarationScope } from "../parsing/Scope";
 
 export const SUCCEEDED = 0;
 export const FAILED = 0;

@@ -46,7 +46,7 @@ import {
   kTooManyParameters,
   kParamAfterRest,
   kMalformedArrowFunParamList
-} from '../MessageTemplate';
+} from '../messageTemplate';
 import { is_strict, is_sloppy, IsDerivedConstructor, IsGetterFunction, IsSetterFunction, Divide, DoubleToInt32, ShlWithWraparound, DoubleToUint32, IsBinaryOp } from '../util';
 import ParserFormalParameters from './function/ParserFormalParameters';
 import { ParameterDeclarationParsingScope } from './ExpressionScope';

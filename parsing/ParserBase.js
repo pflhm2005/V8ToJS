@@ -165,7 +165,7 @@ import {
   kConstructorIsPrivate,
   kStaticPrototype,
   kDuplicateConstructor,
-} from '../MessageTemplate';
+} from '../messageTemplate';
 import ParserFormalParameters from './function/ParserFormalParameters';
 import NextArrowFunctionInfo from './function/NextArrowFunctionInfo';
 
