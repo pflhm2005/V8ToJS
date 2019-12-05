@@ -1,6 +1,34 @@
 # V8record
 记录阅读v8源码过程的笔记，尝试用JavaScript翻译V8引擎
 
+---
+
+### 运行方法
+
+找一个文件夹，依次运行
+```
+git clone https://github.com/pflhm2005/V8ToJS.git
+cd V8ToJS/
+npm install babel-cli -g
+npm install babel-preset-env -D
+```
+
+准备工作完成
+
+运行对应的文件启动解析(修改文件中的source_code看不一样的输出)
+```
+// 输出字符的Token
+babel-node --presets env token.js
+// 输出字符的抽象语法树
+babel-node --presets env ast.js
+// 输出字符的字节码(目前测试仅支持let a = 1;这一个，完善需要较大工作量)
+babel-node --presets env bytecode.js
+```
+
+---
+
+### 简单说明
+
 - [x] 支持所有Token的解析
 - [x] 支持完成了`let a = 1;let b = {a : 1};if(true){};function fn(a,b,c){log(123);}`等语句解析
 - [x] 支持`let a = 1`的字节码生成，复杂语句涉及内存操作基本上无法处理
@@ -15,22 +43,9 @@
 
 ~~目前C++部分比较杂乱 没有时间整理，也没啥看头(已移除)，看JS文件夹里的内容吧~~
 
-文件分类跟源码不太一致，逻辑上基本按照源码进行了复现，注释极其详细
+文件分类跟源码不太一致，逻辑上基本按照源码进行了复现，注释极其详细，更多功能待完善
 
-依次运行
-```
-npm install babel-cli -g
-npm install babel-preset-env -D
-```
-
-启动解析 运行对应的测试文件
-```
-babel-node --presets env xxx(Token.js/Parse.js)
-```
-
-支持对Token、简单语句的的全解析，可以自行修改待编译字符串并查看打印结果
-
-更多功能待完善，这个引擎实在是太复杂了
+---
 
 有一些特殊语法的模拟方式需要说明一下(得益于es6 块级作用域的问题完美解决 不然完蛋了)
 

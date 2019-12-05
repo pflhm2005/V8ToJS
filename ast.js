@@ -7,7 +7,7 @@ import isolate from './execution/Isolate';
 import ParseInfo from './compiler/ParseInfo';
 import { ScriptOriginOptions } from './execution/Script';
 // 在这里设置待编译字符串
-const source = `
+const source_code = `
 function fn(a, b, c){
   let v = 1;
   if(true) log(123);
@@ -21,7 +21,7 @@ class cls {
 `;
 
 let parse_info = new ParseInfo(isolate);
-parse_info.CreateScript(isolate, source, new ScriptOriginOptions(), false);
+parse_info.CreateScript(isolate, source_code, new ScriptOriginOptions(), false);
 Parsing.ParseProgram(parse_info, isolate);
 
 let AstBody = parse_info.literal_.body_;
