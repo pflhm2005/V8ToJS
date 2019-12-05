@@ -1,7 +1,10 @@
 # V8record
 记录阅读v8源码过程的笔记，尝试用JavaScript翻译V8引擎
 
-支持所有Token的解析，完成了`let a = 1;let b = {a : 1};if(true){};function fn(a,b,c){log(123);}`等语句解析
+- [x] 支持所有Token的解析
+- [x] 支持完成了`let a = 1;let b = {a : 1};if(true){};function fn(a,b,c){log(123);}`等语句解析
+- [x] 支持`let a = 1`的字节码生成，复杂语句涉及内存操作基本上无法处理
+- [ ] 支持机器码生成
 
 下述内容过于复杂，需要走源码编译看过程，暂未实现。
 
