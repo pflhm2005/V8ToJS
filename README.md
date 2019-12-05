@@ -138,6 +138,10 @@ const kNo = 1;
 1. Token类型的枚举，由于Token值在整个AST中解析中非常关键，所以显式的用字符串来表示，让后续复盘逻辑更加清晰。后果是在很多进行类型判断的运算中，需要用一个TokenEnumList手动将枚举字符串还原成Token对应的数值。
 2. Token重名，重名有两种情况。(1)该枚举值仅仅在小范围内使用，例如关于函数返回类型的kNormal、kAsyncReturn(待定)。(2)多个重名枚举值存在较为广泛的应用，将更高级的以下划线开头，例如抽象树节点类型NodeType。
 
+*由于枚举类型较多，目前出现了很多重复的情况，因此已经修改为 类名 + _ + 枚举名 的形式*
+
+例如Bytecode::Function_id::kCallRuntime => Bytecode_Function_id_kCallRuntime，这样可以确保不重复且意义明确
+
 ### 宏
 
 简单的直接硬核展开 复杂的诸如调用栈追踪暂时不考虑实现
@@ -250,13 +254,75 @@ class ScriptDeclarationScope extends DeclarationScope{
 
 ### 泛型
 
-实话说，这个语法无法模拟，但是JS的弱类型帮了不少忙，这一块目前没有碰到问题。
+~~实话说，这个语法无法模拟，但是JS的弱类型帮了不少忙，这一块目前没有碰到问题。~~
+
+在处理bytecode生成的时候，遇到了极复杂宏+模板的情况，且模板不作为声明类型使用，因此必须做处理，源码如下
+
+```c++
+template <Bytecode bytecode, AccumulatorUse accumulator_use,
+          OperandType... operand_types>
+class BytecodeNodeBuilder {
+ public:
+  template <typename... Operands>
+  V8_INLINE static BytecodeNode Make(BytecodeArrayBuilder* builder,
+                                     Operands... operands) {
+    static_assert(sizeof...(Operands) <= Bytecodes::kMaxOperands,
+                  "too many operands for bytecode");
+    builder->PrepareToOutputBytecode<bytecode, accumulator_use>();
+    return BytecodeNode::Create<bytecode, accumulator_use, operand_types...>(
+        builder->CurrentSourcePosition(bytecode),
+        OperandHelper<operand_types>::Convert(builder, operands)...);
+  }
+};
+
+template <Bytecode bytecode, AccumulatorUse accum_use,
+          OperandType operand0_type, OperandType operand1_type,
+          OperandType operand2_type, OperandType operand3_type,
+          OperandType operand4_type>
+V8_INLINE static BytecodeNode Create(BytecodeSourceInfo source_info,
+                                      uint32_t operand0, uint32_t operand1,
+                                      uint32_t operand2, uint32_t operand3,
+                                      uint32_t operand4) {
+  OperandScale scale = OperandScale::kSingle;
+  scale = std::max(scale, ScaleForOperand<operand0_type>(operand0));
+  scale = std::max(scale, ScaleForOperand<operand1_type>(operand1));
+  scale = std::max(scale, ScaleForOperand<operand2_type>(operand2));
+  scale = std::max(scale, ScaleForOperand<operand3_type>(operand3));
+  scale = std::max(scale, ScaleForOperand<operand4_type>(operand4));
+  return BytecodeNode(bytecode, 5, scale, source_info, operand0, operand1,
+                      operand2, operand3, operand4);
+}
+```
+
+模板参数作为实际参数使用，所以需要进行处理，处理方法是将模板参数包装为数组，命名为template作为函数的额外参数，如下
+```js
+class BytecodeNodeBuilder {
+  static Make(builder, operands, template) {
+    const [bytecode, accumulator_use] = template;
+    const operand_types = template.slice(2);
+    builder.PrepareToOutputBytecode(bytecode, accumulator_use);
+    let source_info = source_info = builder.CurrentSourcePosition(bytecode);
+    switch (operands.length) {
+      case 0:
+        return BytecodeNode.Create0(bytecode, accumulator_use, source_info);
+      case 1:
+        return BytecodeNode.Create1(
+          bytecode, accumulator_use, source_info,
+          OperandHelper(operand_types[0], builder, operands[0]), operand_types[0]);
+      case 2:
+        // more...
+    }
+  }
+}
+```
 
 ### 多维指针
 
 一维指针不需要额外的逻辑，JS的复杂类型跟指针操作并没有太大区别
 
 多维指针无法模拟，但是换个思路。根据所看的libuv、V8源码，大多数情况下多维指针的应用场景是实现某个数据结构(链表、队列)，而JS的数组无所不能，一般就忽略具体的指针逻辑了。
+
+*当出现取地址作为元数据，此时逻辑无法模仿*
 
 ### 迭代器
 
