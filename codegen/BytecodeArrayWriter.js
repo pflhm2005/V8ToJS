@@ -14,7 +14,7 @@ import {
   Bytecode_kJumpConstant,
   Bytecode_kSuspendGenerator,
 } from "../enum";
-import { FLAG_ignition_elide_noneffectful_bytecodes } from "../Compiler/Flag";
+import { FLAG_ignition_elide_noneffectful_bytecodes } from "../compiler/Flag";
 import { 
   Bytecodes_IsAccumulatorLoadWithoutEffects, 
   Bytecodes_OperandScaleToPrefixBytecode,
