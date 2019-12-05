@@ -4,9 +4,9 @@
  */
 const source_code = "let a = 1;";
 
-import { Isolate, CreateParams } from './Execution/Isolate';
-import Context from './Execution/Context';
-import Script from './Execution/Script';
+import { Isolate, CreateParams } from './execution/Isolate';
+import Context from './execution/Context';
+import Script from './execution/Script';
 
 let create_params = new CreateParams();
 let isolate = Isolate.New(create_params);
