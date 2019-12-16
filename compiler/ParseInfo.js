@@ -109,6 +109,8 @@ export default class ParseInfo {
     this.SetFlag(kAllowHarmonyPrivateMethods, FLAG_harmony_private_methods);
     this.SetFlag(kAllowHarmonyTopLevelAwait, FLAG_harmony_top_level_await);
   }
+  is_toplevel() { return this.GetFlag(kToplevel); }
+  lazy_compile() { return this.GetFlag(kLazyCompile); }
 
   is_eval() { return this.GetFlag(kEval); }
   is_module() { return this.GetFlag(kModule); }
@@ -191,6 +193,7 @@ export default class ParseInfo {
     //   AllocateSourceRangeMap();
     // }
   }
+  ResetCharacterStream() { this.character_stream_.reset(); }
 
   scope() {
     return this.literal_.scope_;

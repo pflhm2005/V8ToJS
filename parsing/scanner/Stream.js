@@ -24,6 +24,10 @@ export default class Stream {
      */
     this.buffer_pos_ = 0;
   }
+  reset() {
+    this.buffer_.length = 0;
+    this.source_string = null;
+  }
   pos() {
     return this.buffer_pos_ + (this.buffer_cursor_ - this.buffer_start_);
   }

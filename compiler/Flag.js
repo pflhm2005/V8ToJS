@@ -16,3 +16,4 @@ export const FLAG_harmony_top_level_await = false;
 export const FLAG_ignition_filter_expression_positions = true;
 export const FLAG_enable_embedded_constant_pool = false;
 export const FLAG_ignition_elide_noneffectful_bytecodes = true;
+export const FLAG_trace_block_coverage = false;

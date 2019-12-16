@@ -17,3 +17,7 @@ export const kNoCacheBecausePacScript = 11;
 export const kNoCacheBecauseInDocumentWrite = 12;
 export const kNoCacheBecauseResourceWithNoCacheHandler = 13;
 export const kNoCacheBecauseDeferredProduceCodeCache = 14;
+
+export const SourcePositionTableBuilder_RecordingMode_OMIT_SOURCE_POSITIONS = 0;
+export const SourcePositionTableBuilder_RecordingMode_LAZY_SOURCE_POSITIONS = 1;
+export const SourcePositionTableBuilder_RecordingMode_RECORD_SOURCE_POSITIONS = 2;

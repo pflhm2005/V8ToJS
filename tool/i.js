@@ -41,10 +41,10 @@ function setIndex() {
  * 需要将第一个参数转换为枚举值
  * export const xxx_kAsyncFunctionAwaitCaught = 0;
  * ...
- * @param {String} key 宏内部调用的字母 如V、F等等
+ * @param {String} keys 宏内部调用的字母 如V、F等等
  * @param {String} prefix 枚举值前缀 一般是类名
  */
-function transformV8MacroToEnum(key, prefix) {
+function transformV8MacroToEnum(keys, prefix) {
   readAndWrite((ar, str) => {
     let flag = false;
     let l = str.length;
@@ -53,7 +53,7 @@ function transformV8MacroToEnum(key, prefix) {
       let char = str[i];
       // 理论上不会出现
       if (i === l - 1) break;
-      if (char === key && str[i + 1] === '(') {
+      if (keys.includes(char) && str[i + 1] === '(') {
         ar.push(`export const ${prefix}`);
         flag = true;
         i++;
@@ -68,7 +68,10 @@ function transformV8MacroToEnum(key, prefix) {
   });
 }
 
-// transformV8MacroToEnum('V', 'IntrinsicId_k');
+let keys = ['V'];
+let prefix = 'AbortReason_';
+
+transformV8MacroToEnum(keys, prefix);
 
 /**
  * 考虑写一个函数处理C++的宏

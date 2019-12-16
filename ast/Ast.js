@@ -107,6 +107,7 @@ import {
   AssignType_NAMED_PROPERTY,
   AssignType_KEYED_SUPER_PROPERTY,
   SLOPPY_FUNCTION_NAME_VARIABLE,
+  kStrict,
 } from "../enum";
 
 import {
@@ -1188,7 +1189,6 @@ class FunctionLiteral extends Expression {
     this.function_literal_id_ = function_literal_id;
     this.raw_name_ = name ? ast_value_factory.NewConsString(name) : null;
     this.scope_ = scope;
-    this.raw_name_ = null;
     this.raw_inferred_name_ = ast_value_factory.empty_cons_string();
     this.produced_preparse_data_ = produced_preparse_data;
     this.bit_field_ |= FunctionSyntaxKindBits.encode(function_syntax_kind) |
@@ -1199,42 +1199,21 @@ class FunctionLiteral extends Expression {
     this.body_ = body || [];
   }
   kind() { return this.scope_.function_kind_; }
-  is_anonymous_expression() {
-    return this.syntax_kind() === kAnonymousExpression;
-  }
-  syntax_kind() {
-    return FunctionSyntaxKindBits.decode(this.bit_field_);
-  }
-  set_raw_name(name) {
-    this.raw_name_ = name;
-  }
+  is_anonymous_expression() { return this.syntax_kind() === kAnonymousExpression; }
+  syntax_kind() { return FunctionSyntaxKindBits.decode(this.bit_field_); }
+  set_raw_name(name) { this.raw_name_ = name; }
+  name() { return this.raw_name_ ? this.raw_name_.literal_bytes_ : null; }
   set_requires_instance_members_initializer(value) {
     this.bit_field_ = RequiresInstanceMembersInitializer.update(this.bit_field_, value);
   }
-  AllowsLazyCompilation() {
-    return this.scope_.AllowsLazyCompilation();
-  }
-  CanSuspend() {
-    return this.suspend_count_ > 0;
-  }
-  set_pretenure() {
-    this.bit_field_ = Pretenure.update(this.bit_field_, true);
-  }
-  SetShouldEagerCompile() {
-    this.scope_.set_should_eager_compile();
-  }
-  add_expected_properties(number_properties) {
-    this.expected_property_count_ += number_properties;
-  }
-  language_mode() {
-    return this.scope_.language_mode();
-  }
-  start_position() {
-    return this.scope_.start_position_;
-  }
-  end_position() {
-    return this.scope_.end_position_;
-  }
+  AllowsLazyCompilation() { return this.scope_.AllowsLazyCompilation(); }
+  CanSuspend() { return this.suspend_count_ > 0; }
+  set_pretenure() { this.bit_field_ = Pretenure.update(this.bit_field_, true); }
+  SetShouldEagerCompile() { this.scope_.set_should_eager_compile(); }
+  add_expected_properties(number_properties) { this.expected_property_count_ += number_properties; }
+  language_mode() { return this.scope_.language_mode(); }
+  start_position() { return this.scope_.start_position_; }
+  end_position() { return this.scope_.end_position_; }
   requires_brand_initialization() {
     let outer = this.scope_.outer_scope_;
     if (!outer.is_class_scope()) return false;
@@ -1243,8 +1222,16 @@ class FunctionLiteral extends Expression {
   requires_instance_members_initializer() {
     return RequiresInstanceMembersInitializer.decode(this.bit_field_);
   }
+  has_duplicate_parameters() { return HasDuplicateParameters.decode(this.bit_field_); }
+  is_oneshot_iife() { return OneshotIIFEBit.decode(this.bit_field_); }
+  dont_optimize_reason() { return DontOptimizeReasonField.decode(this.bit_field_); }
   return_position() {
-      return Math.max(this.start_position(), this.end_position() - (HasBracesField.decode(this.bit_field_) ? 1 : 0));
+    return Math.max(this.start_position(), this.end_position() - (HasBracesField.decode(this.bit_field_) ? 1 : 0));
+  }
+  SafeToSkipArgumentsAdaptor() {
+    return this.language_mode() === kStrict &&
+    this.scope_.arguments_ === null &&
+    this.scope_.rest_parameter() === null;
   }
 }
 

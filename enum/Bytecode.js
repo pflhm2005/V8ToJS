@@ -602,3 +602,15 @@ export const kOperandSizes = [OperandScale_kSingle, OperandScale_kDouble, Operan
     });
   });
 });
+
+export const BytecodeArray_kNoAgeBytecodeAge = 0;
+export const BytecodeArray_kQuadragenarianBytecodeAge = 1;
+export const BytecodeArray_kQuinquagenarianBytecodeAge = 2;
+export const BytecodeArray_kSexagenarianBytecodeAge = 3;
+export const BytecodeArray_kSeptuagenarianBytecodeAge = 4;
+export const BytecodeArray_kOctogenarianBytecodeAge = 5;
+export const BytecodeArray_kAfterLastBytecodeAge = 6;
+export const BytecodeArray_kFirstBytecodeAge = kNoAgeBytecodeAge;
+export const BytecodeArray_kLastBytecodeAge = kAfterLastBytecodeAge - 1;
+export const BytecodeArray_kBytecodeAgeCount = kAfterLastBytecodeAge - kFirstBytecodeAge - 1;
+export const BytecodeArray_kIsOldBytecodeAge = kSexagenarianBytecodeAge;

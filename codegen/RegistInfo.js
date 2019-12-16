@@ -44,6 +44,9 @@ export default class RegisterInfo {
 
     return null;
   }
+  GetEquivalent() {
+    return this.next_;
+  }
   IsInSameEquivalenceSet(info) {
     return this.equivalence_id_ === info.equivalence_id_;
   }

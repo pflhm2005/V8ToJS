@@ -37,7 +37,7 @@ import {
 } from "../enum";
 import Register from "./Register";
 import { IsResumableFunction, IsBaseConstructor, DeclareGlobalsEvalFlag } from "../util";
-import { FLAG_trace } from "../compiler/Flag";
+import { FLAG_trace, FLAG_trace_block_coverage } from "../compiler/Flag";
 import BytecodeArrayBuilder from "./BytecodeArrayBuilder";
 import GlobalDeclarationsBuilder from "./GlobalDeclarationsBuilder";
 import FeedbackSlot from "../util/FeedbackSlot";
@@ -204,6 +204,7 @@ export default class BytecodeGenerator {
 
     // 构建函数名与this变量
     this.VisitThisFunctionVariable(this.closure_scope_.function_);
+    // 如果使用了this才会进行构建
     this.VisitThisFunctionVariable(this.closure_scope_.this_function_var());
 
     // 构建new.target变量
@@ -249,6 +250,23 @@ export default class BytecodeGenerator {
       this.BuildReturn();
     }
   }
+  FinalizeBytecode(isolate, script) {
+    if (this.block_coverage_builder_) {
+      this.info_.coverage_info_ = isolate.factory_.NewCoverageInfo(this.block_coverage_builder_.slots());
+      // if (FLAG_trace_block_coverage) {
+      //   info.coverage_info_.
+      // }
+    }
+
+    if (this.HasStackOverflow()) return null;
+    let bytecode_array = this.builder_.ToBytecodeArray(isolate);
+    if (this.incoming_new_target_or_generator_.is_valid()) {
+      bytecode_array.set_incoming_new_target_or_generator_register(this.incoming_new_target_or_generator_);
+    }
+    
+    return bytecode_array;
+  }
+
   BuildNewLocalActivationContext() {
     let value_execution_result = new ValueResultScope(this);
     let scope = this.closure_scope_;
@@ -710,6 +728,9 @@ export default class BytecodeGenerator {
   AllocateTopLevelRegisters() { }
   BuildGeneratorPrologue() {
 
+  }
+  HasStackOverflow() {
+    return false;
   }
 }
 class FeedbackSlotCache {

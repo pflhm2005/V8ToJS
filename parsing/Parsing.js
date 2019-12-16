@@ -20,10 +20,9 @@ export default class Parsing {
       if (info.is_eval()) info.set_allow_eval_cache(parser.allow_eval_cache_);
     }
 
-    // if (mode === kYes) {
-    //   // if (result === null) 
-    //   parser.UpdateStatistics(isolate, info.script_);
-    // }
+    if (mode === kYes) {
+      parser.UpdateStatistics(isolate, info.script_);
+    }
     return result !== null;
   }
 }

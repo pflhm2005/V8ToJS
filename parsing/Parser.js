@@ -4,27 +4,20 @@ import FunctionState from './function/FunctionState';
 import {
   PARSE_EAGERLY,
   kNoSourcePosition,
-  kUseCounterFeatureCount,
   VariableMode_kVar,
   PARAMETER_VARIABLE,
-  kSloppyModeBlockScopedFunctionRedefinition,
   kWrapped,
   kShouldEagerCompile,
   kShouldLazyCompile,
   PARSE_LAZILY,
-  kSloppyMode,
-  kStrictMode,
   kIncludingVariables,
   kYes,
   kBlock,
   kNamedExpression,
-  VariableMode_kConst,
   NORMAL_VARIABLE,
   kCreatedInitialized,
   SLOPPY_BLOCK_FUNCTION_VARIABLE,
-  kUseAsm,
   kMaxArguments,
-  kSloppy,
   _kVariableProxy,
   kNoDuplicateParameters,
   REFLECT_APPLY_INDEX,
@@ -36,6 +29,12 @@ import {
   kStrict,
   kAnonymousExpression,
   kAccessorOrMethod,
+  UseCounterFeature_kUseAsm,
+  UseCounterFeature_kSloppyModeBlockScopedFunctionRedefinition,
+  UseCounterFeature_kSloppyMode,
+  UseCounterFeature_kStrictMode,
+  UseCounterFeature_kUseCounterFeatureCount,
+  UseCounterFeature_kHtmlComment,
 } from '../enum';
 
 import {
@@ -86,7 +85,7 @@ class Parser extends ParserBase {
     this.allow_harmony_nullish_ = info.allow_harmony_nullish();
     this.allow_harmony_optional_chaining_ = info.allow_harmony_optional_chaining();
     this.allow_allow_harmony_private_methods_ = info.allow_harmony_private_methods();
-    this.use_counts_ = new Array(kUseCounterFeatureCount).fill(0);
+    this.use_counts_ = new Array(UseCounterFeature_kUseCounterFeatureCount).fill(0);
   }
   ParseProgram(isolate, info) {
     // let runtime_timer = new RuntimeCallTimerScope(this.runtime_call_stats_, info.is_eval() ? )
@@ -217,6 +216,17 @@ class Parser extends ParserBase {
   InferFunctionName() {
     this.fni_.Infer();
   }
+  UpdateStatistics(isolate, script) {
+    for (let feature = 0; feature < UseCounterFeature_kUseCounterFeatureCount; ++feature) {
+      if (this.use_counts_[feature] > 0) {
+        isolate.CountUsage(feature);
+      }
+    }
+    if (this.scanner_.found_html_comment_) {
+      isolate.CountUsage(UseCounterFeature_kHtmlComment);
+      // if (script.line_offset)
+    }
+  }
 
   /**
    * 两个数字字面量的运算直接进行整合
@@ -306,7 +316,7 @@ class Parser extends ParserBase {
   GetSymbol() { return this.scanner_.CurrentSymbol(this.ast_value_factory_); }
 
   SetAsmModule() {
-    ++this.use_counts_[kUseAsm];
+    ++this.use_counts_[UseCounterFeature_kUseAsm];
     this.scope_.is_asm_module_ = true;
     this.info_.set_contains_asm_module(true);
   }
@@ -465,7 +475,7 @@ class Parser extends ParserBase {
     }
     // 重定义计数
     else if (sloppy_mode_block_scope_function_redefinition) {
-      ++this.use_counts_[kSloppyModeBlockScopedFunctionRedefinition];
+      ++this.use_counts_[UseCounterFeature_kSloppyModeBlockScopedFunctionRedefinition];
     }
     return was_added;
   }
@@ -664,8 +674,8 @@ class Parser extends ParserBase {
   }
   SetLanguageMode(scope, mode) {
     let feature;
-    if (is_sloppy(mode)) feature = kSloppyMode;
-    else if (is_strict(mode)) feature = kStrictMode;
+    if (is_sloppy(mode)) feature = UseCounterFeature_kSloppyMode;
+    else if (is_strict(mode)) feature = UseCounterFeature_kStrictMode;
     else this.UNREACHABLE();
     ++this.use_counts_[feature];
     scope.set_language_mode(mode);

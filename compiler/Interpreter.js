@@ -1,6 +1,5 @@
 import BytecodeGenerator, { FeedbackVectorSpec } from "../codegen/BytecodeGenerator";
-import { SUCCEEDED, FAILED } from "./Complier";
-import { RecordingMode_RECORD_SOURCE_POSITIONS, RecordingMode_OMIT_LAZY_SOURCE_POSITIONS } from "../enum";
+import { RecordingMode_RECORD_SOURCE_POSITIONS, RecordingMode_OMIT_LAZY_SOURCE_POSITIONS, CompilationJob_FAILED, CompilationJob_SUCCEEDED } from "../enum";
 
 const kReadyToPrepare = 0;
 const kReadyToExecute = 0;
@@ -31,7 +30,7 @@ class CompilationJob {
     this.state_ = initial_state;
   }
   UpdateState(status, next_state) {
-    if (status === SUCCEEDED) {
+    if (status === CompilationJob_SUCCEEDED) {
       this.state_ = next_state;
     }
     else {
@@ -52,8 +51,8 @@ class UnoptimizedCompilationJob extends CompilationJob {
   ExecuteJob() {
     return this.UpdateState(this.ExecuteJobImpl(), kReadyToFinalize);
   }
-  FinalizeJob() {
-
+  FinalizeJob(shared_info, isolate) {
+    return this.UpdateState(this.FinalizeJobImpl(shared_info, isolate), kSucceeded);
   }
 }
 
@@ -68,11 +67,26 @@ class InterpreterCompilationJob extends UnoptimizedCompilationJob {
     // 可以激活FLAG_print_ast标记来打印抽象语法树
     // MaybePrintAst(parse_info(), compilation_info());
     this.generator_.GenerateBytecode(this.stack_limit_);
-    if (this.generator_.stack_overflow_) return FAILED;
+    if (this.generator_.stack_overflow_) return CompilationJob_FAILED;
     console.info('待编译JS代码为:\n', this.parse_info_.character_stream_.source_string);
     console.info('输出的bytecode为:\n', this.generator_.builder_.bytecode_array_writer_.bytecodes_);
-    console.info('待完善');
-    return SUCCEEDED;
+    return CompilationJob_SUCCEEDED;
+  }
+  FinalizeJobImpl(shared_info, isolate) {
+    let bytecodes = this.compilation_info_.bytecode_array_;
+    if (bytecodes === null) {
+      bytecodes = this.generator_.FinalizeBytecode(isolate, this.parse_info_.script_);
+      if (this.generator_.HasStackOverflow()) return CompilationJob_FAILED;
+      this.compilation_info_.bytecode_array_ = bytecodes;
+    }
+
+    if (this.compilation_info_.SourcePositionRecordingMode() === RecordingMode_RECORD_SOURCE_POSITIONS) {
+      let source_position_table = this.generator_.FinalizeSourcePositionTable(isolate);
+      bytecodes.set_source_position_table(source_position_table);
+    }
+
+    // if (ShouldPrintBytecode(shared_info)) {}
+    return CompilationJob_SUCCEEDED;
   }
 }
 
@@ -88,6 +102,8 @@ class UnoptimizedCompilationInfo {
     if (parse_info.collect_type_profile()) this.SetFlag(kCollectTypeProfile);
     if (parse_info.might_always_opt()) this.SetFlag(kMightAlwaysOpt);
     if (parse_info.collect_source_positions()) this.SetFlag(kCollectSourcePositions);
+
+    this.bytecode_array_ = null;
   }
   GetFlag(f) { return (this.flags_ & f) !== 0; }
   SetFlag(f, v = false) {
@@ -96,15 +112,9 @@ class UnoptimizedCompilationInfo {
   }
   collect_source_positions() { return this.GetFlag(kCollectSourcePositions); }
   has_source_range_map() { return this.source_range_map_ !== null; }
-  is_eval() {
-    return this.GetFlag(kIsEval);
-  }
-  scope() {
-    return this.literal_.scope_;
-  }
-  num_parameters_including_this() {
-    return this.scope().num_parameters_ + 1;
-  }
+  is_eval() { return this.GetFlag(kIsEval); }
+  scope() { return this.literal_.scope_; }
+  num_parameters_including_this() { return this.scope().num_parameters_ + 1; }
   SourcePositionRecordingMode() {
     if (this.collect_source_positions()) return RecordingMode_RECORD_SOURCE_POSITIONS;
     return this.literal_.AllowsLazyCompilation() ? RecordingMode_RECORD_SOURCE_POSITIONS : RecordingMode_OMIT_LAZY_SOURCE_POSITIONS;

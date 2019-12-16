@@ -120,7 +120,9 @@ export default class Script {
   is_wrapped() {
     return false;
   }
-  FindSharedFunctionInfo(isolate, fun) {}
+  FindSharedFunctionInfo(isolate, fun) {
+    return false;
+  }
   static Compile(context, source, origin = null) {
     if (origin) {
       let script_source = new Source(source, origin);

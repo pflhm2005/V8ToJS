@@ -1,11 +1,18 @@
 import Factory from "./Factory";
-import { PERFORMANCE_ANIMATION, kNone } from "../enum";
+import Heap from './Heap';
+import { 
+  PERFORMANCE_ANIMATION,
+  kNone, 
+  HeapState_NOT_IN_GC,
+} from "../enum";
 
 let isolate_counter = 0;
 
 export class Isolate {
   constructor() {
     this.isolate_allocator_ = null; // 内存地址
+    // 堆
+    this.heap_ = new Heap(this);
     this.id_ = ++isolate_counter;
     this.stack_guard_ = this;
     this.allocator_ = null;
@@ -33,6 +40,16 @@ export class Isolate {
 
     this.scriptId = -1;
     this.type_profile_mode_ = kNone;
+
+    this.use_counter_callback_ = null;
+  }
+  static New(params) {
+    let isolate = new Isolate();
+    this.Initialize(isolate, params);
+    return isolate;
+  }
+  static Initialize() {
+
   }
   set_default_microtask_queue(value) {
     this.default_microtask_queue_ = value;
@@ -53,13 +70,14 @@ export class Isolate {
     ++this.scriptId;
     return this.scriptId;
   }
-  static New(params) {
-    let isolate = new Isolate();
-    this.Initialize(isolate, params);
-    return isolate;
-  }
-  static Initialize() {
-
+  CountUsage(feature) {
+    if (this.heap_.gc_state_ === HeapState_NOT_IN_GC) {
+      if (this.use_counter_callback_) {
+        // TODO
+      }
+    } else {
+      this.heap_.IncrementDeferredCount(feature);
+    }
   }
 }
 

@@ -1,5 +1,17 @@
 import Script from './Script';
-import { kEmptyFixedArray, SCRIPT_TYPE, TYPE_NORMAL } from "../enum";
+import ByteArray from './ByteArray';
+import { 
+  kEmptyFixedArray, 
+  SCRIPT_TYPE, 
+  TYPE_NORMAL, 
+  Builtins_kCompileLazy,
+  Builtins_kIllegal,
+  AllocationType_kOld,
+  BytecodeArray_kNoAgeBytecodeAge,
+} from "../enum";
+import { Builtins_IsBuiltinId } from '../util';
+import SharedFunctionInfo from './SharedFunctionInfo';
+import Register from '../codegen/Register';
 
 export default class Factory {
   constructor(isolate) {
@@ -7,6 +19,34 @@ export default class Factory {
   }
   empty_fixed_array() {
     return this.isolate.roots_table[kEmptyFixedArray];
+  }
+  NewByteArray(length, allocation) {
+    if (length < 0 || length > 1073741800) throw new Error('invalid array length');
+    let size = ByteArray.SizeFor(length);
+    let result = new ByteArray();
+    // let result = this.AllocateRawWithImmortalMap(size, allocation, this.byte_array_map());
+    result.length = length;
+    // result.clear_padding();
+    return result;
+  }
+  NewBytecodeArray(length, raw_bytecodes, frame_size, parameter_count, constant_pool) {
+    if (length < 0 || length > 1073741800) throw new Error('invalid array length');
+    // BytecodeArray::SizeFor(length); 实际上跟上面一样
+    let size = ByteArray.SizeFor(length);
+    // let result = this.AllocateRawWithImmortalMap(size, AllocationType_kOld, this.byte_array_map());
+    let instance = new BytecodeArray();
+    instance.set_length(length);
+    instance.set_frame_size(frame_size);
+    instance.set_parameter_count(parameter_count);
+    instance.set_incoming_new_target_or_generator_register(new Register());
+    instance.set_osr_loop_nesting_level(0);
+    instance.set_bytecode_age(BytecodeArray_kNoAgeBytecodeAge);
+    instance.set_constant_pool(constant_pool);
+    instance.set_handler_table(this.empty_byte_array());
+    instance.set_source_position_table(undefined);
+    // instance.clear_padding();
+
+    return instance;
   }
   NewScript(source) {
     return this.NewScriptWithId(source, this.isolate.NextScriptId());
@@ -38,7 +78,32 @@ export default class Factory {
   empty_fixed_array() {
     return new FixedArray();
   }
-  NewSharedFunctionInfoForLiteral() {}
+  NewSharedFunctionInfoForLiteral(literal, script, is_toplevel) {
+    let kind = literal.kind();
+    let shared = this.NewSharedFunctionInfoForBuiltin(literal.name(), Builtins_kCompileLazy, kind);
+    SharedFunctionInfo.InitFromFunctionLiteral(shared, literal, is_toplevel);
+    SharedFunctionInfo.SetScript(shared, script, literal.function_literal_id_, false);
+    return shared;
+  }
+  NewSharedFunctionInfoForBuiltin(maybe_name, builtin_index, kind) {
+    return this.NewSharedFunctionInfo(maybe_name, null, builtin_index, kind);
+  }
+  NewSharedFunctionInfo(maybe_name, maybe_function_data, maybe_builtin_index, kind) {
+    let shared = new SharedFunctionInfo();
+    if (maybe_name) {
+      // TODO
+    }
+    if (maybe_function_data) {
+      shared.set_function_data(maybe_function_data);
+    } else if (Builtins_IsBuiltinId(maybe_builtin_index)) {
+      shared.set_builtin_id(maybe_builtin_index);
+    } else {
+      shared.set_builtin_id(Builtins_kIllegal);
+    }
+    shared.CalculateConstructAsBuiltin();
+    shared.set_kind(kind);
+    return shared;
+  }
 }
 
 class FixedArray {}

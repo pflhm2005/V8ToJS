@@ -15,3 +15,6 @@ export * from './Counters';
 export * from './Context';
 export * from './Runtime';
 export * from './Bytecode';
+export * from './Heap';
+export * from './Builtins';
+export * from './BailoutReason';

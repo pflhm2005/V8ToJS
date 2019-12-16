@@ -3,12 +3,9 @@ import ParseInfo from "./ParseInfo";
 import Interpreter from "./Interpreter";
 import { FLAG_stress_lazy_source_positions } from "./Flag";
 import { FLAG_use_strict } from "./Flag";
-import { kEagerCompile, kConsumeCodeCache } from "../enum";
+import { kEagerCompile, kConsumeCodeCache, CompilationJob_FAILED, CompilationJob_SUCCEEDED, CodeEventListener_EVAL_TAG, CodeEventListener_SCRIPT_TAG, CodeEventListener_LAZY_COMPILE_TAG, CodeEventListener_FUNCTION_TAG, BailoutReason_kNoReason } from "../enum";
 import Rewriter from "./Rewriter";
 import { DeclarationScope } from "../parsing/Scope";
-
-export const SUCCEEDED = 0;
-export const FAILED = 0;
 
 export default class Compiler {
   /**
@@ -66,7 +63,18 @@ export default class Compiler {
     return true;
   }
   static GetSharedFunctionInfo(literal, script, isolate) {
+    /**
+     * 从缓存中寻找指定字面量的编译信息
+     * 理论上第一次是找不到的
+     * 但是在xcode上编译了好多次 现在默认有了
+     */
     let maybe_existing = script.FindSharedFunctionInfo(isolate, literal);
+    if (maybe_existing) {
+      // TODO
+      return null;
+    }
+    return null;
+    // return isolate.factory_.NewSharedFunctionInfoForLiteral(literal, script, false);
   }
 }
 
@@ -95,8 +103,10 @@ function NewScript(isolate, parse_info, source, script_details, origin_options, 
 // 太复杂了 只展示主要步骤
 function CompileToplevel(parse_info, isolate, is_compiled_scope) {
   // TODO
+  // 前面这部分设定了一个timer 用来记录编译时间
   if (parse_info.literal_ === null && !Parsing.ParseProgram(parse_info, isolate)) return null;
   // TODO
+  // 这部分打了一个log
   let shared_info = GenerateUnoptimizedCodeForToplevel(isolate, parse_info, null, is_compiled_scope);
   FinalizeScriptCompilation(isolate, parse_info);
   return shared_info;
@@ -117,32 +127,68 @@ function GenerateUnoptimizedCodeForToplevel(isolate, parse_info, allocator, is_c
   // DeclarationScope::AllocateScopeInfos(parse_info, isolate);
 
   let script = parse_info.script_;
-  let tope_level = isolate.factory_.NewSharedFunctionInfoForLiteral(parse_info.literal_, script, true);
+  // let tope_level = isolate.factory_.NewSharedFunctionInfoForLiteral(parse_info.literal_, script, true);
 
   // 不知道这个while的意义 可能是多线程吧
   let functions_to_compile = [];
   functions_to_compile.push(parse_info.literal_);
   while(functions_to_compile.length) {
     let literal = functions_to_compile.pop();
-    // let shared_info = Compiler.GetSharedFunctionInfo(literal, script, isolate);
+    let shared_info = Compiler.GetSharedFunctionInfo(literal, script, isolate);
     // if (shared_info.is_compiled()) continue;
     // 处理asm
     // if (UseAsmWasm(literal, parse_info.is_asm_wasm_broken())) {}
 
     let job = Interpreter.NewCompilationJob(parse_info, literal, allocator, functions_to_compile);
-    if (job.ExecuteJob() === FAILED ||
-      FinalizeUnoptimizedCompilationJob(job.get(), shared_info, isolate) === FAILED) {
+    if (job.ExecuteJob() === CompilationJob_FAILED ||
+      FinalizeUnoptimizedCompilationJob(job, shared_info, isolate) === CompilationJob_FAILED) {
       return null;
     }
 
-    if (FLAG_stress_lazy_source_positions) {}
+    // if (FLAG_stress_lazy_source_positions) {}
     
-    if (shared_info.is_identical_to(tope_level)) {
-      is_compiled_scope = shared_info.is_compiled_scope();
-    }
+    // if (shared_info.is_identical_to(tope_level)) {
+    //   is_compiled_scope = shared_info.is_compiled_scope();
+    // }
   }
   parse_info.ResetCharacterStream();
   return tope_level;
+}
+
+function FinalizeUnoptimizedCompilationJob(job, shared_info, isolate) {
+  let compilation_info = job.compilation_info_;
+  let parse_info = job.parse_info_;
+
+  SetSharedFunctionFlagsFromLiteral(compilation_info.literal_, shared_info);
+
+  let status = job.FinalizeJob(shared_info, isolate);
+  // if (status === CompilationJob_SUCCEEDED) {
+  //   InstallUnoptimizedCode(compilation_info, shared_info, parse_info, isolate);
+  //   let log_tag = null;
+  //   if (parse_info.is_toplevel()) {
+  //     log_tag = compilation_info.is_eval() ? CodeEventListener_EVAL_TAG : CodeEventListener_SCRIPT_TAG;
+  //   } else {
+  //     log_tag = parse_info.lazy_compile() ? CodeEventListener_LAZY_COMPILE_TAG : CodeEventListener_FUNCTION_TAG;
+  //   }
+  //   job.RecordFunctionCompilation(log_tag, shared_info, isolate);
+  //   job.RecordCompilationStats(isolate);
+  // }
+  return status;
+}
+
+function SetSharedFunctionFlagsFromLiteral(literal, shared_info) {
+  return null;
+  shared_info.set_has_duplicate_parameters(literal.has_duplicate_parameters());
+  shared_info.set_is_oneshot_iife(literal.is_oneshot_iife());
+  shared_info.UpdateAndFinalizeExpectedNofPropertiesFromEstimate(literal);
+  if (literal.dont_optimize_reason() !== BailoutReason_kNoReason) {
+    shared_info.DisableOptimization(literal.dont_optimize_reason());
+  }
+  shared_info.set_is_safe_to_skip_arguments_adaptor(literal.SafeToSkipArgumentsAdaptor());
+}
+
+function InstallUnoptimizedCode() {
+
 }
 
 function FinalizeScriptCompilation() {

@@ -24,6 +24,8 @@ import {
 import SourcePosition from './SourcePosition';
 import SourcePositionTableBuilder from "./SourcePositionTableBuilder";
 
+const kSystemPointerSize = 8;
+
 export default class BytecodeArrayWriter {
   /**
    * 
@@ -144,5 +146,15 @@ export default class BytecodeArrayWriter {
         // }
       }
     }
+  }
+
+  ToBytecodeArray(isolate, register_count, parameter_count, handler_table) {
+    let bytecode_size = this.bytecodes_.length;
+    let frame_size = register_count * kSystemPointerSize;
+    let constant_pool = this.constant_array_builder_.ToFixedArray(isolate);
+    let bytecode_array = isolate.factory_.NewBytecodeArray(
+      bytecode_size, this.bytecodes_[0], frame_size, parameter_count, constant_pool);
+    bytecode_array.set_handler_table(handler_table);
+    return bytecode_array;
   }
 }

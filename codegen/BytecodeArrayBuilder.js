@@ -47,6 +47,7 @@ import Register, { RegisterList } from "./Register";
 import BytecodeNode from './BytecodeNode';
 import ConstantArrayBuilder from './ConstantArrayBuilder';
 import { IntrinsicsHelper_FromRuntimeId, IntrinsicsHelper_IsSupported } from "../util";
+import HandlerTableBuilder from "./HandlerTableBuilder";
 
 // TODO
 function IsWithoutExternalSideEffects() { return true; }
@@ -165,6 +166,22 @@ export default class BytecodeArrayBuilder {
   Write(node) {
     this.AttachOrEmitDeferredSourceInfo(node);
     this.bytecode_array_writer_.Write(node);
+  }
+  ToBytecodeArray(isolate) {
+    this.bytecode_generated_ = true;
+    let register_count = this.total_register_count();
+    if (this.register_optimizer_) {
+      this.register_optimizer_.Flush();
+      register_count = this.register_optimizer_.max_register_index_ + 1;
+    }
+
+    let handler_table = this.handler_table_builder_.ToHandlerTable(isolate);
+    return this.bytecode_array_writer_.ToBytecodeArray(
+      isolate, register_count,this.parameter_count_, handler_table);
+  }
+
+  total_register_count() {
+    return this.register_allocator_.max_register_count_;
   }
   SetExpressionPosition(expr) {
     let position = expr.position_;
@@ -498,5 +515,3 @@ class BytecodeSourceInfo {
     this.source_position_ = source_position;
   }
 }
-
-class HandlerTableBuilder { }

@@ -152,10 +152,33 @@ export default class BytecodeRegisterOptimizer {
     }
   }
   Flush() {
+    if (!this.flush_required_) return;
+    for (let reg_info of this.registers_needing_flushed_) {
+      if (!reg_info.needs_flush_) continue;
+      reg_info.needs_flush_ = false;
 
+      let materialized = reg_info.materialized_ ? reg_info : reg_info.GetMaterializedEquivalent();
+      if (materialized !== null) {
+        let equivalent = null;
+        while ((equivalent = materialized.GetEquivalent()) !== materialized) {
+          if (equivalent.allocated_ && !equivalent.materialized_) {
+            this.OutputRegisterTransfer(materialized, equivalent);
+          }
+          equivalent.MoveToNewEquivalenceSet(this.NextEquivalenceId(), true);
+          equivalent.needs_flush_ = false;
+        }
+      } else {
+        reg_info.MoveToNewEquivalenceSet(this.NextEquivalenceId(), false);
+      }
+    }
+    this.registers_needing_flushed_.length = 0;
+    this.flush_required_ = false;
   }
-  Materialize() {
-
+  Materialize(info) {
+    if (!info.materialized_) {
+      let materialized = info.GetMaterializedEquivalent();
+      this.OutputRegisterTransfer(materialized, info);
+    }
   }
   PrepareOutputRegister(reg) {
     let reg_info = this.GetRegisterInfo(reg);
