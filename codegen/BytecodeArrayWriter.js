@@ -148,6 +148,13 @@ export default class BytecodeArrayWriter {
     }
   }
 
+  /**
+   * 将bytecodes转换为V8控制的数组类型
+   * @param {Isolate} isolate V8引擎实例
+   * @param {int} register_count 寄存器数量
+   * @param {int} parameter_count 
+   * @param {ByteArray} handler_table 
+   */
   ToBytecodeArray(isolate, register_count, parameter_count, handler_table) {
     let bytecode_size = this.bytecodes_.length;
     let frame_size = register_count * kSystemPointerSize;
