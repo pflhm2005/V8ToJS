@@ -13,6 +13,8 @@ import { Builtins_IsBuiltinId } from '../util';
 import SharedFunctionInfo from './SharedFunctionInfo';
 import Register from '../codegen/Register';
 
+// HeapObject的内存布局偏移量
+
 export default class Factory {
   constructor(isolate) {
     this.isolate = isolate;
@@ -53,9 +55,12 @@ export default class Factory {
      * 3. 过程涉及gc内存管理部分 JS不需要关心 直接new
      */
     let instance = new BytecodeArray();
+    /* --------以下的属性设置与常规的getter/setter方法不同-------- */
     /**
-     * 以下的属性设置与常规的方法不同
-     * 利用了TaggedField或WriteField等辅助类
+     * 宏展开后方法如下 见SMI_ACCESSORS.cc
+     * reinterpret_cast<Address>(this.address() + kLengthOffset) = Smi::FromInt(value).ptr();
+     * 简述即将length转换为Smi(HeapObject派生类)后 将地址记录在指定偏移位置
+     * 关于kLengthOffset等偏移量的宏定义 见DEFINE_FIELD_OFFSET_CONSTANTS.cc
      */
     instance.set_length(length);
     instance.set_frame_size(frame_size);
@@ -76,7 +81,7 @@ export default class Factory {
     instance.bytecodes = raw_bytecodes;
      /**
       * 这个方法清空尾巴上未用到的内存空间
-      * 根据kHeaderSize与字节码长度所分配的字节是8的倍数 最后一个字节可能会出现未使用字节
+      * 根据kHeaderSize与字节码长度所分配的字节是8的倍数 最后一块区域可能会出现未使用字节
       * 通过这个方法把最后一个字节没有用到的地址置0 JS这个操作无意义 注释掉
       */
     // instance.clear_padding();
