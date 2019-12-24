@@ -1,4 +1,4 @@
-import { RecordingMode_RECORD_SOURCE_POSITIONS, RecordingMode_OMIT_LAZY_SOURCE_POSITIONS } from "../enum";
+import { RecordingMode_RECORD_SOURCE_POSITIONS, RecordingMode_OMIT_LAZY_SOURCE_POSITIONS, AllocationType_kOld } from "../enum";
 import { MoreBit, ValueBits } from "../util";
 
 export default class SourcePositionTableBuilder {
@@ -39,6 +39,14 @@ export default class SourcePositionTableBuilder {
       this.bytes_.push(current);
       encoded >>= ValueBits.kSize;
     } while (more);
+  }
+  ToSourcePositionTable(isolate) {
+    if (!this.bytes_.length) {
+      return null;
+    }
+    let table = isolate.factory_.NewByteArray(this.bytes_.length, AllocationType_kOld);
+    table.bytecodes = this.bytes_;
+    return table;
   }
 }
 

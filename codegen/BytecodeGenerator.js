@@ -266,6 +266,10 @@ export default class BytecodeGenerator {
     
     return bytecode_array;
   }
+  FinalizeSourcePositionTable(isolate) {
+    let source_position_table = this.builder_.ToSourcePositionTable(isolate);
+    return source_position_table;
+  }
 
   BuildNewLocalActivationContext() {
     let value_execution_result = new ValueResultScope(this);

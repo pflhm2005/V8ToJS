@@ -5,4 +5,7 @@ export default class ConstantArrayBuilder {
   Insert() {
     return 0;
   }
+  ToFixedArray(isolate) {
+    return null;
+  }
 }

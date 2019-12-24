@@ -179,6 +179,9 @@ export default class BytecodeArrayBuilder {
     return this.bytecode_array_writer_.ToBytecodeArray(
       isolate, register_count,this.parameter_count_, handler_table);
   }
+  ToSourcePositionTable(isolate) {
+    return this.bytecode_array_writer_.ToSourcePositionTable(isolate);
+  }
 
   total_register_count() {
     return this.register_allocator_.max_register_count_;

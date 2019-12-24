@@ -3,7 +3,17 @@ import ParseInfo from "./ParseInfo";
 import Interpreter from "./Interpreter";
 import { FLAG_stress_lazy_source_positions } from "./Flag";
 import { FLAG_use_strict } from "./Flag";
-import { kEagerCompile, kConsumeCodeCache, CompilationJob_FAILED, CompilationJob_SUCCEEDED, CodeEventListener_EVAL_TAG, CodeEventListener_SCRIPT_TAG, CodeEventListener_LAZY_COMPILE_TAG, CodeEventListener_FUNCTION_TAG, BailoutReason_kNoReason } from "../enum";
+import { 
+  kEagerCompile, 
+  kConsumeCodeCache, 
+  CompilationJob_FAILED, 
+  CompilationJob_SUCCEEDED, 
+  CodeEventListener_EVAL_TAG, 
+  CodeEventListener_SCRIPT_TAG, 
+  CodeEventListener_LAZY_COMPILE_TAG, 
+  CodeEventListener_FUNCTION_TAG, 
+  BailoutReason_kNoReason,
+} from "../enum";
 import Rewriter from "./Rewriter";
 import { DeclarationScope } from "../parsing/Scope";
 
@@ -162,17 +172,17 @@ function FinalizeUnoptimizedCompilationJob(job, shared_info, isolate) {
   SetSharedFunctionFlagsFromLiteral(compilation_info.literal_, shared_info);
 
   let status = job.FinalizeJob(shared_info, isolate);
-  // if (status === CompilationJob_SUCCEEDED) {
-  //   InstallUnoptimizedCode(compilation_info, shared_info, parse_info, isolate);
-  //   let log_tag = null;
-  //   if (parse_info.is_toplevel()) {
-  //     log_tag = compilation_info.is_eval() ? CodeEventListener_EVAL_TAG : CodeEventListener_SCRIPT_TAG;
-  //   } else {
-  //     log_tag = parse_info.lazy_compile() ? CodeEventListener_LAZY_COMPILE_TAG : CodeEventListener_FUNCTION_TAG;
-  //   }
-  //   job.RecordFunctionCompilation(log_tag, shared_info, isolate);
-  //   job.RecordCompilationStats(isolate);
-  // }
+  if (status === CompilationJob_SUCCEEDED) {
+    // InstallUnoptimizedCode(compilation_info, shared_info, parse_info, isolate);
+    // let log_tag = null;
+    // if (parse_info.is_toplevel()) {
+    //   log_tag = compilation_info.is_eval() ? CodeEventListener_EVAL_TAG : CodeEventListener_SCRIPT_TAG;
+    // } else {
+    //   log_tag = parse_info.lazy_compile() ? CodeEventListener_LAZY_COMPILE_TAG : CodeEventListener_FUNCTION_TAG;
+    // }
+    // job.RecordFunctionCompilation(log_tag, shared_info, isolate);
+    // job.RecordCompilationStats(isolate);
+  }
   return status;
 }
 

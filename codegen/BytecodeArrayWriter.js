@@ -20,7 +20,7 @@ import {
   Bytecodes_OperandScaleToPrefixBytecode,
   Bytecodes_GetOperandSizes,
   decToHex,
-} from "../util/Bytecode";
+} from "../util";
 import SourcePosition from './SourcePosition';
 import SourcePositionTableBuilder from "./SourcePositionTableBuilder";
 
@@ -163,5 +163,10 @@ export default class BytecodeArrayWriter {
       bytecode_size, this.bytecodes_[0], frame_size, parameter_count, constant_pool);
     bytecode_array.set_handler_table(handler_table);
     return bytecode_array;
+  }
+  ToSourcePositionTable(isolate) {
+    let source_position_table = this.source_position_table_builder_.Omit() ? null
+      : this.source_position_table_builder_.ToSourcePositionTable(isolate);
+    return source_position_table;
   }
 }

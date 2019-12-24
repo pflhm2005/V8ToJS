@@ -62,6 +62,9 @@ export default class Register {
   ToOperand() {
     return (kRegisterFileStartOffset - this.index_) >>> 0;
   }
+  is_valid() {
+    return this.index_ !== kInvalidIndex;
+  }
 }
 
 export class RegisterList{
