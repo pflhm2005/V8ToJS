@@ -1110,10 +1110,11 @@ export default class ParserBase {
     let class_token_pos = this.position();
     let is_strict_reserved = IsStrictReservedWord(this.peek());
     // nullptr
-    let name = null
-    let variable_name = null
+    let name = null;
+    let variable_name = null;
     /**
      * 表达式
+     * export default class {} 此时可以省略class名
      */
     if (default_export && (this.peek() === 'Token::EXTENDS' || this.peek() === 'Token::LBRACE')) {
       // this.GetDefaultStrings(name, variable_name);
@@ -1122,12 +1123,12 @@ export default class ParserBase {
     }
     /**
      * 声明
+     * class XXX {}
      */
     else {
       name = this.ParseIdentifier();
       variable_name = name;
     }
-
     /**
      * ExpressionParsingScope no_expression_scope(impl());
      */

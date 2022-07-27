@@ -692,8 +692,9 @@ export class Expression extends AstNode {
   UNIMPLEMENTED() { throw new Error('unimplemented code'); }
   UNREACHABLE() { throw new Error('unreachable code'); }
   IsAnonymousFunctionDefinition() {
-    return (this.IsFunctionLiteral() && this.IsAnonymousFunctionDefinition()) ||
-      (this.IsClassLiteral() && this.IsAnonymousFunctionDefinition());
+    // todo FunctionLiteral.is_anonymous_expression()
+    return (this.IsFunctionLiteral()) ||
+      (this.IsClassLiteral());
   }
   IsConciseMethodDefinition() {
     return this.IsFunctionLiteral() && IsConciseMethod(this.kind());
@@ -1199,7 +1200,7 @@ class FunctionLiteral extends Expression {
     this.body_ = body || [];
   }
   kind() { return this.scope_.function_kind_; }
-  is_anonymous_expression() { return this.syntax_kind() === kAnonymousExpression; }
+  static is_anonymous_expression() { return this.syntax_kind() === kAnonymousExpression; }
   syntax_kind() { return FunctionSyntaxKindBits.decode(this.bit_field_); }
   set_raw_name(name) { this.raw_name_ = name; }
   name() { return this.raw_name_ ? this.raw_name_.literal_bytes_ : null; }
