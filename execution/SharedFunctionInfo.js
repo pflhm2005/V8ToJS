@@ -20,10 +20,10 @@ export default class SharedFunctionInfo {
       
     }
   }
-  InitFromFunctionLiteral() {
+  static InitFromFunctionLiteral() {
 
   }
-  SetScript() {
+  static SetScript() {
 
   }
 }

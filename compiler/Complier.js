@@ -137,7 +137,7 @@ function GenerateUnoptimizedCodeForToplevel(isolate, parse_info, allocator, is_c
   // DeclarationScope::AllocateScopeInfos(parse_info, isolate);
 
   let script = parse_info.script_;
-  // let tope_level = isolate.factory_.NewSharedFunctionInfoForLiteral(parse_info.literal_, script, true);
+  let tope_level = isolate.factory_.NewSharedFunctionInfoForLiteral(parse_info.literal_, script, true);
 
   // 不知道这个while的意义 可能是多线程吧
   let functions_to_compile = [];

@@ -192,7 +192,8 @@ export default class Factory {
       shared.set_builtin_id(Builtins_kIllegal);
     }
     shared.CalculateConstructAsBuiltin();
-    shared.set_kind(kind);
+    // todo
+    // shared.set_kind(kind);
     return shared;
   }
 }

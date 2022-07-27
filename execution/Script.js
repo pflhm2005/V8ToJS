@@ -28,7 +28,7 @@ class ScriptCompiler {
   static Compile(context, source, options = kNoCompileOptions, no_cache_reason = kNoCacheNoReason) {
     let isolate = context.GetIsolate();
     let maybe = this.CompileUnboundInternal(isolate, source, options, no_cache_reason);
-    return console.info('Complie');
+    return console.info('Compile');
     // v8::Context::Scope scope(context);
     return maybe.BindToCurrentContext();
   }
